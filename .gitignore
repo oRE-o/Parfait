@@ -1,0 +1,10 @@
+# Local notes, experiments and development artifacts.
+/research/
+/target/
+/PRODUCT.md
+/scripts/dev.ps1
+/.local/
+*.parfait
+*.parfait-wal
+*.parfait-shm
+*.lock.tmp
