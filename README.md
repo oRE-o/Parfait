@@ -6,6 +6,12 @@ A small, open-source drawing app in Rust. A quiet canvas, familiar pen-first con
 
 ![Parfait drawing workspace](docs/images/workspace.png)
 
+## Platform direction
+
+Windows, macOS and Linux are first-class desktop targets. Mobile apps are planned after the desktop foundation, with Android and iOS/iPadOS as intended targets. The Rust drawing core and project format should be shared across platforms; input, lifecycle, file access and UI layout must adapt to each device.
+
+The current prototype has been built and tested on Windows only. macOS, Linux and mobile support are goals, not verified release claims. See the [platform plan](docs/platforms.md) for status and acceptance criteria.
+
 ## Try it
 
 Install a current stable Rust toolchain and the platform build tools, then:

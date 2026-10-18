@@ -40,3 +40,11 @@ Normal app exit joins the worker after submitting the final snapshot. Manual Sav
 - Storage `worker.rs`: queue ownership, asynchronous writes and acknowledgments.
 
 Next changes should introduce typed editor commands before adding many tools, a tile representation before promising large canvases, and explicit schema migrations before changing persisted fields.
+
+## Cross-platform boundaries
+
+Windows, macOS and Linux are equal desktop targets, with mobile apps planned later. Keep document state, brush algorithms, editor commands and project-format migrations independent of platform APIs. Desktop and mobile should share the Rust core and exchange the same versioned project files.
+
+OS integration belongs behind application-level interfaces for file access, data directories, input, lifecycle and rendering capabilities. The current desktop implementation uses eframe, native file dialogs and filesystem paths directly; those integrations still need separation before a mobile frontend is added. Do not assume the current UI framework or OpenGL backend is the final mobile solution.
+
+Mobile suspension may skip normal exit callbacks. Recovery must rely on incremental committed saves, with lifecycle notifications used to request an additional save when possible. Touch and stylus input need normalized samples and gesture routing rather than simulated desktop shortcuts. See [platforms](platforms.md) for planned work and validation gates.
