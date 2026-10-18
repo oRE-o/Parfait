@@ -268,8 +268,9 @@ impl eframe::App for Parfait {
         let ctx = ui.ctx().clone();
         self.saving();
         self.shortcuts(&ctx);
+        // Native window controls remain usable while an editor dialog is open.
+        self.title_bar(ui);
         ui.add_enabled_ui(self.calibration_dialog.is_none(), |ui| {
-            self.title_bar(ui);
             self.top_panel(ui);
             self.bottom_panel(ui);
             if !self.hide_panels {

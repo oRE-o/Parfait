@@ -4,6 +4,8 @@ use parfait_core::PressureCalibration;
 
 pub struct CalibrationDialog {
     draft: PressureCalibration,
+    #[cfg(test)]
+    cancel_rect: Option<egui::Rect>,
     samples: Vec<f32>,
     marks: Vec<([f32; 2], f32, bool)>,
     active: bool,
@@ -15,6 +17,8 @@ pub struct CalibrationDialog {
 impl CalibrationDialog {
     pub fn new(draft: PressureCalibration) -> Self {
         Self {
+            #[cfg(test)]
+            cancel_rect: None,
             draft,
             samples: Vec::new(),
             marks: Vec::new(),
@@ -231,7 +235,22 @@ impl Parfait {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Tablet pressure calibration").open(&mut open).collapsible(false).resizable(false).default_width(500.).show(ctx,|ui| {
+        egui::Window::new("Tablet pressure calibration")
+            .open(&mut open).collapsible(false).resizable(false)
+            .default_pos(ctx.content_rect().center() - egui::vec2(260., 250.))
+            .constrain_to(ctx.content_rect()).default_width(500.).show(ctx,|ui| {
+            // Keep dismissal outside the scrolling body, even on small/high-DPI windows.
+            ui.horizontal(|ui| {
+                apply = ui.add_enabled(dialog.draft.validate(),
+                    egui::Button::new("Apply & close").min_size(egui::vec2(120., 30.))).clicked();
+                let close = ui.add(egui::Button::new("Cancel / close").min_size(egui::vec2(120., 30.)))
+                    .on_hover_text("Close without applying changes (Escape)");
+                #[cfg(test)] { dialog.cancel_rect = Some(close.rect); }
+                cancel = close.clicked();
+            });
+            ui.separator();
+            egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 180.).max(100.))
+                .show(ui, |ui| {
             ui.label("Device calibration · applies to all brushes before their individual pressure settings.");
             dialog.graph(ui); dialog.pad(ui);
             ui.horizontal(|ui| {
@@ -245,10 +264,6 @@ impl Parfait {
                 if ui.button("Reset curve").clicked() { dialog.draft=Default::default(); dialog.selected=None; }
             });
             ui.label(&dialog.message);
-            ui.separator();
-            ui.horizontal(|ui| {
-                apply=ui.add_enabled(dialog.draft.validate(),egui::Button::new("Apply")).clicked();
-                cancel=ui.button("Cancel").clicked();
             });
         });
         if apply || cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -268,6 +283,61 @@ impl Parfait {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn close_button_is_visible_on_small_window_and_escape_cancels() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.));
+        let frame = |app: &mut Parfait, events| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    app.calibration_ui(ui.ctx());
+                },
+            );
+            out.textures_delta.clear();
+        };
+        app.calibration_dialog = Some(CalibrationDialog::new(Default::default()));
+        frame(&mut app, vec![]);
+        frame(&mut app, vec![]);
+        let rect = app
+            .calibration_dialog
+            .as_ref()
+            .unwrap()
+            .cancel_rect
+            .unwrap();
+        assert!(screen.contains_rect(rect));
+        let p = rect.center();
+        let button = |pressed| Event::PointerButton {
+            pos: p,
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: Default::default(),
+        };
+        frame(&mut app, vec![Event::PointerMoved(p), button(true)]);
+        frame(&mut app, vec![button(false)]);
+        assert!(app.calibration_dialog.is_none());
+        app.calibration_dialog = Some(CalibrationDialog::new(PressureCalibration {
+            points: vec![[0., 0.], [0.5, 1.], [1., 1.]],
+        }));
+        frame(
+            &mut app,
+            vec![Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert!(app.calibration_dialog.is_none());
+        assert_eq!(app.calibration, PressureCalibration::default());
+    }
     #[test]
     fn graph_click_adds_and_fast_drag_moves_control_point() {
         let ctx = egui::Context::default();
