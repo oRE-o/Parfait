@@ -18,6 +18,9 @@ pub enum Icon {
     Trash,
     Up,
     Down,
+    Close,
+    Maximize,
+    Restore,
 }
 
 pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui::Response {
@@ -52,6 +55,9 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui:
         Icon::Trash => "\u{f2ed}",
         Icon::Up => "\u{f062}",
         Icon::Down => "\u{f063}",
+        Icon::Close => "\u{f00d}",
+        Icon::Maximize => "\u{f2d0}",
+        Icon::Restore => "\u{f2d2}",
     };
     ui.painter().text(
         rect.center(),

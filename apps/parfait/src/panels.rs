@@ -4,7 +4,6 @@ use crate::{
     widgets::{self, Icon},
 };
 use eframe::egui::{self, Color32, RichText};
-use parfait_core::BrushTip;
 
 impl Parfait {
     pub fn top_panel(&mut self, ui: &mut egui::Ui) {
@@ -54,6 +53,23 @@ impl Parfait {
                     }
                 });
                 ui.menu_button("View", |ui| {
+                    ui.menu_button("Palettes", |ui| {
+                        for p in &mut self.workspace.panels {
+                            ui.checkbox(&mut p.visible, p.palette.title());
+                        }
+                    });
+                    if ui.button("Reset palette layout").clicked() {
+                        self.workspace = Default::default();
+                        ui.ctx().data_mut(|d| {
+                            d.remove::<egui::containers::panel::PanelState>(egui::Id::new(
+                                "dock_left",
+                            ));
+                            d.remove::<egui::containers::panel::PanelState>(egui::Id::new(
+                                "dock_right",
+                            ));
+                        });
+                        ui.close();
+                    }
                     if ui.button("Fit canvas   Ctrl+0").clicked() {
                         self.view = Default::default();
                         ui.close();
@@ -164,7 +180,7 @@ impl Parfait {
             });
         });
     }
-    pub fn tool_panel(&mut self, ui: &mut egui::Ui) {
+    pub fn tool_rail(&mut self, ui: &mut egui::Ui) {
         egui::Panel::left("tool_rail")
             .exact_size(34.)
             .resizable(false)
@@ -224,145 +240,6 @@ impl Parfait {
                 ui.add_space(10.);
                 ui.color_edit_button_srgb(&mut self.brush.color);
             });
-        egui::Panel::left("tools")
-            .default_size(218.)
-            .resizable(true)
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .id_salt("tool_palettes")
-                    .show(ui, |ui| {
-                        widgets::heading(
-                            ui,
-                            if self.brush.erase {
-                                "Sub tool · Eraser"
-                            } else {
-                                "Sub tool · Pen"
-                            },
-                        );
-                        if widgets::brush_row(
-                            ui,
-                            "Round pen",
-                            matches!(self.brush.tip, BrushTip::Round),
-                            false,
-                        ) {
-                            self.brush.tip = BrushTip::Round;
-                            self.tip_name = "Round pen".into();
-                            self.navigation_tool = 0;
-                        }
-                        if widgets::brush_row(
-                            ui,
-                            "Soft brush",
-                            matches!(self.brush.tip, BrushTip::Soft),
-                            true,
-                        ) {
-                            self.brush.tip = BrushTip::Soft;
-                            self.tip_name = "Soft brush".into();
-                            self.navigation_tool = 0;
-                        }
-                        if matches!(self.brush.tip, BrushTip::Image { .. }) {
-                            ui.label(&self.tip_name);
-                        }
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("Brush material").small().weak());
-                            if ui.small_button("+ Import PNG").clicked() {
-                                self.import_tip();
-                            }
-                        });
-                        ui.add_space(5.);
-                        widgets::heading(ui, "Tool property");
-                        widgets::brush_row(
-                            ui,
-                            &self.tip_name,
-                            false,
-                            matches!(self.brush.tip, BrushTip::Soft),
-                        );
-                        ui.horizontal(|ui| {
-                            ui.label("Brush size");
-                            ui.add(
-                                egui::DragValue::new(&mut self.brush.size)
-                                    .range(1.0..=512.0)
-                                    .speed(0.5)
-                                    .suffix(" px"),
-                            );
-                        });
-                        ui.add(
-                            egui::Slider::new(&mut self.brush.size, 1.0..=512.0)
-                                .logarithmic(true)
-                                .show_value(false),
-                        );
-                        ui.horizontal(|ui| {
-                            ui.label("Opacity");
-                            ui.add(
-                                egui::Slider::new(&mut self.brush.opacity, 0.01..=1.0)
-                                    .custom_formatter(|v, _| format!("{:.0}%", v * 100.)),
-                            );
-                        });
-                        ui.checkbox(&mut self.brush.pressure, "Pen pressure → size")
-                            .on_hover_text("Uses pressure when the input backend supplies it.");
-                        ui.add_space(5.);
-                        widgets::heading(ui, "Brush size");
-                        let sizes = [
-                            1., 2., 3., 4., 5., 7., 10., 12., 15., 20., 25., 30., 40., 50., 70.,
-                            100., 150., 200.,
-                        ];
-                        let cell = ((ui.available_width() - 5. * 2.) / 6.).max(20.);
-                        egui::Grid::new("brush_size_grid")
-                            .spacing(egui::vec2(2., 2.))
-                            .show(ui, |ui| {
-                                for (i, size) in sizes.into_iter().enumerate() {
-                                    let (r, response) = ui.allocate_exact_size(
-                                        egui::vec2(cell, 36.),
-                                        egui::Sense::click(),
-                                    );
-                                    response.widget_info(|| {
-                                        egui::WidgetInfo::labeled(
-                                            egui::WidgetType::Button,
-                                            true,
-                                            format!("Brush size {size} pixels"),
-                                        )
-                                    });
-                                    let selected = (self.brush.size - size).abs() < 0.1;
-                                    ui.painter().rect_filled(
-                                        r,
-                                        0.,
-                                        if selected {
-                                            ui.visuals().selection.bg_fill
-                                        } else {
-                                            Color32::from_gray(68)
-                                        },
-                                    );
-                                    ui.painter().circle_filled(
-                                        r.center_top() + egui::vec2(0., 12.),
-                                        size.sqrt().clamp(1., 10.),
-                                        Color32::from_gray(224),
-                                    );
-                                    ui.painter().text(
-                                        r.center_bottom() - egui::vec2(0., 3.),
-                                        egui::Align2::CENTER_BOTTOM,
-                                        format!("{size}"),
-                                        egui::FontId::proportional(10.),
-                                        Color32::from_gray(206),
-                                    );
-                                    if response.clicked() {
-                                        self.brush.size = size;
-                                    }
-                                    if i % 6 == 5 {
-                                        ui.end_row();
-                                    }
-                                }
-                            });
-                        ui.add_space(5.);
-                        widgets::heading(ui, "Color wheel");
-                        widgets::color_wheel(ui, &mut self.brush.color);
-                        ui.horizontal(|ui| {
-                            ui.color_edit_button_srgb(&mut self.brush.color);
-                            ui.label(format!(
-                                "R {}  G {}  B {}",
-                                self.brush.color[0], self.brush.color[1], self.brush.color[2]
-                            ));
-                        });
-                    });
-            });
     }
     fn duplicate_layer(&mut self) {
         self.edit(|d| {
@@ -374,7 +251,7 @@ impl Parfait {
             }
         });
     }
-    fn update_previews(&mut self, ctx: &egui::Context) {
+    pub fn update_previews(&mut self, ctx: &egui::Context) {
         if self.preview_revision == self.doc.revision {
             return;
         }
@@ -407,13 +284,66 @@ impl Parfait {
         }
         self.preview_revision = self.doc.revision;
     }
-    pub fn layer_panel(&mut self, ui: &mut egui::Ui) {
-        self.update_previews(ui.ctx());
-        egui::Panel::right("layers")
-            .default_size(240.)
-            .resizable(true)
-            .show(ui, |ui| {
-                widgets::heading(ui, "Navigator");
+    pub fn palette(&mut self, ui: &mut egui::Ui, palette: crate::workspace::Palette) {
+        use crate::workspace::Palette;
+        match palette {
+            Palette::Brushes => self.brush_library_ui(ui),
+            Palette::Properties => self.brush_properties_ui(ui),
+            Palette::Sizes => {
+                let sizes = [
+                    1., 2., 3., 4., 5., 7., 10., 12., 15., 20., 25., 30., 40., 50., 70., 100.,
+                    150., 200.,
+                ];
+                let cell = ((ui.available_width() - 5. * 2.) / 6.).max(20.);
+                egui::Grid::new("brush_size_grid")
+                    .spacing(egui::vec2(2., 2.))
+                    .show(ui, |ui| {
+                        for (i, size) in sizes.into_iter().enumerate() {
+                            let (r, response) =
+                                ui.allocate_exact_size(egui::vec2(cell, 36.), egui::Sense::click());
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::WidgetType::Button,
+                                    true,
+                                    format!("Brush size {size} pixels"),
+                                )
+                            });
+                            let selected = (self.brush.size - size).abs() < 0.1;
+                            ui.painter().rect_filled(
+                                r,
+                                0.,
+                                if selected {
+                                    ui.visuals().selection.bg_fill
+                                } else {
+                                    Color32::from_gray(68)
+                                },
+                            );
+                            ui.painter().circle_filled(
+                                r.center_top() + egui::vec2(0., 12.),
+                                size.sqrt().clamp(1., 10.),
+                                Color32::from_gray(224),
+                            );
+                            ui.painter().text(
+                                r.center_bottom() - egui::vec2(0., 3.),
+                                egui::Align2::CENTER_BOTTOM,
+                                format!("{size}"),
+                                egui::FontId::proportional(10.),
+                                Color32::from_gray(206),
+                            );
+                            if response.clicked() {
+                                self.brush.size = size;
+                            }
+                            if i % 6 == 5 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+            }
+            Palette::Color => {
+                widgets::color_wheel(ui, &mut self.brush.color);
+                ui.color_edit_button_srgb(&mut self.brush.color);
+            }
+            Palette::Navigator => {
                 if let Some(texture) = &self.texture {
                     let w = ui.available_width();
                     let h = (w * self.doc.height as f32 / self.doc.width as f32).min(180.);
@@ -451,19 +381,8 @@ impl Parfait {
                         self.view = Default::default();
                     }
                 });
-                ui.add_space(6.);
-                widgets::heading(ui, "Layer property");
-                ui.horizontal(|ui| {
-                    ui.label("Expression");
-                    ui.label("RGB color + alpha");
-                });
-                ui.label(
-                    RichText::new("Raster layer · Normal blending")
-                        .small()
-                        .weak(),
-                );
-                ui.add_space(10.);
-                widgets::heading(ui, "Layers");
+            }
+            Palette::Layers => {
                 let active = self.doc.active;
                 let mut opacity = self.doc.layers[active].opacity;
                 ui.horizontal(|ui| {
@@ -599,6 +518,7 @@ impl Parfait {
                                 });
                         }
                     });
-            });
+            }
+        }
     }
 }

@@ -1,11 +1,15 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod app;
+mod brushes;
 mod canvas;
+mod chrome;
 mod diagnostics;
 mod panels;
+mod preferences;
 mod shortcuts;
 mod theme;
 mod widgets;
+mod workspace;
 use std::path::PathBuf;
 
 fn main() {
@@ -40,6 +44,7 @@ fn run() -> anyhow::Result<()> {
         .map(|p| diagnostics::Capture::new(PathBuf::from(&p[1])));
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
+            .with_decorations(false)
             .with_inner_size([1440., 920.])
             .with_min_inner_size([960., 640.]),
         ..Default::default()

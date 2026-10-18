@@ -8,6 +8,10 @@ Core tests cover alpha compositing, visibility, copy-on-write snapshots, continu
 
 Headless egui input tests verify that hand-tool dragging pans without changing pixels, switching back to the pen draws, and a hue chosen while the current color is black is retained when saturation/value is raised. These tests supplement rendered-frame inspection; they do not replace native OS input or physical tablet validation.
 
+Additional regression checks cover Space taking over an existing stroke without leaving paint, Ctrl+Plus leaving UI scale unchanged, dragging a palette into a floating window, redocking it, resizing its height, and reopening persisted layout/pressure settings/image tips. Core tests verify pressure response changes both coverage and opacity and reject non-monotonic curves.
+
+Before release on each OS, also test custom-title dragging, double-click maximize/restore, all resize edges, minimize, and close with a pending save. Move a floating palette to each dock, reorder it, resize both its body and dock, then restart. Use a real tablet to confirm pressure telemetry, small-to-large strokes and driver mode; synthetic pressure tests do not prove device compatibility.
+
 Storage tests round-trip snapshots, corrupt the newest payload and check fallback, and verify exclusive recovery ownership. Integration tests launch `recovery_probe` as a separate process, wait for a durable fixture milestone, forcibly kill it, and reopen the database:
 
 1. Kill during an uncommitted replacement transaction: the prior brush pixels remain.

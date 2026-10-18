@@ -1,6 +1,7 @@
 use eframe::egui::{self, Color32};
 pub const ACCENT: Color32 = Color32::from_rgb(179, 194, 214);
 pub fn apply(ctx: &egui::Context) {
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
     let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
     style.visuals = egui::Visuals::dark();
     style.visuals.panel_fill = Color32::from_gray(61);
@@ -69,4 +70,42 @@ pub fn apply(ctx: &egui::Context) {
         }
     }
     ctx.set_fonts(fonts);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn control_plus_does_not_change_ui_scale() {
+        let ctx = egui::Context::default();
+        apply(&ctx);
+        let modifiers = egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..Default::default()
+        };
+        for events in [
+            vec![egui::Event::ModifiersChanged(modifiers)],
+            vec![egui::Event::Key {
+                key: egui::Key::Plus,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers,
+            }],
+            vec![],
+        ] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.label("Scale test");
+                },
+            );
+            out.textures_delta.clear();
+        }
+        assert_eq!(ctx.zoom_factor(), 1.);
+    }
 }

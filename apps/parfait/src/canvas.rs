@@ -63,8 +63,21 @@ impl Parfait {
         let events = ctx.input(|i| i.events.clone());
         let space = ctx.input(|i| i.key_down(Key::Space)) || self.navigation_tool == 1;
         let modifiers = ctx.input(|i| i.modifiers);
-        let blocked =
-            self.confirm_new || self.error.is_some() || self.show_help || self.show_licenses;
+        let blocked = self.confirm_new
+            || self.error.is_some()
+            || self.show_help
+            || self.show_licenses
+            || self.workspace.dragging.is_some();
+        // Space takes ownership until pointer-up; painting never resumes mid-gesture.
+        if space && self.stroke.take().is_some() {
+            self.force_save();
+            if ctx.input(|i| i.pointer.primary_down()) {
+                self.view.gesture = Some(Gesture::Pan);
+                if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
+                    self.view.last = pos;
+                }
+            }
+        }
         if response.hovered() && !blocked && self.stroke.is_none() {
             let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.
@@ -76,9 +89,23 @@ impl Parfait {
         for event in events {
             match event {
                 Event::Touch {
+                    phase: egui::TouchPhase::Cancel,
+                    ..
+                }
+                | Event::WindowFocused(false) => {
+                    if self.stroke.take().is_some() {
+                        self.force_save();
+                    }
+                    self.view.gesture = None;
+                    self.pressure = 1.;
+                }
+                Event::Touch {
                     force: Some(force), ..
                 } => {
-                    self.pressure = force;
+                    if force.is_finite() {
+                        self.pressure = force.clamp(0., 1.);
+                        self.pressure_seen = true;
+                    }
                 }
                 Event::PointerButton {
                     pos,
@@ -147,7 +174,10 @@ impl Parfait {
                             ),
                         }
                         self.view.last = pos;
-                    } else if let Some(stroke) = &mut self.stroke {
+                    } else if !space
+                        && !blocked
+                        && let Some(stroke) = &mut self.stroke
+                    {
                         let p = self.view.document(pos, rect, size);
                         stroke.extend(
                             &mut self.doc,
@@ -322,6 +352,30 @@ mod tests {
         frame(&mut app, vec![button(end, true)]);
         frame(&mut app, vec![button(end, false)]);
         assert_ne!(app.doc.composite(), before);
+        // Press Space after starting a pen stroke: subsequent moves must only pan,
+        // even if Space is released before the mouse button.
+        frame(&mut app, vec![button(end, true)]);
+        let painted = app.doc.composite();
+        let space = |pressed| Event::Key {
+            key: Key::Space,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        frame(&mut app, vec![space(true)]);
+        frame(
+            &mut app,
+            vec![Event::PointerMoved(end + egui::vec2(12., 0.))],
+        );
+        frame(&mut app, vec![space(false)]);
+        frame(
+            &mut app,
+            vec![Event::PointerMoved(end + egui::vec2(24., 0.))],
+        );
+        assert_eq!(app.doc.composite(), painted);
+        assert!(app.stroke.is_none());
+        frame(&mut app, vec![button(end + egui::vec2(24., 0.), false)]);
     }
     #[test]
     fn coordinate_roundtrip_and_zoom_anchor() {

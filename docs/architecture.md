@@ -42,7 +42,11 @@ Normal app exit joins the worker after submitting the final snapshot. Manual Sav
 
 Next changes should introduce typed editor commands before adding many tools, a tile representation before promising large canvases, and explicit schema migrations before changing persisted fields.
 
-The desktop workspace uses a compact menu/command bar, a narrow tool rail, scrollable brush/color palettes and a navigator/layer palette. Standard action icons come from the pinned Font Awesome Free asset, with tooltips and accessibility labels; see its bundled attribution. Side palettes can be resized or hidden. This is a fixed palette layout, not a drag-and-drop docking system. Layer thumbnails are refreshed from document pixels when the revision changes. Rulers show screen-axis projections of document coordinates when the view is rotated.
+The desktop workspace uses a compact menu/command bar, a narrow tool rail, scrollable brush/color palettes and a navigator/layer palette. Standard action icons come from the pinned Font Awesome Free asset, with tooltips and accessibility labels; see its bundled attribution. Layer thumbnails are refreshed from document pixels when the revision changes. Rulers show screen-axis projections of document coordinates when the view is rotated.
+
+`workspace.rs` owns typed palette placement, ordered side docks, drag/drop targets and floating in-app windows. `preferences.rs` validates and persists versioned layout and brush state to a separate SQLite file using atomic row replacement; artwork format v1 remains unchanged. Invalid or newer preferences are reported and preserved. `brushes.rs` owns the library, bounded image-tip ingestion and versioned JSON `.pbrush` interchange. `chrome.rs` owns the frameless title bar and native viewport window commands. Closing still passes through the save acknowledgment path.
+
+Brush dynamics belong to `parfait-core`: a monotonic five-sample pressure curve is interpolated before size/opacity modulation. Spacing, flow, roundness, angle and simple low-pass smoothing are independent settings. Brush settings are frozen at pointer-down. Smoothing can trail the cursor; this is not predictive or velocity-aware stabilization. The canvas keeps navigation and painting mutually exclusive for the duration of a held pointer gesture. Native pressure samples use the existing windowing backend; no native driver API is embedded in the core.
 
 ## Cross-platform boundaries
 

@@ -16,6 +16,24 @@ use std::{
 pub use worker::{Autosave, SaveEvent};
 
 const MAX_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Workspace and brush preferences are separate from artwork and committed atomically.
+pub fn load_preferences(path: &Path) -> Result<Option<String>> {
+    use rusqlite::OptionalExtension;
+    let c = Connection::open(path)?;
+    c.execute_batch("CREATE TABLE IF NOT EXISTS preferences(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL)")?;
+    Ok(
+        c.query_row("SELECT json FROM preferences WHERE id=1", [], |r| r.get(0))
+            .optional()?,
+    )
+}
+pub fn save_preferences(path: &Path, json: &str) -> Result<()> {
+    ensure!(json.len() <= 32 * 1024 * 1024, "Preferences exceed 32 MiB");
+    let c = Connection::open(path)?;
+    c.execute_batch("PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS preferences(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL)")?;
+    c.execute("INSERT OR REPLACE INTO preferences VALUES(1,?1)", [json])?;
+    Ok(())
+}
 pub struct Store {
     connection: Connection,
 }

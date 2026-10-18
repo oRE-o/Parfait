@@ -9,6 +9,13 @@ use std::{
 };
 
 pub struct Parfait {
+    pub workspace: crate::workspace::Workspace,
+    pub presets: Vec<crate::brushes::Preset>,
+    pub preferences_saved: String,
+    pub preferences_tick: Instant,
+    pub preferences_read_failed: bool,
+    pub pressure_seen: bool,
+    pub pressure_tab: bool,
     pub capture: Option<crate::diagnostics::Capture>,
     pub navigation_tool: u8,
     pub layer_previews: Vec<egui::TextureHandle>,
@@ -63,7 +70,14 @@ impl Parfait {
         };
         autosave.submit(doc.clone());
         let submitted = doc.revision;
-        Ok(Self {
+        let mut app = Self {
+            workspace: Default::default(),
+            presets: crate::brushes::defaults(),
+            preferences_saved: String::new(),
+            preferences_tick: Instant::now(),
+            preferences_read_failed: false,
+            pressure_seen: false,
+            pressure_tab: false,
             capture: None,
             navigation_tool: 0,
             layer_previews: Vec::new(),
@@ -92,7 +106,9 @@ impl Parfait {
             saving_failed: false,
             close_pending: false,
             _lock: lock,
-        })
+        };
+        app.restore_preferences();
+        Ok(app)
     }
     pub fn edit(&mut self, action: impl FnOnce(&mut Document)) {
         self.history.checkpoint(&self.doc);
@@ -113,6 +129,15 @@ impl Parfait {
         self.autosave.submit(self.doc.clone());
         self.submitted = self.doc.revision;
         self.last_submit = Instant::now();
+    }
+    pub fn request_close(&mut self, ctx: &egui::Context) {
+        if self.saved < self.doc.revision || self.saving_failed {
+            self.stroke = None;
+            self.close_pending = true;
+            self.force_save();
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
     }
     pub fn save_project(&mut self, save_as: bool) {
         let path = if !save_as { self.project.clone() } else { None }.or_else(|| {
@@ -206,45 +231,6 @@ impl Parfait {
             }
         }
     }
-    pub fn import_tip(&mut self) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Brush tip", &["png"])
-            .pick_file()
-        {
-            match image::ImageReader::open(&path)
-                .map_err(anyhow::Error::from)
-                .and_then(|r| r.decode().map_err(Into::into))
-            {
-                Ok(img) => {
-                    let img = img.thumbnail(256, 256).to_rgba8();
-                    let (w, h) = img.dimensions();
-                    let alpha = img.pixels().any(|p| p[3] < 255);
-                    let mask = img
-                        .pixels()
-                        .map(|p| {
-                            if alpha {
-                                p[3]
-                            } else {
-                                255 - ((p[0] as u32 + p[1] as u32 + p[2] as u32) / 3) as u8
-                            }
-                        })
-                        .collect();
-                    self.brush.tip = parfait_core::BrushTip::Image {
-                        width: w,
-                        height: h,
-                        mask: std::sync::Arc::new(mask),
-                    };
-                    self.tip_name = path
-                        .file_stem()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .into_owned();
-                    self.notice=Some("Brush tip imported. Transparent tips use alpha; opaque tips use inverted luminance.".into());
-                }
-                Err(e) => self.error = Some(format!("Brush import failed: {e:#}")),
-            }
-        }
-    }
     fn saving(&mut self) {
         while let Some(event) = self.autosave.poll() {
             match event {
@@ -278,11 +264,11 @@ impl eframe::App for Parfait {
         let ctx = ui.ctx().clone();
         self.saving();
         self.shortcuts(&ctx);
+        self.title_bar(ui);
         self.top_panel(ui);
         self.bottom_panel(ui);
         if !self.hide_panels {
-            self.tool_panel(ui);
-            self.layer_panel(ui);
+            self.workspace_ui(ui);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
@@ -344,6 +330,8 @@ impl eframe::App for Parfait {
                 });
         }
         ctx.request_repaint_after(Duration::from_millis(100));
+        crate::chrome::resize_edges(ui);
+        self.persist_preferences(false);
         if let Some(capture) = &mut self.capture
             && let Err(error) = capture.update(&ctx)
         {
@@ -361,6 +349,7 @@ impl eframe::App for Parfait {
         }
     }
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.persist_preferences(true);
         self.autosave.finish(self.doc.clone());
     }
 }
