@@ -1,6 +1,6 @@
 use crate::app::Parfait;
 use eframe::egui::{self, Color32, Event, Key, PointerButton, Pos2, Rect, Vec2};
-use parfait_core::{Point, Stroke};
+use parfait_core::{PixelRect, Point, Stroke};
 
 #[derive(Clone, Copy)]
 enum Gesture {
@@ -86,6 +86,9 @@ impl Parfait {
                 self.view.zoom_at((scroll * 0.003).exp(), pos, rect, size);
             }
         }
+        // Changes made outside this input batch (undo, layer edits, open) invalidate all pixels.
+        let full_refresh = self.rendered != self.doc.revision || self.texture.is_none();
+        let mut damage: Option<PixelRect> = None;
         for event in events {
             match event {
                 Event::Touch {
@@ -129,10 +132,13 @@ impl Parfait {
                             let p = self.view.document(pos, rect, size);
                             if p.x >= 0. && p.y >= 0. && p.x < size.x && p.y < size.y {
                                 if modifiers.alt || self.navigation_tool == 2 {
-                                    let pixels = self.doc.composite();
-                                    let idx =
-                                        ((p.y as u32 * self.doc.width + p.x as u32) * 4) as usize;
-                                    self.brush.color.copy_from_slice(&pixels[idx..idx + 3]);
+                                    let pixels = self.doc.composite_region(PixelRect {
+                                        x0: p.x as u32,
+                                        y0: p.y as u32,
+                                        x1: p.x as u32 + 1,
+                                        y1: p.y as u32 + 1,
+                                    });
+                                    self.brush.color.copy_from_slice(&pixels[..3]);
                                 } else if !self.doc.layers[self.doc.active].locked
                                     && self.doc.layers[self.doc.active].visible
                                 {
@@ -191,18 +197,37 @@ impl Parfait {
                 }
                 _ => {}
             }
+            if let Some(stroke) = &mut self.stroke
+                && let Some(r) = stroke.take_damage()
+            {
+                damage = Some(damage.map_or(r, |old| old.union(r)));
+            }
         }
         if !ctx.input(|i| i.pointer.primary_down()) && self.stroke.take().is_some() {
             self.force_save();
         }
         if self.rendered != self.doc.revision || self.texture.is_none() {
-            let mut pixels = self.doc.composite();
-            for (y, row) in pixels
-                .chunks_exact_mut(self.doc.width as usize * 4)
-                .enumerate()
-            {
+            let region = if let Some(r) = damage.filter(|_| !full_refresh) {
+                r
+            } else {
+                PixelRect {
+                    x0: 0,
+                    y0: 0,
+                    x1: self.doc.width,
+                    y1: self.doc.height,
+                }
+            };
+            let width = (region.x1 - region.x0) as usize;
+            let height = (region.y1 - region.y0) as usize;
+            let mut pixels = self.doc.composite_region(region);
+            for (y, row) in pixels.chunks_exact_mut(width * 4).enumerate() {
                 for (x, p) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                    let bg = if (x / 16 + y / 16) % 2 == 0 {
+                    if p[3] == 255 {
+                        continue;
+                    }
+                    let bg = if ((x + region.x0 as usize) / 16 + (y + region.y0 as usize) / 16)
+                        .is_multiple_of(2)
+                    {
                         235.
                     } else {
                         218.
@@ -214,12 +239,17 @@ impl Parfait {
                     p[3] = 255;
                 }
             }
-            let image = egui::ColorImage::from_rgba_unmultiplied(
-                [self.doc.width as usize, self.doc.height as usize],
-                &pixels,
-            );
+            let image = egui::ColorImage::from_rgba_unmultiplied([width, height], &pixels);
             if let Some(tex) = &mut self.texture {
-                tex.set(image, egui::TextureOptions::LINEAR);
+                if full_refresh || damage.is_none() {
+                    tex.set(image, egui::TextureOptions::LINEAR);
+                } else {
+                    tex.set_partial(
+                        [region.x0 as usize, region.y0 as usize],
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    );
+                }
             } else {
                 self.texture =
                     Some(ctx.load_texture("drawing", image, egui::TextureOptions::LINEAR));
@@ -377,6 +407,73 @@ mod tests {
         assert!(app.stroke.is_none());
         frame(&mut app, vec![button(end + egui::vec2(24., 0.), false)]);
     }
+    #[test]
+    fn texture_updates_are_partial_for_strokes_and_full_for_external_edits() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        app.doc = parfait_core::Document::new(128, 128);
+        app.doc.layers[0].visible = false; // exercise checkerboard origin in partial updates
+        let ctx = egui::Context::default();
+        let mut cache = vec![Color32::TRANSPARENT; 128 * 128];
+        let mut frame = |app: &mut Parfait, events: Vec<Event>, partial: bool| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(400., 400.))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
+                },
+            );
+            let id = app.texture.as_ref().unwrap().id();
+            let updates = out.textures_delta.set.get(&id).expect("canvas upload");
+            assert_eq!(updates.len(), 1);
+            let delta = &updates[0];
+            assert_eq!(delta.pos.is_some(), partial);
+            let egui::ImageData::Color(image) = &delta.image;
+            let [x, y] = delta.pos.unwrap_or([0, 0]);
+            if partial {
+                assert!(image.size[0] * image.size[1] < 128 * 128);
+            }
+            for row in 0..image.size[1] {
+                let at = (y + row) * 128 + x;
+                cache[at..at + image.size[0]]
+                    .copy_from_slice(&image.pixels[row * image.size[0]..(row + 1) * image.size[0]]);
+            }
+            for (i, p) in app.doc.composite().as_chunks::<4>().0.iter().enumerate() {
+                let bg = if (i % 128 / 16 + i / 128 / 16).is_multiple_of(2) {
+                    235.
+                } else {
+                    218.
+                };
+                let a = p[3] as f32 / 255.;
+                let rgb: [u8; 3] =
+                    std::array::from_fn(|c| (p[c] as f32 * a + bg * (1. - a)).round() as u8);
+                assert_eq!(cache[i], Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+            }
+            out.textures_delta.clear();
+        };
+        frame(&mut app, vec![], false);
+        let p = egui::pos2(210., 210.);
+        let button = |pressed| Event::PointerButton {
+            pos: p,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(
+            &mut app,
+            vec![Event::PointerMoved(p), button(true), button(false)],
+            true,
+        );
+        app.doc.layers[1].opacity = 0.2;
+        app.doc.touch();
+        frame(&mut app, vec![], false);
+        app.history.undo(&mut app.doc);
+        frame(&mut app, vec![], false);
+    }
+
     #[test]
     fn coordinate_roundtrip_and_zoom_anchor() {
         let mut v = View {

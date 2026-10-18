@@ -1,6 +1,35 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// Half-open pixel bounds. Transient renderer state, never serialized into projects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PixelRect {
+    pub x0: u32,
+    pub y0: u32,
+    pub x1: u32,
+    pub y1: u32,
+}
+impl PixelRect {
+    pub fn union(self, other: Self) -> Self {
+        Self {
+            x0: self.x0.min(other.x0),
+            y0: self.y0.min(other.y0),
+            x1: self.x1.max(other.x1),
+            y1: self.y1.max(other.y1),
+        }
+    }
+    pub fn clipped(self, width: u32, height: u32) -> Self {
+        let x0 = self.x0.min(width);
+        let y0 = self.y0.min(height);
+        Self {
+            x0,
+            y0,
+            x1: self.x1.min(width).max(x0),
+            y1: self.y1.min(height).max(y0),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct Layer {
     pub name: String,
@@ -82,19 +111,36 @@ impl Document {
         self.touch();
     }
     pub fn composite(&self) -> Vec<u8> {
-        let mut out = vec![0; self.width as usize * self.height as usize * 4];
+        self.composite_region(PixelRect {
+            x0: 0,
+            y0: 0,
+            x1: self.width,
+            y1: self.height,
+        })
+    }
+    /// Composite a clipped, tightly packed region without allocating the full canvas.
+    pub fn composite_region(&self, rect: PixelRect) -> Vec<u8> {
+        let r = rect.clipped(self.width, self.height);
+        let stride = (r.x1 - r.x0) as usize * 4;
+        let mut out = vec![0; stride * (r.y1 - r.y0) as usize];
+        if stride == 0 {
+            return out;
+        }
         for layer in self.layers.iter().filter(|l| l.visible && l.opacity > 0.) {
-            for (dst, src) in out
-                .as_chunks_mut::<4>()
-                .0
-                .iter_mut()
-                .zip(layer.pixels.as_chunks::<4>().0.iter())
-            {
-                composite_over(
-                    dst,
-                    [src[0], src[1], src[2]],
-                    src[3] as f32 / 255. * layer.opacity,
-                );
+            for (y, row) in out.chunks_exact_mut(stride).enumerate() {
+                let start = ((r.y0 as usize + y) * self.width as usize + r.x0 as usize) * 4;
+                for (dst, src) in row.as_chunks_mut::<4>().0.iter_mut().zip(
+                    layer.pixels[start..start + stride]
+                        .as_chunks::<4>()
+                        .0
+                        .iter(),
+                ) {
+                    composite_over(
+                        dst,
+                        [src[0], src[1], src[2]],
+                        src[3] as f32 / 255. * layer.opacity,
+                    );
+                }
             }
         }
         out
@@ -104,6 +150,11 @@ impl Document {
 pub fn composite_over(dst: &mut [u8], rgb: [u8; 3], alpha: f32) {
     let sa = alpha.clamp(0., 1.);
     if sa == 0. {
+        return;
+    }
+    if sa == 1. {
+        dst[..3].copy_from_slice(&rgb);
+        dst[3] = 255;
         return;
     }
     let da = dst[3] as f32 / 255.;

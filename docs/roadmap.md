@@ -11,7 +11,8 @@ Basic drawing, layers, PNG tips, local projects and verified process-crash recov
 - Typed edit commands and grouped property edits.
 - Brush library tags and import compatibility reports.
 - Hardware-tested pen sampling, tilt and velocity-aware stabilization.
-- Tiled buffers, partial texture updates and GPU layer compositing.
+- Tiled copy-on-write buffers and measured GPU layer compositing; partial stroke texture updates are implemented.
+- Release performance baselines on modest reference hardware, including autosave and p95/p99 frame times.
 - Tests for disk exhaustion, permission failures and storage migration.
 - Selection, clipping and masks, then geometric transforms and liquify.
 - Additional brush formats based on versioned fixtures and documented mappings.
@@ -28,3 +29,12 @@ Implemented after the initial prototype: draggable in-app palettes with persiste
 - Validate recovery after background suspension and OS termination, memory pressure, sandboxed import/export and tablet pen behavior.
 
 See the [platform plan](platforms.md) for the support matrix and release criteria.
+
+## Community (later)
+
+- Portable material packs with versioned metadata, license, attribution and compatibility.
+- Optional brush/material publication, search, tags, previews and downloads.
+- Upload limits, validation, reporting and moderation before a public service launches.
+- Keep local drawing and existing downloaded materials usable offline without an account.
+
+The [project vision](vision.md) governs scope: responsiveness and recovery come before catalog size or online features.

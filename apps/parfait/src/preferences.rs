@@ -50,7 +50,8 @@ impl Parfait {
         }
     }
     pub fn persist_preferences(&mut self, force: bool) {
-        if self.preferences_read_failed
+        if (!force && self.stroke.is_some())
+            || self.preferences_read_failed
             || (!force && self.preferences_tick.elapsed().as_secs_f32() < 1.)
         {
             return;

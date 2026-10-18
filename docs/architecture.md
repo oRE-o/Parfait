@@ -16,6 +16,10 @@ Layer pixel buffers use `Arc<Vec<u8>>`. History and autosave snapshots share unc
 
 Brush strokes freeze their brush settings at pointer-down. Samples are interpolated to spaced dabs; a dab applies coverage, opacity and optional pressure scaling. Erasing modifies alpha. PNG tips are masks; the brush color supplies their ink. Raster operations are independent of the view rotation and zoom.
 
+## Incremental canvas rendering
+
+Each stroke accumulates clipped, half-open `PixelRect` dab bounds. The UI drains these after each input event and unions them for the frame. `Document::composite_region` returns tightly packed RGBA for that region; the UI applies checkerboard coordinates in document space and sends `TextureHandle::set_partial`. A revision mismatch before processing canvas input forces a full refresh for external edits such as undo, layer changes or project replacement. The navigator reuses the same texture. Damage is transient and never changes the serialized document format.
+
 ## Storage protocol
 
 Format v1 is SQLite (`user_version=1`) with `snapshots` and `session` tables. A snapshot stores the complete document using fixed-integer bincode 1 encoding, zlib compression and SHA-256 of the uncompressed bytes. Deserialization is size-limited and followed by document validation. The limit is 512 MiB uncompressed per snapshot.
@@ -42,7 +46,7 @@ Normal app exit joins the worker after submitting the final snapshot. Manual Sav
 
 Next changes should introduce typed editor commands before adding many tools, a tile representation before promising large canvases, and explicit schema migrations before changing persisted fields.
 
-The desktop workspace uses a compact menu/command bar, a narrow tool rail, scrollable brush/color palettes and a navigator/layer palette. Standard action icons come from the pinned Font Awesome Free asset, with tooltips and accessibility labels; see its bundled attribution. Layer thumbnails are refreshed from document pixels when the revision changes. Rulers show screen-axis projections of document coordinates when the view is rotated.
+The desktop workspace uses a compact menu/command bar, a narrow tool rail, scrollable brush/color palettes and a navigator/layer palette. Standard action icons come from the pinned Font Awesome Free asset, with tooltips and accessibility labels; see its bundled attribution. Layer thumbnails are refreshed from document pixels when the revision changes, deferred until pen-up during strokes. Rulers show screen-axis projections of document coordinates when the view is rotated.
 
 `workspace.rs` owns typed palette placement, ordered side docks, drag/drop targets and floating in-app windows. `preferences.rs` validates and persists versioned layout and brush state to a separate SQLite file using atomic row replacement; artwork format v1 remains unchanged. Invalid or newer preferences are reported and preserved. `brushes.rs` owns the library, bounded image-tip ingestion and versioned JSON `.pbrush` interchange. `chrome.rs` owns the frameless title bar and native viewport window commands. Closing still passes through the save acknowledgment path.
 

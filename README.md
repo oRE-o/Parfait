@@ -1,10 +1,14 @@
 # Parfait
 
-A small, open-source drawing app in Rust. A quiet canvas, familiar pen-first controls, layers, and automatic local recovery.
+A lightweight, open-source drawing app in Rust. A quiet canvas, familiar pen-first controls, layers, and automatic local recovery.
 
 **Early desktop prototype (0.1).** The first version prioritizes a complete draw → save → restart workflow over a large tool catalog.
 
 ![Parfait drawing workspace](docs/images/workspace.png)
+
+## Product direction
+
+Prioritize immediate strokes, low resource use and reliable recovery. Drawing stays local and offline; a future optional community will let creators share brushes and materials. See the [project vision](docs/vision.md) and [performance evidence](docs/performance.md).
 
 ## Platform direction
 
@@ -48,7 +52,7 @@ Run an isolated session with `parfait --data-dir PATH`. Otherwise recovery data 
 
 Drag a palette's **≡ header** onto another palette to insert it above that palette. Drop over the canvas to detach it, or at the left/right app edge to dock it. Floating palettes stay inside the app window; use their inner ≡ header to dock again. Drag the side dock boundary for width, the bottom grip for palette height, or floating window edges for size. **View → Palettes** toggles visibility; **View → Reset palette layout** restores the default arrangement.
 
-Layout, active brush settings and the local preset library are saved to `preferences.sqlite` in the recovery directory approximately once per second and on normal exit. Artwork remains in its separate recovery database. Settings changed immediately before a forced termination may not yet be saved.
+Layout, active brush settings and the local preset library are saved to `preferences.sqlite` in the recovery directory approximately once per second while not drawing, and on normal exit. Artwork remains in its separate recovery database. Settings changed immediately before a forced termination may not yet be saved.
 
 In **Tool property / Pressure**, choose **Pressure curve** and drag the five graph nodes vertically. Linear, Soft and Firm are starting points. Pressure can drive size, opacity or both. The indicator reports whether pressure samples have arrived. Windows uses the backend's Windows Ink/pointer pressure path; tablet drivers need to deliver those events (legacy Wintab-only mode is not implemented). Mouse input uses full pressure. Physical tablets and Linux/macOS pen backends still require hardware verification.
 
@@ -99,7 +103,7 @@ docs/                    Architecture, testing, roadmap
 
 ## Current limits
 
-The prototype starts at 1024 × 768 and uses whole-layer CPU buffers and CPU compositing. Large-canvas tiled rendering is planned. Physical pen pressure/tilt and device-specific behavior still need hardware validation. Independent OS palette windows, ABR/SUT import, advanced mixing, selection, transforms, and liquify are not implemented. Linux/macOS source portability has not yet been validated on hardware. See the [feature plan](docs/feature-plan.md) for remaining editing tools and UI groups.
+The prototype starts at 1024 × 768 and uses whole-layer CPU buffers with changed-region CPU compositing and partial texture updates during strokes. Large-canvas tiled rendering is planned. Physical pen pressure/tilt and device-specific behavior still need hardware validation. Independent OS palette windows, ABR/SUT import, advanced mixing, selection, transforms, and liquify are not implemented. Linux/macOS source portability has not yet been validated on hardware. See the [feature plan](docs/feature-plan.md) for remaining editing tools and UI groups.
 
 ## License
 

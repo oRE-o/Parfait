@@ -1,4 +1,4 @@
-use crate::{Document, composite_over};
+use crate::{Document, PixelRect, composite_over};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug)]
@@ -101,18 +101,24 @@ impl Brush {
     }
 }
 pub struct Stroke {
+    damage: Option<PixelRect>,
     last: Point,
     spacing_left: f32,
     brush: Brush,
 }
 impl Stroke {
     pub fn begin(doc: &mut Document, brush: Brush, point: Point) -> Self {
-        stamp(doc, &brush, point);
+        let damage = stamp(doc, &brush, point);
         Self {
+            damage,
             last: point,
             spacing_left: 0.,
             brush,
         }
+    }
+    /// Drain all dab bounds since the last renderer update.
+    pub fn take_damage(&mut self) -> Option<PixelRect> {
+        self.damage.take()
     }
     pub fn extend(&mut self, doc: &mut Document, point: Point) {
         let point = Point {
@@ -134,7 +140,7 @@ impl Stroke {
         };
         while step <= dist {
             let t = step / dist;
-            stamp(
+            let damage = stamp(
                 doc,
                 &self.brush,
                 Point {
@@ -143,19 +149,22 @@ impl Stroke {
                     pressure: self.last.pressure + (point.pressure - self.last.pressure) * t,
                 },
             );
+            if let Some(r) = damage {
+                self.damage = Some(self.damage.map_or(r, |old| old.union(r)));
+            }
             step += spacing;
         }
         self.spacing_left = step - dist;
         self.last = point;
     }
 }
-fn stamp(doc: &mut Document, brush: &Brush, p: Point) {
+fn stamp(doc: &mut Document, brush: &Brush, p: Point) -> Option<PixelRect> {
     if !p.x.is_finite() || !p.y.is_finite() {
-        return;
+        return None;
     }
     let layer = &mut doc.layers[doc.active];
     if layer.locked || !layer.visible {
-        return;
+        return None;
     }
     let mapped = brush.mapped_pressure(p.pressure);
     let pressure = if brush.pressure {
@@ -164,11 +173,14 @@ fn stamp(doc: &mut Document, brush: &Brush, p: Point) {
         1.
     };
     let radius = (brush.size * pressure / 2.).clamp(0.5, 256.);
-    let pixels = Arc::make_mut(&mut layer.pixels);
     let x0 = ((p.x - radius - 1.).floor() as i32).max(0);
     let y0 = ((p.y - radius - 1.).floor() as i32).max(0);
     let x1 = ((p.x + radius + 1.).ceil() as i32).min(doc.width as i32);
     let y1 = ((p.y + radius + 1.).ceil() as i32).min(doc.height as i32);
+    if x0 >= x1 || y0 >= y1 {
+        return None;
+    }
+    let pixels = Arc::make_mut(&mut layer.pixels);
     let (sin, cos) = brush.angle.to_radians().sin_cos();
     for y in y0..y1 {
         for x in x0..x1 {
@@ -216,6 +228,12 @@ fn stamp(doc: &mut Document, brush: &Brush, p: Point) {
         }
     }
     doc.touch();
+    Some(PixelRect {
+        x0: x0 as u32,
+        y0: y0 as u32,
+        x1: x1 as u32,
+        y1: y1 as u32,
+    })
 }
 #[cfg(test)]
 mod tests {

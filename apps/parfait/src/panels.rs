@@ -252,7 +252,8 @@ impl Parfait {
         });
     }
     pub fn update_previews(&mut self, ctx: &egui::Context) {
-        if self.preview_revision == self.doc.revision {
+        // Thumbnails catch up on pen-up; the canvas/navigator remain live.
+        if self.stroke.is_some() || self.preview_revision == self.doc.revision {
             return;
         }
         self.layer_previews.truncate(self.doc.layers.len());

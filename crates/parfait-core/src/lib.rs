@@ -3,5 +3,5 @@ mod brush;
 mod document;
 mod history;
 pub use brush::{Brush, BrushTip, Point, Stroke};
-pub use document::{Document, Layer, composite_over};
+pub use document::{Document, Layer, PixelRect, composite_over};
 pub use history::History;
