@@ -63,7 +63,8 @@ impl Parfait {
         let events = ctx.input(|i| i.events.clone());
         let space = ctx.input(|i| i.key_down(Key::Space)) || self.navigation_tool == 1;
         let modifiers = ctx.input(|i| i.modifiers);
-        let blocked = self.confirm_new
+        let blocked = self.calibration_dialog.is_some()
+            || self.confirm_new
             || self.error.is_some()
             || self.show_help
             || self.show_licenses
@@ -149,7 +150,7 @@ impl Parfait {
                                         Point {
                                             x: p.x,
                                             y: p.y,
-                                            pressure: self.pressure,
+                                            pressure: self.calibration.map(self.pressure),
                                         },
                                     ));
                                 }
@@ -190,7 +191,7 @@ impl Parfait {
                             Point {
                                 x: p.x,
                                 y: p.y,
-                                pressure: self.pressure,
+                                pressure: self.calibration.map(self.pressure),
                             },
                         );
                     }

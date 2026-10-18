@@ -21,7 +21,8 @@ pub const HELP: &[&str] = &[
 ];
 impl Parfait {
     pub fn shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input()
+        if self.calibration_dialog.is_some()
+            || ctx.egui_wants_keyboard_input()
             || self.stroke.is_some()
             || self.confirm_new
             || self.error.is_some()

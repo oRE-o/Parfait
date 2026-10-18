@@ -1,0 +1,351 @@
+use crate::app::Parfait;
+use eframe::egui::{self, Color32, Event, Pos2, Sense, Stroke, TouchPhase};
+use parfait_core::PressureCalibration;
+
+pub struct CalibrationDialog {
+    draft: PressureCalibration,
+    samples: Vec<f32>,
+    marks: Vec<([f32; 2], f32, bool)>,
+    active: bool,
+    connected: bool,
+    selected: Option<usize>,
+    raw: f32,
+    message: String,
+}
+impl CalibrationDialog {
+    pub fn new(draft: PressureCalibration) -> Self {
+        Self {
+            draft,
+            samples: Vec::new(),
+            marks: Vec::new(),
+            active: false,
+            connected: false,
+            selected: None,
+            raw: 1.,
+            message: "Draw light and firm strokes at your usual pressure. Mouse previews use 100%."
+                .into(),
+        }
+    }
+    fn record(&mut self, pos: Pos2, raw: f32, rect: egui::Rect, measured: bool) {
+        if !rect.contains(pos) {
+            self.connected = false;
+            return;
+        }
+        self.raw = raw.clamp(0., 1.);
+        if measured && raw.is_finite() && self.samples.len() < 4096 {
+            self.samples.push(self.raw);
+        }
+        if self.marks.len() < 4096 {
+            self.marks.push((
+                [
+                    (pos.x - rect.left()) / rect.width(),
+                    (pos.y - rect.top()) / rect.height(),
+                ],
+                self.raw,
+                self.connected,
+            ));
+            self.connected = true;
+        }
+    }
+    fn graph(&mut self, ui: &mut egui::Ui) -> egui::Rect {
+        ui.label("Output ↑      Input pressure →");
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), 210.),
+            Sense::click_and_drag(),
+        );
+        let r = rect.shrink(10.);
+        let position =
+            |v: [f32; 2]| egui::pos2(r.left() + v[0] * r.width(), r.bottom() - v[1] * r.height());
+        if ((response.is_pointer_button_down_on() && ui.input(|i| i.pointer.any_pressed()))
+            || response.clicked())
+            && let Some(p) = response.interact_pointer_pos()
+        {
+            self.selected = self
+                .draft
+                .points
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| {
+                    position(**a)
+                        .distance_sq(p)
+                        .total_cmp(&position(**b).distance_sq(p))
+                })
+                .and_then(|(i, v)| (position(*v).distance(p) < 14.).then_some(i));
+            if self.selected.is_none() && response.clicked() && self.draft.points.len() < 16 {
+                let x = ((p.x - r.left()) / r.width()).clamp(0., 1.);
+                let i = self.draft.points.partition_point(|v| v[0] < x);
+                if i > 0
+                    && i < self.draft.points.len()
+                    && x - self.draft.points[i - 1][0] > 0.005
+                    && self.draft.points[i][0] - x > 0.005
+                {
+                    let y = ((r.bottom() - p.y) / r.height())
+                        .clamp(self.draft.points[i - 1][1], self.draft.points[i][1]);
+                    self.draft.points.insert(i, [x, y]);
+                    self.selected = Some(i);
+                }
+            }
+        }
+        if response.dragged()
+            && let (Some(i), Some(p)) = (self.selected, response.interact_pointer_pos())
+            && i > 0
+            && i + 1 < self.draft.points.len()
+        {
+            let left = self.draft.points[i - 1][0] + 0.002;
+            let right = self.draft.points[i + 1][0] - 0.002;
+            let x = if left <= right {
+                ((p.x - r.left()) / r.width()).clamp(left, right)
+            } else {
+                self.draft.points[i][0]
+            };
+            self.draft.points[i] = [
+                x,
+                ((r.bottom() - p.y) / r.height())
+                    .clamp(self.draft.points[i - 1][1], self.draft.points[i + 1][1]),
+            ];
+        }
+        let painter = ui.painter();
+        painter.rect_filled(r, 0., Color32::from_gray(35));
+        for i in 0..=4 {
+            let t = i as f32 / 4.;
+            let ink = Stroke::new(1., Color32::from_gray(70));
+            painter.line_segment([position([t, 0.]), position([t, 1.])], ink);
+            painter.line_segment([position([0., t]), position([1., t])], ink);
+        }
+        painter.line_segment(
+            [position([0., 0.]), position([1., 1.])],
+            Stroke::new(1., Color32::GRAY),
+        );
+        painter.add(egui::Shape::line(
+            self.draft.points.iter().map(|p| position(*p)).collect(),
+            Stroke::new(2., Color32::LIGHT_BLUE),
+        ));
+        for (i, p) in self.draft.points.iter().enumerate() {
+            painter.circle_filled(
+                position(*p),
+                4.,
+                if self.selected == Some(i) {
+                    Color32::YELLOW
+                } else {
+                    Color32::WHITE
+                },
+            );
+        }
+        painter.circle_filled(
+            position([self.raw, self.draft.map(self.raw)]),
+            5.,
+            Color32::LIGHT_GREEN,
+        );
+        ui.small(
+            "Click to add (max 16). Drag to move. Endpoints stay fixed; output stays monotonic.",
+        );
+        let removable = self
+            .selected
+            .is_some_and(|i| i > 0 && i + 1 < self.draft.points.len());
+        if ui
+            .add_enabled(removable, egui::Button::new("Delete selected point"))
+            .clicked()
+            && let Some(i) = self.selected.take()
+        {
+            self.draft.points.remove(i);
+        }
+        r
+    }
+    fn pad(&mut self, ui: &mut egui::Ui) {
+        ui.label("Test strokes — preview updates when you edit the curve");
+        let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 180.), Sense::drag());
+        let events = ui.input(|i| i.events.clone());
+        let has_touch = events.iter().any(|e| matches!(e, Event::Touch { .. }));
+        for event in events {
+            match event {
+                Event::Touch {
+                    phase, pos, force, ..
+                } => {
+                    if phase == TouchPhase::Start {
+                        self.active = r.contains(pos);
+                        self.connected = false;
+                    }
+                    if self.active && matches!(phase, TouchPhase::Start | TouchPhase::Move) {
+                        self.record(
+                            pos,
+                            force.filter(|v| v.is_finite()).unwrap_or(1.),
+                            r,
+                            force.is_some_and(|v| v.is_finite()),
+                        );
+                    }
+                    if matches!(phase, TouchPhase::End | TouchPhase::Cancel) {
+                        self.active = false;
+                        self.connected = false;
+                    }
+                }
+                Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    ..
+                } if !has_touch => {
+                    self.active = pressed && r.contains(pos);
+                    self.connected = false;
+                    if self.active {
+                        self.record(pos, 1., r, false);
+                    }
+                }
+                Event::PointerMoved(pos) if !has_touch && self.active => {
+                    self.record(pos, 1., r, false);
+                }
+                Event::WindowFocused(false) | Event::PointerGone => {
+                    self.active = false;
+                    self.connected = false;
+                }
+                _ => {}
+            }
+        }
+        let p = ui.painter().with_clip_rect(r);
+        p.rect_filled(r, 0., Color32::from_gray(245));
+        let mut previous = None;
+        for (v, raw, connected) in &self.marks {
+            let at = egui::pos2(r.left() + v[0] * r.width(), r.top() + v[1] * r.height());
+            let width = 1. + self.draft.map(*raw) * 22.;
+            if *connected && let Some(last) = previous {
+                p.line_segment([last, at], Stroke::new(width, Color32::from_gray(35)));
+            }
+            p.circle_filled(at, width / 2., Color32::from_gray(35));
+            previous = Some(at);
+        }
+        ui.label(format!(
+            "Raw {:.0}% → calibrated {:.0}% · {} pressure samples",
+            self.raw * 100.,
+            self.draft.map(self.raw) * 100.,
+            self.samples.len()
+        ));
+        if self.marks.len() == 4096 {
+            ui.small("Preview limit reached. Clear strokes to collect a new sample set.");
+        }
+    }
+}
+impl Parfait {
+    pub fn calibration_ui(&mut self, ctx: &egui::Context) {
+        let Some(dialog) = &mut self.calibration_dialog else {
+            return;
+        };
+        let mut open = true;
+        let mut apply = false;
+        let mut cancel = false;
+        egui::Window::new("Tablet pressure calibration").open(&mut open).collapsible(false).resizable(false).default_width(500.).show(ctx,|ui| {
+            ui.label("Device calibration · applies to all brushes before their individual pressure settings.");
+            dialog.graph(ui); dialog.pad(ui);
+            ui.horizontal(|ui| {
+                if ui.button("Suggest from strokes").clicked() {
+                    if let Some(curve)=PressureCalibration::suggest(&dialog.samples) {
+                        dialog.draft=curve; dialog.selected=None;
+                        dialog.message="Suggested from the 95th percentile of measured pressure. Test before applying.".into();
+                    } else { dialog.message="Need at least 20 pressure samples with varied light/firm pressure. Mouse or constant input cannot calibrate.".into(); }
+                }
+                if ui.button("Clear strokes").clicked() { dialog.samples.clear(); dialog.marks.clear(); dialog.connected=false; }
+                if ui.button("Reset curve").clicked() { dialog.draft=Default::default(); dialog.selected=None; }
+            });
+            ui.label(&dialog.message);
+            ui.separator();
+            ui.horizontal(|ui| {
+                apply=ui.add_enabled(dialog.draft.validate(),egui::Button::new("Apply")).clicked();
+                cancel=ui.button("Cancel").clicked();
+            });
+        });
+        if apply || cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.finish_calibration(apply);
+        }
+    }
+    fn finish_calibration(&mut self, apply: bool) {
+        if let Some(dialog) = self.calibration_dialog.take()
+            && apply
+            && dialog.draft.validate()
+        {
+            self.calibration = dialog.draft;
+            self.persist_preferences(true);
+        }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn graph_click_adds_and_fast_drag_moves_control_point() {
+        let ctx = egui::Context::default();
+        let mut d = CalibrationDialog::new(Default::default());
+        let mut frame = |events| {
+            let mut rect = egui::Rect::NOTHING;
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(500., 400.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        rect = d.graph(ui);
+                    });
+                },
+            );
+            out.textures_delta.clear();
+            (rect, d.draft.clone())
+        };
+        let (r, _) = frame(vec![]);
+        let start = egui::pos2(r.left() + 0.4 * r.width(), r.bottom() - 0.6 * r.height());
+        let button = |pos, pressed| Event::PointerButton {
+            pos,
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: Default::default(),
+        };
+        frame(vec![Event::PointerMoved(start), button(start, true)]);
+        let (_, added) = frame(vec![button(start, false)]);
+        assert_eq!(added.points.len(), 3);
+        frame(vec![button(start, true)]);
+        let end = start + egui::vec2(50., -20.);
+        let (_, moved) = frame(vec![Event::PointerMoved(end)]);
+        assert!(moved.points[1][0] > added.points[1][0] + 0.05);
+        assert!(moved.validate());
+    }
+    #[test]
+    fn cancel_preserves_settings_and_apply_survives_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let original = app.doc.clone();
+        let curve = PressureCalibration {
+            points: vec![[0., 0.], [0.6, 1.], [1., 1.]],
+        };
+        app.calibration_dialog = Some(CalibrationDialog::new(curve.clone()));
+        app.finish_calibration(false);
+        assert_eq!(app.calibration, PressureCalibration::default());
+        app.calibration_dialog = Some(CalibrationDialog::new(curve.clone()));
+        app.finish_calibration(true);
+        assert_eq!(app.doc, original);
+        drop(app);
+        let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
+        assert_eq!(restored.calibration, curve);
+        // Old preference JSON without the field still opens with identity calibration.
+        let mut json: serde_json::Value =
+            serde_json::from_str(&restored.preferences_saved).unwrap();
+        json.as_object_mut().unwrap().remove("calibration");
+        let old: crate::preferences::Preferences = serde_json::from_value(json).unwrap();
+        assert!(old.validate());
+        assert_eq!(old.calibration, PressureCalibration::default());
+    }
+    #[test]
+    fn only_measured_pad_samples_calibrate_and_collection_is_bounded() {
+        let mut d = CalibrationDialog::new(Default::default());
+        let rect = egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(100., 100.));
+        d.record(egui::pos2(50., 50.), 1., rect, false);
+        d.record(egui::pos2(150., 50.), 0.5, rect, true);
+        assert!(d.samples.is_empty());
+        for i in 0..5000 {
+            d.record(egui::pos2(50., 50.), (i % 100) as f32 / 100., rect, true);
+        }
+        assert_eq!(d.samples.len(), 4096);
+        assert_eq!(d.marks.len(), 4096);
+        assert!(PressureCalibration::suggest(&d.samples).is_some());
+    }
+}

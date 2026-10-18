@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
+    #[serde(default)]
+    pub calibration: parfait_core::PressureCalibration,
     pub version: u32,
     pub workspace: Workspace,
     pub presets: Vec<Preset>,
@@ -14,6 +16,7 @@ pub struct Preferences {
 impl Preferences {
     pub fn validate(&self) -> bool {
         self.version == 1
+            && self.calibration.validate()
             && self.workspace.validate()
             && self.presets.len() <= 64
             && self
@@ -33,6 +36,7 @@ impl Parfait {
                 anyhow::ensure!(json.len() <= 32 * 1024 * 1024, "Preferences too large");
                 let pref: Preferences = serde_json::from_str(&json)?;
                 anyhow::ensure!(pref.validate(), "Invalid or unsupported preferences");
+                self.calibration = pref.calibration;
                 self.workspace = pref.workspace;
                 self.presets = pref.presets;
                 self.brush = pref.brush;
@@ -58,6 +62,7 @@ impl Parfait {
         }
         self.preferences_tick = std::time::Instant::now();
         let prefs = Preferences {
+            calibration: self.calibration.clone(),
             version: 1,
             workspace: self.workspace.clone(),
             presets: self.presets.clone(),

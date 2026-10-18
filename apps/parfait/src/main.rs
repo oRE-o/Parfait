@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod app;
 mod brushes;
+mod calibration;
 mod canvas;
 mod chrome;
 mod diagnostics;
@@ -42,6 +43,9 @@ fn run() -> anyhow::Result<()> {
         .windows(2)
         .find(|p| p[0] == "--screenshot")
         .map(|p| diagnostics::Capture::new(PathBuf::from(&p[1])));
+    if args.iter().any(|arg| arg == "--calibrate-pressure") {
+        app.calibration_dialog = Some(calibration::CalibrationDialog::new(app.calibration.clone()));
+    }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_decorations(false)

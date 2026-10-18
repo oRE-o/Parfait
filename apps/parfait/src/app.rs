@@ -9,6 +9,8 @@ use std::{
 };
 
 pub struct Parfait {
+    pub calibration: parfait_core::PressureCalibration,
+    pub calibration_dialog: Option<crate::calibration::CalibrationDialog>,
     pub workspace: crate::workspace::Workspace,
     pub presets: Vec<crate::brushes::Preset>,
     pub preferences_saved: String,
@@ -71,6 +73,8 @@ impl Parfait {
         autosave.submit(doc.clone());
         let submitted = doc.revision;
         let mut app = Self {
+            calibration: Default::default(),
+            calibration_dialog: None,
             workspace: Default::default(),
             presets: crate::brushes::defaults(),
             preferences_saved: String::new(),
@@ -264,15 +268,18 @@ impl eframe::App for Parfait {
         let ctx = ui.ctx().clone();
         self.saving();
         self.shortcuts(&ctx);
-        self.title_bar(ui);
-        self.top_panel(ui);
-        self.bottom_panel(ui);
-        if !self.hide_panels {
-            self.workspace_ui(ui);
-        }
-        egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
-            .show(ui, |ui| self.canvas(ui));
+        ui.add_enabled_ui(self.calibration_dialog.is_none(), |ui| {
+            self.title_bar(ui);
+            self.top_panel(ui);
+            self.bottom_panel(ui);
+            if !self.hide_panels {
+                self.workspace_ui(ui);
+            }
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
+                .show(ui, |ui| self.canvas(ui));
+        });
+        self.calibration_ui(&ctx);
         if self.show_help {
             egui::Window::new("Keyboard shortcuts")
                 .open(&mut self.show_help)

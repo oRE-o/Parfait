@@ -286,6 +286,11 @@ impl Parfait {
             ui.add(egui::Slider::new(&mut self.brush.smoothing, 0. ..=0.95).text("Smoothing"));
         } else {
             widgets::heading(ui, "Pressure response");
+            if ui.button("Calibrate tablet pressure…").clicked() {
+                self.calibration_dialog = Some(crate::calibration::CalibrationDialog::new(
+                    self.calibration.clone(),
+                ));
+            }
             ui.checkbox(&mut self.brush.pressure, "Pressure → size");
             ui.checkbox(&mut self.brush.pressure_opacity, "Pressure → opacity");
             ui.add(egui::Slider::new(&mut self.brush.minimum_size, 0. ..=1.).text("Minimum size"));
