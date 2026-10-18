@@ -38,6 +38,7 @@ Run an isolated session with `parfait --data-dir PATH`. Otherwise recovery data 
 - Pan, cursor-centered zoom, view rotation, fit view and navigator preview.
 - Local `.parfait` projects, PNG export, background autosave and startup recovery.
 - Dark workspace: tools on the left, canvas in the middle, navigator and layers on the right.
+- Compact desktop palettes: icon tool rail, brush previews and size presets, hue/SV color wheel, canvas rulers and live layer thumbnails.
 
 ## Controls
 
@@ -87,3 +88,5 @@ The prototype starts at 1024 × 768 and uses whole-layer CPU buffers and CPU com
 ## License
 
 MIT. See [LICENSE](LICENSE). Contributions should include source provenance, tests for behavior changes, and no third-party assets without redistribution permission.
+
+Toolbar icons use bundled Font Awesome Free 6.7.2 (SIL OFL 1.1 for the font). See [asset attribution](apps/parfait/assets/fontawesome/README.md) and Help → Third-party notices in the app.

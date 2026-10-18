@@ -5,6 +5,7 @@ mod diagnostics;
 mod panels;
 mod shortcuts;
 mod theme;
+mod widgets;
 use std::path::PathBuf;
 
 fn main() {

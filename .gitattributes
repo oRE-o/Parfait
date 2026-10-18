@@ -5,3 +5,4 @@
 *.yml text eol=lf
 *.lock text eol=lf
 *.png binary
+*.ttf binary

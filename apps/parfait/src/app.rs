@@ -10,6 +10,9 @@ use std::{
 
 pub struct Parfait {
     pub capture: Option<crate::diagnostics::Capture>,
+    pub navigation_tool: u8,
+    pub layer_previews: Vec<egui::TextureHandle>,
+    pub preview_revision: u64,
     pub doc: Document,
     pub brush: Brush,
     pub history: History,
@@ -26,6 +29,7 @@ pub struct Parfait {
     pub project: Option<PathBuf>,
     pub recovery_path: PathBuf,
     pub show_help: bool,
+    pub show_licenses: bool,
     pub confirm_new: bool,
     pub tip_name: String,
     pub hide_panels: bool,
@@ -61,6 +65,9 @@ impl Parfait {
         let submitted = doc.revision;
         Ok(Self {
             capture: None,
+            navigation_tool: 0,
+            layer_previews: Vec::new(),
+            preview_revision: u64::MAX,
             doc,
             brush: Brush::default(),
             history: History::default(),
@@ -77,6 +84,7 @@ impl Parfait {
             project: None,
             recovery_path: path,
             show_help: false,
+            show_licenses: false,
             confirm_new: false,
             tip_name: "Round pen".into(),
             hide_panels: false,
@@ -277,7 +285,7 @@ impl eframe::App for Parfait {
             self.layer_panel(ui);
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(23, 24, 29)))
+            .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
             .show(ui, |ui| self.canvas(ui));
         if self.show_help {
             egui::Window::new("Keyboard shortcuts")
@@ -306,6 +314,23 @@ impl eframe::App for Parfait {
                             self.confirm_new = false;
                         }
                     });
+                });
+        }
+        if self.show_licenses {
+            egui::Window::new("Third-party notices")
+                .open(&mut self.show_licenses)
+                .default_width(600.)
+                .show(&ctx, |ui| {
+                    ui.label("Font Awesome Free 6.7.2 · Fonticons, Inc.");
+                    ui.hyperlink_to(
+                        "Upstream source",
+                        "https://github.com/FortAwesome/Font-Awesome/tree/6.7.2",
+                    );
+                    egui::ScrollArea::vertical()
+                        .max_height(450.)
+                        .show(ui, |ui| {
+                            ui.label(include_str!("../assets/fontawesome/LICENSE.txt"));
+                        });
                 });
         }
         if let Some(error) = self.error.clone() {

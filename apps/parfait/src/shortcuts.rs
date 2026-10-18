@@ -60,9 +60,11 @@ impl Parfait {
         } else {
             if i.key_pressed(Key::B) || i.key_pressed(Key::P) {
                 self.brush.erase = false;
+                self.navigation_tool = 0;
             }
             if i.key_pressed(Key::E) {
                 self.brush.erase = true;
+                self.navigation_tool = 0;
             }
             if i.key_pressed(Key::OpenBracket) {
                 self.brush.size = (self.brush.size / 1.2).max(1.);

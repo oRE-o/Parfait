@@ -33,6 +33,7 @@ Normal app exit joins the worker after submitting the final snapshot. Manual Sav
 - `panels.rs`: tools, navigator, layer controls and status.
 - `shortcuts.rs`: keyboard commands and help text.
 - `theme.rs`: visual style and optional system font discovery.
+- `widgets.rs`: palette controls, color wheel and accessible icon buttons using the bundled Font Awesome Free font.
 - `document.rs`: layer data, validation, compositing.
 - `brush.rs`: sample interpolation and raster dabs.
 - `history.rs`: reversible document snapshots.
@@ -40,6 +41,8 @@ Normal app exit joins the worker after submitting the final snapshot. Manual Sav
 - Storage `worker.rs`: queue ownership, asynchronous writes and acknowledgments.
 
 Next changes should introduce typed editor commands before adding many tools, a tile representation before promising large canvases, and explicit schema migrations before changing persisted fields.
+
+The desktop workspace uses a compact menu/command bar, a narrow tool rail, scrollable brush/color palettes and a navigator/layer palette. Standard action icons come from the pinned Font Awesome Free asset, with tooltips and accessibility labels; see its bundled attribution. Side palettes can be resized or hidden. This is a fixed palette layout, not a drag-and-drop docking system. Layer thumbnails are refreshed from document pixels when the revision changes. Rulers show screen-axis projections of document coordinates when the view is rotated.
 
 ## Cross-platform boundaries
 

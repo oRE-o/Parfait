@@ -2086,6 +2086,7 @@ dependencies = [
  "parfait-core",
  "parfait-storage",
  "rfd",
+ "tempfile",
 ]
 
 [[package]]

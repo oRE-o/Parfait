@@ -49,8 +49,9 @@ fn rotate(v: Vec2, a: f32) -> Vec2 {
 }
 impl Parfait {
     pub fn canvas(&mut self, ui: &mut egui::Ui) {
-        let (rect, response) =
+        let (outer, response) =
             ui.allocate_exact_size(ui.available_size(), egui::Sense::click_and_drag());
+        let rect = Rect::from_min_max(outer.min + egui::vec2(18., 18.), outer.max);
         let size = egui::vec2(self.doc.width as f32, self.doc.height as f32);
         if !self.view.initialized {
             self.view.zoom = ((rect.width() - 80.) / size.x)
@@ -60,9 +61,10 @@ impl Parfait {
         }
         let ctx = ui.ctx().clone();
         let events = ctx.input(|i| i.events.clone());
-        let space = ctx.input(|i| i.key_down(Key::Space));
+        let space = ctx.input(|i| i.key_down(Key::Space)) || self.navigation_tool == 1;
         let modifiers = ctx.input(|i| i.modifiers);
-        let blocked = self.confirm_new || self.error.is_some() || self.show_help;
+        let blocked =
+            self.confirm_new || self.error.is_some() || self.show_help || self.show_licenses;
         if response.hovered() && !blocked && self.stroke.is_none() {
             let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.
@@ -99,7 +101,7 @@ impl Parfait {
                         } else if button == PointerButton::Primary {
                             let p = self.view.document(pos, rect, size);
                             if p.x >= 0. && p.y >= 0. && p.x < size.x && p.y < size.y {
-                                if modifiers.alt {
+                                if modifiers.alt || self.navigation_tool == 2 {
                                     let pixels = self.doc.composite();
                                     let idx =
                                         ((p.y as u32 * self.doc.width + p.x as u32) * 4) as usize;
@@ -217,12 +219,51 @@ impl Parfait {
                 });
             }
             mesh.indices = vec![0, 1, 2, 0, 2, 3];
-            ui.painter().add(egui::Shape::mesh(mesh));
+            ui.painter()
+                .with_clip_rect(rect)
+                .add(egui::Shape::mesh(mesh));
+        }
+        // Rulers follow the view transform; at rotation they show projected document coordinates.
+        let painter = ui.painter();
+        painter.rect_filled(
+            Rect::from_min_max(outer.min, egui::pos2(outer.right(), rect.top())),
+            0.,
+            Color32::from_gray(66),
+        );
+        painter.rect_filled(
+            Rect::from_min_max(outer.min, egui::pos2(rect.left(), outer.bottom())),
+            0.,
+            Color32::from_gray(66),
+        );
+        let ink = Color32::from_gray(168);
+        for x in (0..rect.width() as usize).step_by(50) {
+            let p = egui::pos2(rect.left() + x as f32, rect.top());
+            let value = self.view.document(p, rect, size).x;
+            painter.line_segment([p, p - egui::vec2(0., 5.)], egui::Stroke::new(1., ink));
+            painter.text(
+                p - egui::vec2(-3., 7.),
+                egui::Align2::LEFT_BOTTOM,
+                format!("{value:.0}"),
+                egui::FontId::monospace(9.),
+                ink,
+            );
+        }
+        for y in (0..rect.height() as usize).step_by(50) {
+            let p = egui::pos2(rect.left(), rect.top() + y as f32);
+            painter.line_segment([p, p - egui::vec2(5., 0.)], egui::Stroke::new(1., ink));
+            // Horizontal labels stay legible in the narrow vertical ruler.
+            painter.text(
+                p - egui::vec2(3., -2.),
+                egui::Align2::RIGHT_TOP,
+                format!("{:.0}", self.view.document(p, rect, size).y),
+                egui::FontId::monospace(7.),
+                ink,
+            );
         }
         if response.hovered() {
             if space {
                 ctx.set_cursor_icon(egui::CursorIcon::Grab);
-            } else if modifiers.alt {
+            } else if modifiers.alt || self.navigation_tool == 2 {
                 ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
             } else if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
                 ctx.set_cursor_icon(egui::CursorIcon::None);
@@ -241,6 +282,47 @@ impl Parfait {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hand_drag_moves_view_without_painting_then_pen_draws() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        app.doc = parfait_core::Document::new(64, 64);
+        let ctx = egui::Context::default();
+        let frame = |app: &mut Parfait, events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(400., 400.))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
+                },
+            );
+            output.textures_delta.clear();
+        };
+        let button = |pos, pressed| Event::PointerButton {
+            pos,
+            pressed,
+            button: PointerButton::Primary,
+            modifiers: Default::default(),
+        };
+        frame(&mut app, vec![]);
+        let start = egui::pos2(210., 210.);
+        let end = start + egui::vec2(15., 10.);
+        let before = app.doc.composite();
+        app.navigation_tool = 1;
+        frame(&mut app, vec![Event::PointerMoved(start)]);
+        frame(&mut app, vec![button(start, true)]);
+        frame(&mut app, vec![Event::PointerMoved(end)]);
+        frame(&mut app, vec![button(end, false)]);
+        assert_eq!(app.view.pan, egui::vec2(15., 10.));
+        assert_eq!(app.doc.composite(), before);
+        app.navigation_tool = 0;
+        frame(&mut app, vec![button(end, true)]);
+        frame(&mut app, vec![button(end, false)]);
+        assert_ne!(app.doc.composite(), before);
+    }
     #[test]
     fn coordinate_roundtrip_and_zoom_anchor() {
         let mut v = View {
