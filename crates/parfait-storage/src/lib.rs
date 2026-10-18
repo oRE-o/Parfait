@@ -1,5 +1,7 @@
 //! Transactional project snapshots. No UI dependency; disk work belongs to the worker.
+mod legacy;
 mod worker;
+const SNAPSHOT_V2: &[u8] = b"PARFAIT\0SNAP2\0";
 use anyhow::{Context, Result, bail, ensure};
 use bincode::Options;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
@@ -49,11 +51,11 @@ impl Store {
         let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(3))?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        ensure!(version <= 1, "This project uses a newer format ({version})");
+        ensure!(version <= 2, "This project uses a newer format ({version})");
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
             CREATE TABLE IF NOT EXISTS snapshots(revision INTEGER PRIMARY KEY, checksum BLOB NOT NULL, payload BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY CHECK(id=1), clean INTEGER NOT NULL);
-            INSERT OR IGNORE INTO session VALUES(1,1); PRAGMA user_version=1;")?;
+            INSERT OR IGNORE INTO session VALUES(1,1);")?;
         Ok(Self { connection })
     }
     pub fn unclean(&self) -> Result<bool> {
@@ -73,10 +75,12 @@ impl Store {
     }
     pub fn save(&mut self, doc: &Document) -> Result<()> {
         ensure!(doc.validate(), "Invalid document");
-        let raw = bincode::DefaultOptions::new()
+        let mut raw = SNAPSHOT_V2.to_vec();
+        bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .with_limit(MAX_BYTES)
-            .serialize(doc)?;
+            .with_limit(MAX_BYTES - SNAPSHOT_V2.len() as u64)
+            .serialize_into(&mut raw, doc)?;
+        ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
         let checksum = Sha256::digest(&raw).to_vec();
         let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
         enc.write_all(&raw)?;
@@ -87,6 +91,7 @@ impl Store {
             params![i64::try_from(doc.revision)?, checksum, payload],
         )?;
         tx.execute("DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 3)",[])?;
+        tx.pragma_update(None, "user_version", 2)?;
         tx.commit()?;
         Ok(())
     }
@@ -110,11 +115,16 @@ impl Store {
                     Sha256::digest(&raw).as_slice() == hash,
                     "Snapshot checksum mismatch"
                 );
-                let doc: Document = bincode::DefaultOptions::new()
+                let options = bincode::DefaultOptions::new()
                     .with_fixint_encoding()
                     .with_limit(MAX_BYTES)
-                    .reject_trailing_bytes()
-                    .deserialize(&raw)?;
+                    .reject_trailing_bytes();
+                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V2) {
+                    options.deserialize(payload)?
+                } else {
+                    let old: legacy::LegacyDocument = options.deserialize(&raw)?;
+                    old.into()
+                };
                 ensure!(doc.validate(), "Invalid document layout");
                 Ok(doc)
             };
@@ -176,6 +186,7 @@ mod tests {
         let mut d = Document::new(8, 8);
         s.save(&d).unwrap();
         d.add_layer();
+        d.layers[d.active].blend_mode = parfait_core::BlendMode::Multiply;
         s.save(&d).unwrap();
         assert_eq!(s.load().unwrap().unwrap().document, d);
         s.connection
@@ -190,6 +201,69 @@ mod tests {
         assert!(loaded.document.revision > d.revision);
         s.save(&loaded.document).unwrap();
         assert!(!s.load().unwrap().unwrap().fell_back);
+    }
+    #[test]
+    fn legacy_snapshots_upgrade_and_remain_recoverable() {
+        use legacy::{LegacyDocument, LegacyLayer};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.parfait");
+        let mut store = Store::open(&path).unwrap();
+        let old = LegacyDocument {
+            width: 1,
+            height: 1,
+            name: "Old drawing".into(),
+            active: 0,
+            revision: 1,
+            layers: vec![LegacyLayer {
+                name: "Ink".into(),
+                visible: true,
+                locked: false,
+                opacity: 0.75,
+                pixels: std::sync::Arc::new(vec![30, 60, 90, 128]),
+            }],
+        };
+        let raw = bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .serialize(&old)
+            .unwrap();
+        let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
+        enc.write_all(&raw).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO snapshots VALUES(1,?1,?2)",
+                params![Sha256::digest(&raw).to_vec(), enc.finish().unwrap()],
+            )
+            .unwrap();
+        store
+            .connection
+            .pragma_update(None, "user_version", 1)
+            .unwrap();
+        let mut d = store.load().unwrap().unwrap().document;
+        assert_eq!(d.layers[0].blend_mode, parfait_core::BlendMode::Normal);
+        assert_eq!(d.layers[0].pixels.as_slice(), &[30, 60, 90, 128]);
+        d.layers[0].blend_mode = parfait_core::BlendMode::Screen;
+        d.touch();
+        store.save(&d).unwrap();
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.load().unwrap().unwrap().document, d);
+        let version: i64 = store
+            .connection
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        store
+            .connection
+            .execute("UPDATE snapshots SET payload=x'00' WHERE revision=2", [])
+            .unwrap();
+        let recovered = store.load().unwrap().unwrap();
+        assert!(recovered.fell_back);
+        assert_eq!(
+            recovered.document.layers[0].blend_mode,
+            parfait_core::BlendMode::Normal
+        );
+        assert_eq!(recovered.document.name, "Old drawing");
     }
     #[test]
     fn session_lock_is_exclusive() {

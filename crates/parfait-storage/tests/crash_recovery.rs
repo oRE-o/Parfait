@@ -31,6 +31,10 @@ fn crash(mode: &str, expected_layers: usize) {
     let loaded = store.load().unwrap().unwrap();
     assert!(!loaded.fell_back);
     assert_eq!(loaded.document.layers.len(), expected_layers);
+    assert_eq!(
+        loaded.document.layers[1].blend_mode,
+        parfait_core::BlendMode::Multiply
+    );
     assert!(
         loaded.document.layers[1].pixels[(32 * 64 + 32) * 4 + 3] > 0,
         "stroke survived the process kill"

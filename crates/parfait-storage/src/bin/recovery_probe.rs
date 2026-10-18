@@ -18,6 +18,7 @@ fn main() -> anyhow::Result<()> {
             pressure: 1.,
         },
     );
+    doc.layers[1].blend_mode = parfait_core::BlendMode::Multiply;
     store.save(&doc)?;
     if args[3] == "during" {
         let conn = rusqlite::Connection::open(&path)?;

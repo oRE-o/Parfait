@@ -34,3 +34,5 @@ Workspace checks assert live detachment before pointer release, preserved width/
 A synthetic right-edge drag test compares the preview footprint with the actual side-by-side slot after drop. Additional checks cover row identity when moving a group owner and native placement/geometry preference round trips. Windows runtime QA observed a distinct palette OS window and closed it via Alt+F4 while the root window remained open and the palette visibility persisted as false. Native cross-monitor/DPI, resize and all target operating systems still require broader manual checks.
 
 Shared curve-editor tests cover declining responses, pressure monotonicity, fixed-x/endpoints and independent selection/edit/delete behavior for two adjacent graphs. Calibration interaction tests exercise the same widget, including fast point dragging.
+
+Blend tests cover known channel values, transparent/partial alpha, all-mode partial/full equivalence, undo/redo, canvas texture invalidation, v1 migration, mixed-generation fallback, saved-mode roundtrips and mode preservation after process termination.

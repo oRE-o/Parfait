@@ -8,3 +8,6 @@ pub use history::History;
 
 mod pressure;
 pub use pressure::PressureCalibration;
+
+mod blend;
+pub use blend::BlendMode;

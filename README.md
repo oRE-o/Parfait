@@ -37,7 +37,7 @@ Run an isolated session with `parfait --data-dir PATH`. Otherwise recovery data 
 
 - Round and soft brushes, eraser, size and opacity, color picker and palette.
 - Import PNG brush tips: alpha masks for transparent PNGs; inverted luminance for opaque PNGs.
-- Raster layers: add, duplicate, remove, reorder, rename, show/hide, lock, and opacity.
+- Raster layers: add, duplicate, remove, reorder, rename, show/hide, lock, opacity and 14 blend modes.
 - Bounded undo/redo with copy-on-write pixel snapshots.
 - Pan, cursor-centered zoom, view rotation, fit view and navigator preview.
 - Local `.parfait` projects, PNG export, background autosave and startup recovery.
@@ -116,3 +116,9 @@ The prototype starts at 1024 × 768 and uses whole-layer CPU buffers with change
 MIT. See [LICENSE](LICENSE). Contributions should include source provenance, tests for behavior changes, and no third-party assets without redistribution permission.
 
 Toolbar icons use bundled Font Awesome Free 6.7.2 (SIL OFL 1.1 for the font). See [asset attribution](apps/parfait/assets/fontawesome/README.md) and Help → Third-party notices in the app.
+
+### Layer blend modes
+
+Choose the active layer's mode in the Layers palette, beside opacity: Normal, Multiply, Screen, Overlay, Darken, Lighten, Color dodge, Color burn, Hard light, Soft light, Difference, Exclusion, Add and Subtract. Modes affect the canvas, navigator and PNG export; changes support undo/redo and persist in projects and recovery snapshots.
+
+Older projects open with Normal layers. Saving writes format v2, which older Parfait builds cannot open. Blending currently uses stored sRGB channel values, not linear-light or color-managed compositing.

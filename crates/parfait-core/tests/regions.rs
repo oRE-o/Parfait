@@ -87,3 +87,46 @@ fn empty_and_outside_regions_are_safe() {
     assert!(stroke.take_damage().is_none());
     assert_eq!(doc, before);
 }
+
+#[test]
+fn every_blend_mode_matches_partial_compositing_and_history() {
+    use parfait_core::{BlendMode, History};
+    for mode in BlendMode::ALL {
+        let mut d = Document::new(4, 3);
+        d.layers[0].locked = false;
+        for (i, p) in Arc::make_mut(&mut d.layers[0].pixels)
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            p.copy_from_slice(&[40, 120, 230, (i * 23) as u8]);
+        }
+        for p in Arc::make_mut(&mut d.layers[1].pixels)
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+        {
+            p.copy_from_slice(&[210, 90, 50, 180]);
+        }
+        d.layers[1].opacity = 0.6;
+        let before = d.composite();
+        let mut history = History::default();
+        history.checkpoint(&d);
+        d.layers[1].blend_mode = mode;
+        d.touch();
+        let full = d.composite();
+        let region = d.composite_region(PixelRect {
+            x0: 1,
+            y0: 1,
+            x1: 3,
+            y1: 3,
+        });
+        assert_eq!(region, [&full[20..28], &full[36..44]].concat(), "{mode:?}");
+        history.undo(&mut d);
+        assert_eq!(d.composite(), before);
+        history.redo(&mut d);
+        assert_eq!(d.layers[1].blend_mode, mode);
+        assert_eq!(d.composite(), full);
+    }
+}

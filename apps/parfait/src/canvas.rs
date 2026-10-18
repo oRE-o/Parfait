@@ -471,6 +471,8 @@ mod tests {
         app.doc.layers[1].opacity = 0.2;
         app.doc.touch();
         frame(&mut app, vec![], false);
+        app.edit(|d| d.layers[1].blend_mode = parfait_core::BlendMode::Multiply);
+        frame(&mut app, vec![], false);
         app.history.undo(&mut app.doc);
         frame(&mut app, vec![], false);
     }

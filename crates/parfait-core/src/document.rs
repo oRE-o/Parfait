@@ -1,3 +1,4 @@
+use crate::{BlendMode, blend::composite_blend};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -36,6 +37,8 @@ pub struct Layer {
     pub visible: bool,
     pub locked: bool,
     pub opacity: f32,
+    #[serde(default)]
+    pub blend_mode: BlendMode,
     pub pixels: Arc<Vec<u8>>,
 }
 
@@ -64,6 +67,7 @@ impl Document {
                     visible: true,
                     locked: true,
                     opacity: 1.,
+                    blend_mode: BlendMode::Normal,
                     pixels: Arc::new(vec![255; len]),
                 },
                 Layer {
@@ -71,6 +75,7 @@ impl Document {
                     visible: true,
                     locked: false,
                     opacity: 1.,
+                    blend_mode: BlendMode::Normal,
                     pixels: Arc::new(vec![0; len]),
                 },
             ],
@@ -104,6 +109,7 @@ impl Document {
             visible: true,
             locked: false,
             opacity: 1.,
+            blend_mode: BlendMode::Normal,
             pixels: Arc::new(vec![0; self.width as usize * self.height as usize * 4]),
         };
         self.active += 1;
@@ -135,10 +141,11 @@ impl Document {
                         .0
                         .iter(),
                 ) {
-                    composite_over(
+                    composite_blend(
                         dst,
                         [src[0], src[1], src[2]],
                         src[3] as f32 / 255. * layer.opacity,
+                        layer.blend_mode,
                     );
                 }
             }

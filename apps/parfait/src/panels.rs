@@ -387,7 +387,18 @@ impl Parfait {
                 let active = self.doc.active;
                 let mut opacity = self.doc.layers[active].opacity;
                 ui.horizontal(|ui| {
-                    ui.label("Normal");
+                    let mut mode = self.doc.layers[active].blend_mode;
+                    egui::ComboBox::from_id_salt("layer_blend_mode")
+                        .width(92.)
+                        .selected_text(mode.label())
+                        .show_ui(ui, |ui| {
+                            for candidate in parfait_core::BlendMode::ALL {
+                                ui.selectable_value(&mut mode, candidate, candidate.label());
+                            }
+                        });
+                    if mode != self.doc.layers[active].blend_mode {
+                        self.edit(|d| d.layers[active].blend_mode = mode);
+                    }
                     let r = ui.add(
                         egui::Slider::new(&mut opacity, 0.0..=1.)
                             .custom_formatter(|v, _| format!("{:.0}%", v * 100.)),
@@ -491,8 +502,9 @@ impl Parfait {
                                         ui.vertical(|ui| {
                                             ui.label(
                                                 RichText::new(format!(
-                                                    "{:.0}%  Normal",
-                                                    self.doc.layers[idx].opacity * 100.
+                                                    "{:.0}%  {}",
+                                                    self.doc.layers[idx].opacity * 100.,
+                                                    self.doc.layers[idx].blend_mode.label()
                                                 ))
                                                 .size(10.),
                                             );
