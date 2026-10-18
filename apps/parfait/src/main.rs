@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod app;
 mod brush_details;
+mod brush_stroke;
+mod brush_widgets;
 mod brushes;
 mod calibration;
 mod canvas;
@@ -9,6 +11,7 @@ mod curve_editor;
 mod diagnostics;
 mod panels;
 mod preferences;
+mod rulers;
 mod shortcuts;
 mod theme;
 mod widgets;
@@ -50,6 +53,12 @@ fn run() -> anyhow::Result<()> {
     }
     if args.iter().any(|arg| arg == "--brush-details") {
         app.brush_details.open = true;
+    }
+    if args.iter().any(|arg| arg == "--stroke-settings") {
+        app.brush_details.open_stroke_settings();
+    }
+    if args.iter().any(|arg| arg == "--brush-dynamics") {
+        app.brush_details.open_pressure_dynamics();
     }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

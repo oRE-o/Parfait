@@ -7,7 +7,7 @@ Parfait is intended to support Windows, macOS and Linux as first-class desktop p
 | Target | Current evidence | Work before a supported release |
 | --- | --- | --- |
 | Windows | Local build, core/storage tests, process-kill recovery tests and rendered workspace inspection | Installer/distribution checks, real stylus testing and broader hardware coverage |
-| macOS | Intended desktop target; no native build or hardware validation yet | Native builds, platform conventions, graphics/input checks, packaging and recovery validation |
+| macOS | Apple M1/arm64 debug and release builds, native UI/drawing/restart smoke checks, workspace tests and process-kill recovery tests | Real stylus/latency, broader graphics/window/DPI and multi-monitor checks, distribution signing/notarization and more hardware |
 | Linux | Intended desktop target; no native build or hardware validation yet | Build dependencies, X11/Wayland checks, distribution packaging, pen input and recovery validation |
 | Android | Planned; no mobile frontend or build yet | Mobile shell, lifecycle/storage integration, adaptive UI and device validation |
 | iOS/iPadOS | Planned; no mobile frontend or build yet | Mobile shell, lifecycle/storage integration, adaptive UI and device validation |

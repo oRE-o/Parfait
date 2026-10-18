@@ -27,6 +27,16 @@ fn incremental_pixels_match_full_composite_for_all_tips_and_eraser() {
                 angle: 37.,
                 aspect: 0.5,
                 pressure_opacity: true,
+                gap_mode: parfait_core::GapMode::Narrow,
+                continuous_spray: true,
+                pressure_curve: parfait_core::ResponseCurve {
+                    points: vec![[0., 0.], [0.17, 0.9], [0.62, 0.2], [1., 1.]],
+                    controls: Some(vec![
+                        [[0.04, 0.8], [0.13, 0.9]],
+                        [[0.3, 0.8], [0.5, 0.3]],
+                        [[0.8, 0.1], [0.95, 0.9]],
+                    ]),
+                },
                 ..Default::default()
             };
             let mut stroke = Stroke::begin(
@@ -47,6 +57,7 @@ fn incremental_pixels_match_full_composite_for_all_tips_and_eraser() {
                         pressure: (i % 10) as f32 / 10.,
                     },
                 );
+                stroke.spray(&mut doc, 0.05, (i % 10) as f32 / 10.);
                 if let Some(r) = stroke.take_damage() {
                     let patch = doc.composite_region(r);
                     let stride = (r.x1 - r.x0) as usize * 4;

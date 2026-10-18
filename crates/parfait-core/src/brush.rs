@@ -19,6 +19,14 @@ pub enum BrushTip {
         mask: Arc<Vec<u8>>,
     },
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum GapMode {
+    #[default]
+    Fixed,
+    Wide,
+    Normal,
+    Narrow,
+}
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Brush {
@@ -28,11 +36,14 @@ pub struct Brush {
     pub erase: bool,
     pub pressure: bool,
     pub tip: BrushTip,
-    pub pressure_curve: [f32; 5],
+    pub pressure_curve: crate::ResponseCurve,
     pub minimum_size: f32,
     pub pressure_opacity: bool,
     pub flow: f32,
     pub spacing: f32,
+    pub gap_mode: GapMode,
+    pub continuous_spray: bool,
+    pub spray_rate: f32,
     pub hardness: f32,
     pub aspect: f32,
     pub angle: f32,
@@ -47,11 +58,14 @@ impl Default for Brush {
             erase: false,
             pressure: true,
             tip: BrushTip::Round,
-            pressure_curve: [0., 0.25, 0.5, 0.75, 1.],
+            pressure_curve: Default::default(),
             minimum_size: 0.05,
             pressure_opacity: false,
             flow: 1.,
             spacing: 0.12,
+            gap_mode: GapMode::Fixed,
+            continuous_spray: false,
+            spray_rate: 30.,
             hardness: 1.,
             aspect: 1.,
             angle: 0.,
@@ -60,28 +74,36 @@ impl Default for Brush {
     }
 }
 impl Brush {
+    pub fn spacing_pixels(&self) -> f32 {
+        let ratio = match self.gap_mode {
+            GapMode::Fixed => self.spacing,
+            GapMode::Wide => 0.5,
+            GapMode::Normal => 0.25,
+            GapMode::Narrow => 0.1,
+        };
+        (self.size * ratio).max(0.5)
+    }
     pub fn mapped_pressure(&self, raw: f32) -> f32 {
         let p = if raw.is_finite() {
             raw.clamp(0., 1.)
         } else {
             1.
         };
-        let points = std::array::from_fn::<_, 5, _>(|i| [i as f32 / 4., self.pressure_curve[i]]);
-        crate::sample_response(&points, p)
+        self.pressure_curve.sample(p)
     }
     pub fn validate(&self) -> bool {
         let bounded = |v: f32, a, b| v.is_finite() && (a..=b).contains(&v);
         bounded(self.size, 1., 512.)
             && bounded(self.opacity, 0., 1.)
             && bounded(self.flow, 0.01, 1.)
-            && bounded(self.spacing, 0.01, 2.)
+            && bounded(self.spacing, 0.01, 10.)
+            && bounded(self.spray_rate, 1., 120.)
             && bounded(self.hardness, 0., 1.)
             && bounded(self.aspect, 0.1, 1.)
             && bounded(self.angle, -180., 180.)
             && bounded(self.smoothing, 0., 0.95)
             && bounded(self.minimum_size, 0., 1.)
-            && self.pressure_curve.iter().all(|&v| bounded(v, 0., 1.))
-            && self.pressure_curve.windows(2).all(|w| w[0] <= w[1])
+            && self.pressure_curve.validate()
             && match &self.tip {
                 BrushTip::Image {
                     width,
@@ -103,6 +125,7 @@ pub struct Stroke {
     last: Point,
     spacing_left: f32,
     brush: Brush,
+    spray_remainder: f64,
 }
 impl Stroke {
     pub fn begin(doc: &mut Document, brush: Brush, point: Point) -> Self {
@@ -112,11 +135,32 @@ impl Stroke {
             last: point,
             spacing_left: 0.,
             brush,
+            spray_remainder: 0.,
         }
     }
     /// Drain all dab bounds since the last renderer update.
     pub fn take_damage(&mut self) -> Option<PixelRect> {
         self.damage.take()
+    }
+    pub fn spray_interval(&self) -> Option<f32> {
+        self.brush
+            .continuous_spray
+            .then_some(1. / self.brush.spray_rate)
+    }
+    pub fn spray(&mut self, doc: &mut Document, elapsed: f32, pressure: f32) {
+        if !self.brush.continuous_spray || !elapsed.is_finite() || elapsed <= 0. {
+            return;
+        }
+        let interval = 1. / f64::from(self.brush.spray_rate);
+        let elapsed = self.spray_remainder + f64::from(elapsed.min(0.1));
+        let count = ((elapsed + 0.0000001) / interval).floor() as usize;
+        self.spray_remainder = (elapsed - count as f64 * interval).max(0.);
+        self.last.pressure = pressure;
+        for _ in 0..count.min(12) {
+            if let Some(region) = stamp(doc, &self.brush, self.last) {
+                self.damage = Some(self.damage.map_or(region, |old| old.union(region)));
+            }
+        }
     }
     pub fn extend(&mut self, doc: &mut Document, point: Point) {
         let point = Point {
@@ -127,10 +171,14 @@ impl Stroke {
         let dx = point.x - self.last.x;
         let dy = point.y - self.last.y;
         let dist = dx.hypot(dy);
-        if !dist.is_finite() || dist == 0. {
+        if !dist.is_finite() {
             return;
         }
-        let spacing = (self.brush.size * self.brush.spacing).max(0.5);
+        if dist == 0. {
+            self.last = point;
+            return;
+        }
+        let spacing = self.brush.spacing_pixels();
         let mut step = if self.spacing_left == 0. {
             spacing
         } else {
@@ -237,12 +285,82 @@ fn stamp(doc: &mut Document, brush: &Brush, p: Point) -> Option<PixelRect> {
 mod tests {
     use super::*;
     #[test]
+    fn tangent_handles_change_actual_paint_without_moving_pressure_anchors() {
+        let mut automatic = Document::new(64, 64);
+        let mut bent = automatic.clone();
+        let mut brush = Brush {
+            size: 40.,
+            pressure_opacity: true,
+            ..Default::default()
+        };
+        let point = Point {
+            x: 32.,
+            y: 32.,
+            pressure: 0.3,
+        };
+        Stroke::begin(&mut automatic, brush.clone(), point);
+        let anchors = brush.pressure_curve.points.clone();
+        brush.pressure_curve.controls = Some(vec![[[0.12, 0.9], [0.7, 0.95]]]);
+        assert!(brush.validate());
+        assert_eq!(brush.pressure_curve.points, anchors);
+        Stroke::begin(&mut bent, brush, point);
+        let alpha = |document: &Document| {
+            document.layers[1]
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| u64::from(pixel[3]))
+                .sum::<u64>()
+        };
+        assert!(alpha(&bent) > alpha(&automatic) * 3);
+    }
+    #[test]
+    fn arbitrary_control_point_pressure_changes_actual_dab_pixels() {
+        let mut low = Document::new(64, 64);
+        let mut high = low.clone();
+        let brush = Brush {
+            size: 40.,
+            pressure_curve: crate::ResponseCurve {
+                points: vec![[0., 0.], [0.17, 0.9], [0.62, 0.1], [1., 1.]],
+                controls: None,
+            },
+            pressure_opacity: true,
+            ..Default::default()
+        };
+        assert!(brush.validate());
+        let point = Point {
+            x: 32.,
+            y: 32.,
+            pressure: 0.62,
+        };
+        Stroke::begin(&mut low, brush.clone(), point);
+        Stroke::begin(
+            &mut high,
+            brush,
+            Point {
+                pressure: 0.17,
+                ..point
+            },
+        );
+        let total_alpha = |document: &Document| {
+            document.layers[1]
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| u64::from(pixel[3]))
+                .sum::<u64>()
+        };
+        assert!(total_alpha(&high) > total_alpha(&low) * 10);
+    }
+    #[test]
     fn pressure_curve_controls_coverage_and_opacity() {
         let mut low = Document::new(64, 64);
         let mut high = low.clone();
         let b = Brush {
             size: 40.,
-            pressure_curve: [0., 0.06, 0.25, 0.56, 1.],
+            pressure_curve: [0., 0.06, 0.25, 0.56, 1.].into(),
             pressure_opacity: true,
             ..Default::default()
         };
@@ -277,7 +395,7 @@ mod tests {
         };
         assert!(alpha(&high) > alpha(&low) * 5);
         let invalid = Brush {
-            pressure_curve: [0., 0.8, 0.1, 0.9, 1.],
+            pressure_curve: [0., 0.8, f32::NAN, 0.9, 1.].into(),
             ..Default::default()
         };
         assert!(!invalid.validate());

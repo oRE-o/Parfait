@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(restored.calibration, curve);
         // Old preference JSON without the field still opens with identity calibration.
         let mut json: serde_json::Value =
-            serde_json::from_str(&restored.preferences_saved).unwrap();
+            serde_json::from_str(&restored.saved_preferences_json()).unwrap();
         json.as_object_mut().unwrap().remove("calibration");
         let old: crate::preferences::Preferences = serde_json::from_value(json).unwrap();
         assert!(old.validate());

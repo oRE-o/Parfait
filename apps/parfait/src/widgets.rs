@@ -4,6 +4,11 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 #[derive(Clone, Copy)]
 pub enum Icon {
     Pen,
+    Pencil,
+    Brush,
+    Airbrush,
+    Eye,
+    EyeSlash,
     Eraser,
     Hand,
     Picker,
@@ -21,6 +26,43 @@ pub enum Icon {
     Close,
     Maximize,
     Restore,
+    Search,
+    Favorite,
+    More,
+    Material,
+}
+impl Icon {
+    pub fn glyph(self) -> &'static str {
+        match self {
+            Icon::Pen => "\u{f5ad}",
+            Icon::Pencil => "\u{f303}",
+            Icon::Brush => "\u{f55d}",
+            Icon::Airbrush => "\u{f5bd}",
+            Icon::Eye => "\u{f06e}",
+            Icon::EyeSlash => "\u{f070}",
+            Icon::Eraser => "\u{f12d}",
+            Icon::Hand => "\u{f256}",
+            Icon::Picker => "\u{f1fb}",
+            Icon::Plus => "\u{002b}",
+            Icon::Minus => "\u{f068}",
+            Icon::Fit => "\u{f065}",
+            Icon::Undo => "\u{f2ea}",
+            Icon::Redo => "\u{f2f9}",
+            Icon::Save => "\u{f0c7}",
+            Icon::Folder => "\u{f07c}",
+            Icon::Copy => "\u{f0c5}",
+            Icon::Trash => "\u{f2ed}",
+            Icon::Up => "\u{f062}",
+            Icon::Down => "\u{f063}",
+            Icon::Close => "\u{f00d}",
+            Icon::Maximize => "\u{f2d0}",
+            Icon::Restore => "\u{f2d2}",
+            Icon::Search => "\u{f002}",
+            Icon::Favorite => "\u{f005}",
+            Icon::More => "\u{f141}",
+            Icon::Material => "\u{f03e}",
+        }
+    }
 }
 
 pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui::Response {
@@ -37,30 +79,10 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui:
         visuals.bg_stroke,
         egui::StrokeKind::Inside,
     );
-    let glyph = match kind {
-        Icon::Pen => "\u{f5ad}",
-        Icon::Eraser => "\u{f12d}",
-        Icon::Hand => "\u{f256}",
-        Icon::Picker => "\u{f1fb}",
-        Icon::Plus => "\u{002b}",
-        Icon::Minus => "\u{f068}",
-        Icon::Fit => "\u{f065}",
-        Icon::Undo => "\u{f2ea}",
-        Icon::Redo => "\u{f2f9}",
-        Icon::Save => "\u{f0c7}",
-        Icon::Folder => "\u{f07c}",
-        Icon::Copy => "\u{f0c5}",
-        Icon::Trash => "\u{f2ed}",
-        Icon::Up => "\u{f062}",
-        Icon::Down => "\u{f063}",
-        Icon::Close => "\u{f00d}",
-        Icon::Maximize => "\u{f2d0}",
-        Icon::Restore => "\u{f2d2}",
-    };
     ui.painter().text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
-        glyph,
+        kind.glyph(),
         egui::FontId::new(14., egui::FontFamily::Name("icons".into())),
         if ui.is_enabled() {
             Color32::from_gray(203)
@@ -71,64 +93,142 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui:
     response.on_hover_text(label)
 }
 
-pub fn heading(ui: &mut egui::Ui, title: &str) {
-    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 21.), Sense::hover());
-    ui.painter().rect_filled(r, 0., Color32::from_gray(51));
+pub fn flat_icon(
+    ui: &mut egui::Ui,
+    kind: Icon,
+    selected: bool,
+    label: &str,
+    side: f32,
+) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), selected, label)
+    });
+    let highlighted =
+        response.hovered() || response.has_focus() || response.is_pointer_button_down_on();
+    if selected || highlighted {
+        let visuals = ui.style().interact_selectable(&response, selected);
+        ui.painter().rect_filled(
+            rect.shrink(1.),
+            0.,
+            if selected {
+                ui.visuals().selection.bg_fill
+            } else {
+                visuals.weak_bg_fill
+            },
+        );
+        ui.painter().rect_stroke(
+            rect.shrink(1.),
+            0.,
+            if response.has_focus() {
+                ui.visuals().selection.stroke
+            } else {
+                visuals.bg_stroke
+            },
+            egui::StrokeKind::Inside,
+        );
+    }
     ui.painter().text(
-        r.left_center() + egui::vec2(6., 0.),
-        egui::Align2::LEFT_CENTER,
-        format!("≡  {title}"),
-        egui::FontId::proportional(11.),
-        Color32::from_gray(196),
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        kind.glyph(),
+        egui::FontId::new(
+            (side * 0.6).max(12.),
+            egui::FontFamily::Name("icons".into()),
+        ),
+        if !ui.is_enabled() {
+            Color32::from_gray(100)
+        } else if selected {
+            Color32::from_gray(239)
+        } else {
+            Color32::from_gray(196)
+        },
     );
+    response.on_hover_text(label)
 }
 
-pub fn brush_row(ui: &mut egui::Ui, name: &str, selected: bool, soft: bool) -> bool {
-    let (r, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 33.), Sense::click());
-    response
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::SelectableLabel, true, name));
-    let p = ui.painter();
-    p.rect_filled(
+pub fn brush_row(
+    ui: &mut egui::Ui,
+    r: Rect,
+    name: &str,
+    selected: bool,
+    kind: Icon,
+    preview: Option<egui::TextureId>,
+) -> egui::Response {
+    let target = Rect::from_min_max(r.min, r.max - egui::vec2(24., 0.));
+    let response = ui.interact(target, ui.id().with("preset"), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            selected,
+            name,
+        )
+    });
+    let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(r));
+    painter.rect_filled(
         r,
         0.,
         if selected {
             ui.visuals().selection.bg_fill
-        } else if response.hovered() {
-            Color32::from_gray(81)
+        } else if response.hovered() || response.has_focus() {
+            Color32::from_gray(76)
         } else {
-            Color32::from_gray(67)
+            Color32::from_gray(61)
         },
     );
-    let w = (r.width() * 0.46).min(104.);
-    let points: Vec<Pos2> = (0..40)
-        .map(|i| {
-            let t = i as f32 / 39.;
-            r.left_center() + egui::vec2(7. + t * w, (t * std::f32::consts::TAU).sin() * 4.)
-        })
-        .collect();
-    if soft {
-        p.add(egui::Shape::line(
-            points.clone(),
-            Stroke::new(7., Color32::from_white_alpha(25)),
-        ));
+    if let Some(texture) = preview {
+        painter.image(
+            texture,
+            Rect::from_min_max(
+                r.min + egui::vec2(22., 2.),
+                target.max - egui::vec2(4., 12.),
+            ),
+            Rect::from_min_max(Pos2::ZERO, egui::pos2(1., 1.)),
+            Color32::WHITE,
+        );
     }
-    p.add(egui::Shape::line(
-        points,
-        Stroke::new(if soft { 3. } else { 1.8 }, Color32::from_gray(220)),
-    ));
-    p.text(
-        r.right_center() - egui::vec2(6., 0.),
-        egui::Align2::RIGHT_CENTER,
-        name,
-        egui::FontId::proportional(11.),
-        Color32::from_gray(225),
+    painter.text(
+        r.min + egui::vec2(12., 13.),
+        egui::Align2::CENTER_CENTER,
+        kind.glyph(),
+        egui::FontId::new(13., egui::FontFamily::Name("icons".into())),
+        Color32::from_gray(190),
     );
-    response.clicked()
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        name.to_owned(),
+        egui::FontId::proportional(11.),
+        Color32::from_gray(233),
+    );
+    job.wrap = egui::text::TextWrapping::truncate_at_width((target.width() - 28.).max(1.));
+    let galley = painter.layout_job(job);
+    painter.galley(
+        target.right_bottom() - egui::vec2(5., 2.) - galley.size(),
+        galley,
+        Color32::from_gray(233),
+    );
+    painter.line_segment(
+        [r.left_bottom(), r.right_bottom()],
+        Stroke::new(1., Color32::from_gray(46)),
+    );
+    if selected || response.has_focus() {
+        painter.rect_stroke(
+            r,
+            0.,
+            Stroke::new(1., ui.visuals().selection.stroke.color),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response.on_hover_text(name)
 }
 
+#[cfg(test)]
 pub fn color_wheel(ui: &mut egui::Ui, color: &mut [u8; 3]) {
-    let side = ui.available_width().min(204.);
+    color_wheel_sized(ui, color, 204.);
+}
+
+pub fn color_wheel_sized(ui: &mut egui::Ui, color: &mut [u8; 3], max_side: f32) {
+    let side = ui.available_width().min(max_side).clamp(80., 204.);
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::click_and_drag());
     response.widget_info(|| {
         egui::WidgetInfo::labeled(

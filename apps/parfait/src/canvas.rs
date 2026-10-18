@@ -64,16 +64,16 @@ impl Parfait {
         let space = ctx.input(|i| i.key_down(Key::Space)) || self.navigation_tool == 1;
         let modifiers = ctx.input(|i| i.modifiers);
         let blocked = self.calibration_dialog.is_some()
-            || self.brush_details.open
+            || self.brush_details.dialog_open()
             || self.confirm_new
             || self.error.is_some()
             || self.show_help
             || self.show_licenses
             || self.workspace.dragging.is_some();
         // Space takes ownership until pointer-up; painting never resumes mid-gesture.
-        if space && self.stroke.take().is_some() {
+        if (space || blocked) && self.stroke.take().is_some() {
             self.force_save();
-            if ctx.input(|i| i.pointer.primary_down()) {
+            if space && !blocked && ctx.input(|i| i.pointer.primary_down()) {
                 self.view.gesture = Some(Gesture::Pan);
                 if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
                     self.view.last = pos;
@@ -109,12 +109,14 @@ impl Parfait {
         // Changes made outside this input batch (undo, layer edits, open) invalidate all pixels.
         let full_refresh = self.rendered != self.doc.revision || self.texture.is_none();
         let mut damage: Option<PixelRect> = None;
+        let mut stroke_started = false;
         for event in events {
             match event {
                 Event::Touch {
                     phase: egui::TouchPhase::Cancel,
                     ..
                 }
+                | Event::PointerGone
                 | Event::WindowFocused(false) => {
                     if self.stroke.take().is_some() {
                         self.force_save();
@@ -174,6 +176,7 @@ impl Parfait {
                                             pressure: self.calibration.map(self.pressure),
                                         },
                                     ));
+                                    stroke_started = true;
                                 }
                             }
                         }
@@ -227,6 +230,26 @@ impl Parfait {
         }
         if !ctx.input(|i| i.pointer.primary_down()) && self.stroke.take().is_some() {
             self.force_save();
+        }
+        if !stroke_started
+            && !blocked
+            && !space
+            && let Some(stroke) = &mut self.stroke
+            && let Some(interval) = stroke.spray_interval()
+        {
+            stroke.spray(
+                &mut self.doc,
+                ctx.input(|input| input.unstable_dt),
+                self.calibration.map(self.pressure),
+            );
+            if let Some(region) = stroke.take_damage() {
+                damage = Some(damage.map_or(region, |old| old.union(region)));
+            }
+            ctx.request_repaint_after(std::time::Duration::from_secs_f32(interval));
+        } else if stroke_started
+            && let Some(interval) = self.stroke.as_ref().and_then(Stroke::spray_interval)
+        {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f32(interval));
         }
         if self.rendered != self.doc.revision || self.texture.is_none() {
             let region = if let Some(r) = damage.filter(|_| !full_refresh) {
@@ -305,43 +328,13 @@ impl Parfait {
                 .with_clip_rect(rect)
                 .add(egui::Shape::mesh(mesh));
         }
-        // Rulers follow the view transform; at rotation they show projected document coordinates.
-        let painter = ui.painter();
-        painter.rect_filled(
-            Rect::from_min_max(outer.min, egui::pos2(outer.right(), rect.top())),
-            0.,
-            Color32::from_gray(66),
+        crate::rulers::paint(
+            ui,
+            outer,
+            rect,
+            self.view.document(rect.left_top(), rect, size),
+            self.view.angle.cos() / self.view.zoom,
         );
-        painter.rect_filled(
-            Rect::from_min_max(outer.min, egui::pos2(rect.left(), outer.bottom())),
-            0.,
-            Color32::from_gray(66),
-        );
-        let ink = Color32::from_gray(168);
-        for x in (0..rect.width() as usize).step_by(50) {
-            let p = egui::pos2(rect.left() + x as f32, rect.top());
-            let value = self.view.document(p, rect, size).x;
-            painter.line_segment([p, p - egui::vec2(0., 5.)], egui::Stroke::new(1., ink));
-            painter.text(
-                p - egui::vec2(-3., 7.),
-                egui::Align2::LEFT_BOTTOM,
-                format!("{value:.0}"),
-                egui::FontId::monospace(9.),
-                ink,
-            );
-        }
-        for y in (0..rect.height() as usize).step_by(50) {
-            let p = egui::pos2(rect.left(), rect.top() + y as f32);
-            painter.line_segment([p, p - egui::vec2(5., 0.)], egui::Stroke::new(1., ink));
-            // Horizontal labels stay legible in the narrow vertical ruler.
-            painter.text(
-                p - egui::vec2(3., -2.),
-                egui::Align2::RIGHT_TOP,
-                format!("{:.0}", self.view.document(p, rect, size).y),
-                egui::FontId::monospace(7.),
-                ink,
-            );
-        }
         if response.hovered() {
             if space {
                 ctx.set_cursor_icon(egui::CursorIcon::Grab);
@@ -363,7 +356,150 @@ impl Parfait {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stationary_spray_ticks_frozen_brush_and_stops_on_release_focus_loss_navigation_and_dialogs()
+    {
+        for stop in 0..5 {
+            let dir = tempfile::tempdir().unwrap();
+            let mut app = crate::app::Parfait::open(dir.path().to_path_buf()).unwrap();
+            app.doc = parfait_core::Document::new(64, 64);
+            app.brush = parfait_core::Brush {
+                continuous_spray: true,
+                pressure: false,
+                size: 20.,
+                flow: 0.03,
+                ..Default::default()
+            };
+            let ctx = eframe::egui::Context::default();
+            let frame = |app: &mut crate::app::Parfait, time, events| {
+                let mut output = ctx.run_ui(
+                    eframe::egui::RawInput {
+                        time: Some(time),
+                        screen_rect: Some(eframe::egui::Rect::from_min_size(
+                            eframe::egui::Pos2::ZERO,
+                            eframe::egui::vec2(400., 400.),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| app.canvas(ui),
+                );
+                output.textures_delta.clear();
+            };
+            let position = eframe::egui::pos2(210., 210.);
+            let button = |pressed| eframe::egui::Event::PointerButton {
+                pos: position,
+                button: eframe::egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            };
+            frame(&mut app, 0., vec![]);
+            frame(
+                &mut app,
+                0.01,
+                vec![eframe::egui::Event::PointerMoved(position), button(true)],
+            );
+            let started = app.doc.revision;
+            app.brush.continuous_spray = false;
+            frame(&mut app, 0.11, vec![]);
+            assert!(app.doc.revision > started);
+            let painted = app.doc.composite();
+            let event = match stop {
+                0 => button(false),
+                1 => eframe::egui::Event::WindowFocused(false),
+                2 => {
+                    app.navigation_tool = 1;
+                    eframe::egui::Event::PointerMoved(position)
+                }
+                3 => {
+                    app.brush_details.open_stroke_settings();
+                    eframe::egui::Event::PointerMoved(position)
+                }
+                _ => eframe::egui::Event::PointerGone,
+            };
+            frame(&mut app, 0.21, vec![event]);
+            frame(&mut app, 0.31, vec![]);
+            assert!(app.stroke.is_none());
+            assert_eq!(app.doc.composite(), painted);
+        }
+    }
     use super::*;
+    #[test]
+    fn pan_moves_painted_ruler_labels_without_editing_or_uploading_artwork() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        app.doc = parfait_core::Document::new(512, 512);
+        app.view.initialized = true;
+        app.navigation_tool = 1;
+        let original = app.doc.clone();
+        let ctx = egui::Context::default();
+        let frame = |app: &mut Parfait, events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(600., 400.))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.canvas(ui),
+            );
+            let labels: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| {
+                    if let egui::Shape::Text(text) = &shape.shape {
+                        Some((text.galley.job.text.clone(), text.pos, text.angle))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let uploaded = output
+                .textures_delta
+                .set
+                .contains_key(&app.texture.as_ref().unwrap().id());
+            output.textures_delta.clear();
+            (labels, uploaded)
+        };
+        let (before, _) = frame(&mut app, vec![]);
+        let start = egui::pos2(230., 180.);
+        let delta = egui::vec2(37.25, 31.5);
+        let end = start + delta;
+        let button = |position, pressed| Event::PointerButton {
+            pos: position,
+            pressed,
+            button: PointerButton::Primary,
+            modifiers: Default::default(),
+        };
+        frame(&mut app, vec![Event::PointerMoved(start)]);
+        frame(&mut app, vec![button(start, true)]);
+        frame(&mut app, vec![Event::PointerMoved(end)]);
+        let (after, uploaded) = frame(&mut app, vec![button(end, false)]);
+        assert_eq!(app.view.pan, delta);
+        assert_eq!(app.doc, original);
+        assert!(!uploaded);
+        for angle in [0., -std::f32::consts::FRAC_PI_2] {
+            let before = before
+                .iter()
+                .find(|(label, _, rotation)| label == "100" && *rotation == angle)
+                .unwrap()
+                .1;
+            let after = after
+                .iter()
+                .find(|(label, _, rotation)| label == "100" && *rotation == angle)
+                .unwrap()
+                .1;
+            let moved = if angle == 0. {
+                after.x - before.x
+            } else {
+                after.y - before.y
+            };
+            let expected = if angle == 0. { delta.x } else { delta.y };
+            assert!((moved - expected).abs() < 0.001);
+        }
+        app.history.undo(&mut app.doc);
+        assert_eq!(app.doc, original);
+    }
+
     fn zoom_frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<Event>) -> Rect {
         let mut rect = Rect::NOTHING;
         let mut output = ctx.run_ui(

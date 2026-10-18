@@ -182,7 +182,7 @@ impl Parfait {
     }
     pub fn tool_rail(&mut self, ui: &mut egui::Ui) {
         egui::Panel::left("tool_rail")
-            .exact_size(34.)
+            .exact_size(38.)
             .resizable(false)
             .frame(
                 egui::Frame::NONE
@@ -190,51 +190,52 @@ impl Parfait {
                     .inner_margin(4),
             )
             .show(ui, |ui| {
-                if widgets::icon(
-                    ui,
-                    Icon::Pen,
-                    !self.brush.erase && self.navigation_tool == 0,
-                    "Pen · B / P",
-                )
-                .clicked()
-                {
-                    self.brush.erase = false;
-                    self.navigation_tool = 0;
-                }
-                if widgets::icon(
-                    ui,
-                    Icon::Eraser,
-                    self.brush.erase && self.navigation_tool == 0,
-                    "Eraser · E",
-                )
-                .clicked()
-                {
-                    self.brush.erase = true;
-                    self.navigation_tool = 0;
+                ui.spacing_mut().item_spacing.y = 1.;
+                use crate::brushes::BrushGroup;
+                for (group, icon, label) in [
+                    (BrushGroup::Ink, Icon::Pen, "Ink / pen · P"),
+                    (BrushGroup::Sketch, Icon::Pencil, "Sketch / pencil · K"),
+                    (BrushGroup::Paint, Icon::Brush, "Paint / marker · B"),
+                    (BrushGroup::Airbrush, Icon::Airbrush, "Airbrush · A"),
+                    (BrushGroup::Eraser, Icon::Eraser, "Eraser · E"),
+                ] {
+                    if widgets::flat_icon(
+                        ui,
+                        icon,
+                        self.navigation_tool == 0 && BrushGroup::of(&self.brush) == group,
+                        label,
+                        30.,
+                    )
+                    .clicked()
+                    {
+                        self.select_brush_group(group);
+                    }
                 }
                 ui.separator();
-                if widgets::icon(
+                if widgets::flat_icon(
                     ui,
                     Icon::Hand,
                     self.navigation_tool == 1,
-                    "Hand · drag to pan; Space temporarily",
+                    "Hand · H; Space temporarily",
+                    30.,
                 )
                 .clicked()
                 {
                     self.navigation_tool = 1;
                 }
-                if widgets::icon(
+                if widgets::flat_icon(
                     ui,
                     Icon::Picker,
                     self.navigation_tool == 2,
-                    "Eyedropper · Alt temporarily",
+                    "Eyedropper · I; Alt temporarily",
+                    30.,
                 )
                 .clicked()
                 {
                     self.navigation_tool = 2;
                 }
                 ui.separator();
-                if widgets::icon(ui, Icon::Fit, false, "Fit canvas").clicked() {
+                if widgets::flat_icon(ui, Icon::Fit, false, "Fit canvas", 30.).clicked() {
                     self.view = Default::default();
                 }
                 ui.add_space(10.);
@@ -341,13 +342,28 @@ impl Parfait {
                     });
             }
             Palette::Color => {
-                widgets::color_wheel(ui, &mut self.brush.color);
+                let height = self
+                    .workspace
+                    .panels
+                    .iter()
+                    .find(|panel| panel.palette == Palette::Color)
+                    .map_or(190., |panel| panel.height);
+                ui.vertical_centered(|ui| {
+                    widgets::color_wheel_sized(ui, &mut self.brush.color, height - 30.);
+                });
                 ui.color_edit_button_srgb(&mut self.brush.color);
             }
             Palette::Navigator => {
                 if let Some(texture) = &self.texture {
                     let w = ui.available_width();
-                    let h = (w * self.doc.height as f32 / self.doc.width as f32).min(180.);
+                    let height = self
+                        .workspace
+                        .panels
+                        .iter()
+                        .find(|panel| panel.palette == Palette::Navigator)
+                        .map_or(190., |panel| panel.height);
+                    let h = (w * self.doc.height as f32 / self.doc.width as f32)
+                        .min((height - 66.).clamp(30., 180.));
                     let size = egui::vec2(h * self.doc.width as f32 / self.doc.height as f32, h);
                     ui.vertical_centered(|ui| {
                         ui.add(egui::Image::new(texture).fit_to_exact_size(size));

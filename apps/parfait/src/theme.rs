@@ -27,8 +27,8 @@ pub fn apply(ctx: &egui::Context) {
     style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1., ACCENT);
     style.visuals.widgets.active.bg_fill = Color32::from_gray(58);
     style.visuals.widgets.active.weak_bg_fill = Color32::from_gray(58);
-    style.visuals.widgets.open.bg_fill = Color32::from_rgb(91, 105, 126);
-    style.visuals.widgets.open.weak_bg_fill = Color32::from_rgb(91, 105, 126);
+    style.visuals.widgets.open.bg_fill = Color32::from_gray(74);
+    style.visuals.widgets.open.weak_bg_fill = Color32::from_gray(74);
     style.visuals.widgets.inactive.bg_fill = Color32::from_gray(87);
     style.visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(87);
     style.visuals.widgets.hovered.bg_fill = Color32::from_gray(88);

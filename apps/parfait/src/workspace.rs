@@ -24,7 +24,7 @@ impl Palette {
     pub fn title(self) -> &'static str {
         match self {
             Self::Brushes => "Sub tools",
-            Self::Properties => "Tool property / Pressure",
+            Self::Properties => "Tool property",
             Self::Sizes => "Brush size",
             Self::Color => "Color wheel",
             Self::Navigator => "Navigator",
@@ -109,15 +109,15 @@ impl Default for Workspace {
                         Location::Right
                     },
                     visible: true,
-                    collapsed: false,
+                    collapsed: p == Palette::Sizes,
                     row: None,
                     window_rect: None,
                     scroll_offset: 0.,
-                    height: [185., 185., 115., 205., 240., 400.][i],
+                    height: [250., 265., 115., 190., 190., 400.][i],
                     rect: [300. + i as f32 * 24., 120. + i as f32 * 24., 270., 340.],
                 })
                 .collect(),
-            left_width: 230.,
+            left_width: 260.,
             right_width: 250.,
             dragging: None,
             slots: Vec::new(),
@@ -130,6 +130,25 @@ impl Default for Workspace {
     }
 }
 impl Workspace {
+    pub(crate) fn same_preferences(&self, other: &Self) -> bool {
+        self.left_width == other.left_width
+            && self.right_width == other.right_width
+            && self.panels.len() == other.panels.len()
+            && self
+                .panels
+                .iter()
+                .zip(&other.panels)
+                .all(|(current, saved)| {
+                    current.palette == saved.palette
+                        && current.location == saved.location
+                        && current.visible == saved.visible
+                        && current.collapsed == saved.collapsed
+                        && current.row == saved.row
+                        && current.window_rect == saved.window_rect
+                        && current.height == saved.height
+                        && current.rect == saved.rect
+                })
+    }
     pub fn validate(&self) -> bool {
         self.panels.len() == 6
             && Palette::ALL
@@ -765,6 +784,46 @@ impl Parfait {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn preference_comparison_covers_geometry_but_ignores_runtime_caches() {
+        let original = super::Workspace::default();
+        let mut runtime = original.clone();
+        runtime.panels[0].scroll_offset = 40.;
+        runtime.dragging = Some(super::Palette::Brushes);
+        runtime.slots.push((
+            super::Palette::Brushes,
+            super::Location::Left,
+            eframe::egui::Rect::EVERYTHING,
+        ));
+        runtime.drag_origin = Some((0, runtime.panels[0].clone()));
+        assert!(original.same_preferences(&runtime));
+        assert_eq!(
+            serde_json::to_string(&original).unwrap(),
+            serde_json::to_string(&runtime).unwrap()
+        );
+        let changes: [fn(&mut super::Workspace); 10] = [
+            |workspace| workspace.right_width += 10.,
+            |workspace| workspace.panels.swap(0, 1),
+            |workspace| workspace.panels.pop().map(|_| ()).unwrap(),
+            |workspace| workspace.panels[0].palette = super::Palette::Color,
+            |workspace| workspace.panels[0].location = super::Location::Window,
+            |workspace| workspace.panels[0].visible = false,
+            |workspace| workspace.panels[0].row = Some(super::Palette::Color),
+            |workspace| workspace.panels[0].window_rect = Some([1., 2., 250., 300.]),
+            |workspace| workspace.panels[0].height += 1.,
+            |workspace| workspace.panels[0].rect[0] += 1.,
+        ];
+        for change in changes {
+            let mut changed = original.clone();
+            change(&mut changed);
+            assert!(!original.same_preferences(&changed));
+            assert_ne!(
+                serde_json::to_string(&original).unwrap(),
+                serde_json::to_string(&changed).unwrap()
+            );
+        }
+    }
+
     use super::*;
     #[test]
     fn header_context_menu_opens_a_separate_window() {
@@ -1029,7 +1088,10 @@ mod tests {
             );
             frame(&mut app, vec![button(pos, false)]);
             assert!(app.workspace.panels[0].collapsed);
-            assert_eq!(app.workspace.panels[0].height, 185.);
+            assert_eq!(
+                app.workspace.panels[0].height,
+                Workspace::default().panels[0].height
+            );
             assert!(app.workspace.dragging.is_none());
             let pos = r.right_center() + egui::vec2(31.5, 0.);
             frame(
@@ -1044,7 +1106,10 @@ mod tests {
         let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
         assert!(restored.workspace.panels[0].collapsed);
         assert!(!restored.workspace.panels[0].visible);
-        assert_eq!(restored.workspace.panels[0].height, 185.);
+        assert_eq!(
+            restored.workspace.panels[0].height,
+            Workspace::default().panels[0].height
+        );
         // Existing preferences without collapse state still decode as expanded.
         let mut json = serde_json::to_value(&restored.workspace).unwrap();
         for panel in json["panels"].as_array_mut().unwrap() {
@@ -1101,7 +1166,7 @@ mod tests {
             .find(|p| p.palette == Palette::Brushes)
             .unwrap();
         assert_eq!(detached.location, Location::Floating);
-        assert_eq!(detached.height, 185.);
+        assert_eq!(detached.height, Workspace::default().panels[0].height);
         assert!((detached.rect[2] - r.width()).abs() < 2.);
         assert!(app.workspace.dragging.is_some());
         frame(&mut app, vec![button(end, false)]);
@@ -1180,9 +1245,11 @@ mod tests {
             .unwrap()
             .height;
         assert!(new_height > old_height);
-        app.brush.pressure_curve = [0., 0.1, 0.3, 0.6, 1.];
+        app.brush.pressure_curve = [0., 0.1, 0.3, 0.6, 1.].into();
         app.presets.push(crate::brushes::Preset {
             name: "My imported tip".into(),
+            favorite: false,
+            properties: Default::default(),
             brush: parfait_core::Brush {
                 tip: parfait_core::BrushTip::Image {
                     width: 2,
@@ -1216,7 +1283,10 @@ mod tests {
                 .height,
             new_height
         );
-        assert_eq!(restored.brush.pressure_curve, [0., 0.1, 0.3, 0.6, 1.]);
+        assert_eq!(
+            restored.brush.pressure_curve,
+            parfait_core::ResponseCurve::from([0., 0.1, 0.3, 0.6, 1.])
+        );
         assert_eq!(restored.presets.last().unwrap().name, "My imported tip");
         assert!(
             matches!(&restored.presets.last().unwrap().brush.tip,parfait_core::BrushTip::Image{mask,..} if mask.as_slice()==[0,128,255,64])

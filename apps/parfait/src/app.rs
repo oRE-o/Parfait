@@ -13,7 +13,8 @@ pub struct Parfait {
     pub calibration_dialog: Option<crate::calibration::CalibrationDialog>,
     pub workspace: crate::workspace::Workspace,
     pub presets: Vec<crate::brushes::Preset>,
-    pub preferences_saved: String,
+    pub brush_library: crate::brushes::BrushLibrary,
+    pub preferences_saved: Option<crate::preferences::Preferences>,
     pub preferences_tick: Instant,
     pub preferences_read_failed: bool,
     pub pressure_seen: bool,
@@ -78,7 +79,8 @@ impl Parfait {
             calibration_dialog: None,
             workspace: Default::default(),
             presets: crate::brushes::defaults(),
-            preferences_saved: String::new(),
+            brush_library: Default::default(),
+            preferences_saved: None,
             preferences_tick: Instant::now(),
             preferences_read_failed: false,
             pressure_seen: false,
@@ -135,6 +137,17 @@ impl Parfait {
         self.autosave.submit(self.doc.clone());
         self.submitted = self.doc.revision;
         self.last_submit = Instant::now();
+    }
+    fn maintenance_interval(&self) -> Duration {
+        if self.stroke.is_some()
+            || self.close_pending
+            || self.saved < self.submitted
+            || self.saved < self.doc.revision
+        {
+            Duration::from_millis(100)
+        } else {
+            Duration::from_secs(1)
+        }
     }
     pub fn request_close(&mut self, ctx: &egui::Context) {
         if self.saved < self.doc.revision || self.saving_failed {
@@ -272,14 +285,17 @@ impl eframe::App for Parfait {
         self.shortcuts(&ctx);
         // Native window controls remain usable while an editor dialog is open.
         self.title_bar(ui);
-        ui.add_enabled_ui(self.calibration_dialog.is_none(), |ui| {
-            self.top_panel(ui);
-            self.bottom_panel(ui);
-            self.workspace_ui(ui);
-            egui::CentralPanel::default()
-                .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
-                .show(ui, |ui| self.canvas(ui));
-        });
+        ui.add_enabled_ui(
+            self.calibration_dialog.is_none() && !self.brush_details.dialog_open(),
+            |ui| {
+                self.top_panel(ui);
+                self.bottom_panel(ui);
+                self.workspace_ui(ui);
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
+                    .show(ui, |ui| self.canvas(ui));
+            },
+        );
         self.brush_details_ui(&ctx);
         self.calibration_ui(&ctx);
         if self.show_help {
@@ -338,7 +354,7 @@ impl eframe::App for Parfait {
                     }
                 });
         }
-        ctx.request_repaint_after(Duration::from_millis(100));
+        ctx.request_repaint_after(self.maintenance_interval());
         crate::chrome::resize_edges(ui);
         self.persist_preferences(false);
         if let Some(capture) = &mut self.capture
@@ -360,5 +376,40 @@ impl eframe::App for Parfait {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.persist_preferences(true);
         self.autosave.finish(self.doc.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn idle_maintenance_slows_down_without_delaying_pending_saves_or_strokes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        app.doc = Document::new(16, 16);
+        app.saved = app.doc.revision;
+        app.submitted = app.saved;
+        assert_eq!(app.maintenance_interval(), Duration::from_secs(1));
+        app.doc.touch();
+        assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
+        app.saved = app.doc.revision;
+        app.submitted = app.saved + 1;
+        assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
+        app.submitted = app.saved;
+        app.close_pending = true;
+        assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
+        app.close_pending = false;
+        app.stroke = Some(Stroke::begin(
+            &mut app.doc,
+            Brush::default(),
+            parfait_core::Point {
+                x: 4.,
+                y: 4.,
+                pressure: 1.,
+            },
+        ));
+        app.saved = app.doc.revision;
+        assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
     }
 }

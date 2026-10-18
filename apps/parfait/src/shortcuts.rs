@@ -1,7 +1,8 @@
 use crate::app::Parfait;
 use eframe::egui::{self, Key};
 pub const HELP: &[&str] = &[
-    "B / P    Brush       E    Eraser",
+    "P    Pen       K    Pencil       B    Paint / marker",
+    "A    Airbrush       E    Eraser       H    Hand       I    Eyedropper",
     "[ / ]    Smaller / larger brush",
     "Space + drag    Pan canvas",
     "Shift + Space + drag    Rotate view",
@@ -23,7 +24,7 @@ pub const HELP: &[&str] = &[
 impl Parfait {
     pub fn shortcuts(&mut self, ctx: &egui::Context) {
         if self.calibration_dialog.is_some()
-            || self.brush_details.open
+            || self.brush_details.dialog_open()
             || ctx.egui_wants_keyboard_input()
             || self.stroke.is_some()
             || self.confirm_new
@@ -54,14 +55,13 @@ impl Parfait {
                 (Key::N, true, false) => self.confirm_new = true,
                 (Key::E, true, true) => self.export(),
                 (Key::Num0, true, false) => self.view = Default::default(),
-                (Key::B | Key::P, _, _) => {
-                    self.brush.erase = false;
-                    self.navigation_tool = 0;
-                }
-                (Key::E, _, _) => {
-                    self.brush.erase = true;
-                    self.navigation_tool = 0;
-                }
+                (Key::P, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Ink),
+                (Key::B, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Paint),
+                (Key::K, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Sketch),
+                (Key::A, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Airbrush),
+                (Key::E, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Eraser),
+                (Key::H, _, _) => self.navigation_tool = 1,
+                (Key::I, _, _) => self.navigation_tool = 2,
                 (Key::OpenBracket, _, _) => self.brush.size = (self.brush.size / 1.2).max(1.),
                 (Key::CloseBracket, _, _) => self.brush.size = (self.brush.size * 1.2).min(512.),
                 (Key::Tab, _, _) => self.hide_panels = !self.hide_panels,
