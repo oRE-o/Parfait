@@ -64,6 +64,7 @@ impl Parfait {
         let space = ctx.input(|i| i.key_down(Key::Space)) || self.navigation_tool == 1;
         let modifiers = ctx.input(|i| i.modifiers);
         let blocked = self.calibration_dialog.is_some()
+            || self.brush_details.open
             || self.confirm_new
             || self.error.is_some()
             || self.show_help

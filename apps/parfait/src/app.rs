@@ -18,6 +18,7 @@ pub struct Parfait {
     pub preferences_read_failed: bool,
     pub pressure_seen: bool,
     pub pressure_tab: bool,
+    pub brush_details: crate::brush_details::BrushDetails,
     pub capture: Option<crate::diagnostics::Capture>,
     pub navigation_tool: u8,
     pub layer_previews: Vec<egui::TextureHandle>,
@@ -82,6 +83,7 @@ impl Parfait {
             preferences_read_failed: false,
             pressure_seen: false,
             pressure_tab: false,
+            brush_details: Default::default(),
             capture: None,
             navigation_tool: 0,
             layer_previews: Vec::new(),
@@ -278,6 +280,7 @@ impl eframe::App for Parfait {
                 .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
                 .show(ui, |ui| self.canvas(ui));
         });
+        self.brush_details_ui(&ctx);
         self.calibration_ui(&ctx);
         if self.show_help {
             egui::Window::new("Keyboard shortcuts")

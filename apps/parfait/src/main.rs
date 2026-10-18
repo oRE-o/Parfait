@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod app;
+mod brush_details;
 mod brushes;
 mod calibration;
 mod canvas;
@@ -46,6 +47,9 @@ fn run() -> anyhow::Result<()> {
         .map(|p| diagnostics::Capture::new(PathBuf::from(&p[1])));
     if args.iter().any(|arg| arg == "--calibrate-pressure") {
         app.calibration_dialog = Some(calibration::CalibrationDialog::new(app.calibration.clone()));
+    }
+    if args.iter().any(|arg| arg == "--brush-details") {
+        app.brush_details.open = true;
     }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

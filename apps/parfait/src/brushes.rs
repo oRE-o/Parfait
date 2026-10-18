@@ -117,20 +117,7 @@ impl Parfait {
                 .on_hover_text("Updates a preset with this name, or adds a new one")
                 .clicked()
             {
-                let p = Preset {
-                    name: self.tip_name.trim().to_owned(),
-                    brush: self.brush.clone(),
-                };
-                if p.name.is_empty() {
-                    self.error = Some("Give the brush a name first.".into());
-                } else if let Some(old) = self.presets.iter_mut().find(|v| v.name == p.name) {
-                    *old = p;
-                } else if self.presets.len() < 64 {
-                    self.presets.push(p);
-                } else {
-                    self.error =
-                        Some("The brush library is limited to 64 presets in this version.".into());
-                }
+                self.save_current_preset();
             }
             if ui
                 .button("Reset built-ins")
@@ -146,6 +133,21 @@ impl Parfait {
                 }
             }
         });
+    }
+    pub(crate) fn save_current_preset(&mut self) {
+        let p = Preset {
+            name: self.tip_name.trim().to_owned(),
+            brush: self.brush.clone(),
+        };
+        if p.name.is_empty() {
+            self.error = Some("Give the brush a name first.".into());
+        } else if let Some(old) = self.presets.iter_mut().find(|v| v.name == p.name) {
+            *old = p;
+        } else if self.presets.len() < 64 {
+            self.presets.push(p);
+        } else {
+            self.error = Some("The brush library is limited to 64 presets in this version.".into());
+        }
     }
     fn import_brushes(&mut self) {
         let Some(paths) = rfd::FileDialog::new()
@@ -264,64 +266,9 @@ impl Parfait {
             }
         }
     }
-    pub fn brush_properties_ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.pressure_tab, false, "Brush");
-            ui.selectable_value(&mut self.pressure_tab, true, "Pressure curve");
-        });
-        ui.label(&self.tip_name);
-        if !self.pressure_tab {
-            ui.add(
-                egui::Slider::new(&mut self.brush.size, 1. ..=512.)
-                    .logarithmic(true)
-                    .text("Size"),
-            );
-            ui.add(egui::Slider::new(&mut self.brush.opacity, 0. ..=1.).text("Opacity"));
-            ui.add(egui::Slider::new(&mut self.brush.flow, 0.01..=1.).text("Flow"));
-            ui.add(egui::Slider::new(&mut self.brush.spacing, 0.01..=2.).text("Spacing"));
-            ui.add(egui::Slider::new(&mut self.brush.hardness, 0. ..=1.).text("Hardness"))
-                .on_hover_text("Round tips only");
-            ui.add(egui::Slider::new(&mut self.brush.aspect, 0.1..=1.).text("Roundness"));
-            ui.add(egui::Slider::new(&mut self.brush.angle, -180. ..=180.).text("Angle"));
-            ui.add(egui::Slider::new(&mut self.brush.smoothing, 0. ..=0.95).text("Smoothing"));
-        } else {
-            widgets::heading(ui, "Pressure response");
-            if ui.button("Calibrate tablet pressure…").clicked() {
-                self.calibration_dialog = Some(crate::calibration::CalibrationDialog::new(
-                    self.calibration.clone(),
-                ));
-            }
-            ui.checkbox(&mut self.brush.pressure, "Pressure → size");
-            ui.checkbox(&mut self.brush.pressure_opacity, "Pressure → opacity");
-            ui.add(egui::Slider::new(&mut self.brush.minimum_size, 0. ..=1.).text("Minimum size"));
-            ui.label(if self.pressure_seen {
-                format!("Pressure received: {:.0}%", self.pressure * 100.)
-            } else {
-                "No pressure samples yet (mouse = 100%)".into()
-            });
-            pressure_graph(
-                ui,
-                &mut self.brush.pressure_curve,
-                self.calibration.map(self.pressure),
-            );
-            ui.horizontal(|ui| {
-                if ui.small_button("Linear").clicked() {
-                    self.brush.pressure_curve = [0., 0.25, 0.5, 0.75, 1.];
-                }
-                if ui.small_button("Soft").clicked() {
-                    self.brush.pressure_curve = [0., 0.5, 0.71, 0.87, 1.];
-                }
-                if ui.small_button("Firm").clicked() {
-                    self.brush.pressure_curve = [0., 0.06, 0.25, 0.56, 1.];
-                }
-            });
-            ui.small(
-                "Drag graph nodes vertically. Save preset to keep these settings in the library.",
-            );
-        }
-    }
 }
-fn pressure_graph(ui: &mut egui::Ui, curve: &mut [f32; 5], pressure: f32) {
+
+pub(crate) fn pressure_graph(ui: &mut egui::Ui, curve: &mut [f32; 5], pressure: f32) {
     let id = ui.id().with("brush_pressure_selection");
     let mut selected = ui.data(|d| d.get_temp::<Option<usize>>(id)).flatten();
     let mut points: Vec<_> = curve

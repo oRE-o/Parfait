@@ -7,7 +7,7 @@ pub struct Point {
     pub y: f32,
     pub pressure: f32,
 }
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BrushTip {
     Round,
     Soft,
@@ -19,7 +19,7 @@ pub enum BrushTip {
         mask: Arc<Vec<u8>>,
     },
 }
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Brush {
     pub size: f32,

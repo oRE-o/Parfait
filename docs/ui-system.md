@@ -31,3 +31,7 @@ Callers provide normalized points and constraints: fixed x coordinates versus ed
 Both device calibration and brush pressure now use this widget. Device calibration has up to 16 movable points with fixed endpoints; brush pressure keeps its existing five x positions and movable output values. Stored point formats are unchanged. Curves now use shape-preserving cubic Hermite interpolation shared with the brush engine: the line passes through each control point, joins smoothly and does not overshoot neighboring output values. Both increasing and decreasing segments are supported. Actual tilt/speed input dynamics remain future work. Existing nonlinear presets now evaluate smoothly between their saved nodes; identity curves remain unchanged.
 
 Standard buttons, combo boxes and numeric controls use visible one-pixel outlines, lighter neutral fills and distinct hover/pressed states. Custom icon buttons use the same interaction visuals, including their border.
+
+## Brush properties and details
+
+`brush_details.rs` owns compact label/slider/numeric rows, a bounded cached tip preview, and a five-category detail window. The palette exposes frequent adjustments while the detail window exposes all implemented brush settings and pressure calibration. Category help describes actual parameter semantics and preview limits; unsupported engine features are not presented as working controls. Preview textures regenerate only when brush settings change and drawing is idle. Palette and detail edits share the active brush model and existing preference/preset persistence.

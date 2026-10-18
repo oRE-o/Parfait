@@ -38,3 +38,5 @@ Shared curve-editor tests cover declining responses, pressure monotonicity, fixe
 Blend tests cover known channel values, transparent/partial alpha, all-mode partial/full equivalence, undo/redo, canvas texture invalidation, v1 migration, mixed-generation fallback, saved-mode roundtrips and mode preservation after process termination.
 
 Smooth-response tests verify exact control points, identity, continuous tangents, monotonicity and bounded output across rising/falling/flat and tightly spaced segments, plus equality between brush and calibration evaluation.
+
+Brush detail tests render every category at a small desktop size, validate the active brush, verify preview texture reuse and updated settings, preserve artwork, save the active preset, and close via Escape without reverting live edits.

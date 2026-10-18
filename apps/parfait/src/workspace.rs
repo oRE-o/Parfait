@@ -113,7 +113,7 @@ impl Default for Workspace {
                     row: None,
                     window_rect: None,
                     scroll_offset: 0.,
-                    height: [185., 145., 115., 205., 240., 400.][i],
+                    height: [185., 185., 115., 205., 240., 400.][i],
                     rect: [300. + i as f32 * 24., 120. + i as f32 * 24., 270., 340.],
                 })
                 .collect(),
