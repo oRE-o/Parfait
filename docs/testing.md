@@ -42,3 +42,5 @@ Smooth-response tests verify exact control points, identity, continuous tangents
 Brush detail tests render every category at a small desktop size, validate the active brush, verify preview texture reuse and updated settings, preserve artwork, save the active preset, and close via Escape without reverting live edits.
 
 Canvas zoom regression tests feed actual keyboard, wheel and pinch events: Ctrl plus/equals/minus changes canvas zoom while UI scale stays fixed; plain and Ctrl-wheel zoom in both directions, preserve the pointer anchor, and do nothing outside the canvas. Keyboard zoom keeps the viewport center fixed and is blocked by brush details.
+
+Modifier fallback tests cover Ctrl+B/E/brackets/Tab, registered Ctrl+Shift+N and Ctrl+Z precedence, Ctrl+middle-button panning without zooming, and normal pen input while Ctrl is held.

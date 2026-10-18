@@ -84,7 +84,7 @@ Ctrl/Cmd + Plus/Minus no longer scales the UI. Space + pointer drag pans; pressi
 | Export PNG | Ctrl + Shift + E |
 | Hide side panels / help | Tab / F1 |
 
-Keyboard shortcuts pause while editing a text field. View transformations do not alter image pixels.
+Unused Ctrl/Cmd combinations keep ordinary key actions; registered combinations take precedence. Middle-button dragging pans even with Ctrl held. Keyboard shortcuts pause while editing a text field. View transformations do not alter image pixels.
 
 ## Recovery contract
 

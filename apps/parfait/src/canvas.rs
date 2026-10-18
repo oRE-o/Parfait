@@ -140,9 +140,11 @@ impl Parfait {
                         if button == PointerButton::Middle
                             || (button == PointerButton::Primary && space)
                         {
-                            self.view.gesture = Some(if modifiers.shift {
+                            self.view.gesture = Some(if button == PointerButton::Middle {
+                                Gesture::Pan
+                            } else if modifiers.shift {
                                 Gesture::Rotate
-                            } else if modifiers.command {
+                            } else if modifiers.command || modifiers.ctrl {
                                 Gesture::Zoom
                             } else {
                                 Gesture::Pan
@@ -489,6 +491,59 @@ mod tests {
         let before = app.view.zoom;
         zoom_frame(&mut app, &ctx, vec![Event::Zoom(1.1)]);
         assert!((app.view.zoom - before * 1.1).abs() < 1e-6);
+    }
+    #[test]
+    fn unused_control_pointer_combinations_keep_panning_and_drawing() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        app.doc = parfait_core::Document::new(64, 64);
+        let ctx = egui::Context::default();
+        let modifiers = egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..Default::default()
+        };
+        let start = egui::pos2(210., 210.);
+        let end = start + egui::vec2(12., 8.);
+        let button = |pos, button, pressed| Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers,
+        };
+        zoom_frame(
+            &mut app,
+            &ctx,
+            vec![
+                Event::ModifiersChanged(modifiers),
+                Event::PointerMoved(start),
+            ],
+        );
+        let before = app.doc.composite();
+        let zoom = app.view.zoom;
+        zoom_frame(
+            &mut app,
+            &ctx,
+            vec![button(start, PointerButton::Middle, true)],
+        );
+        zoom_frame(&mut app, &ctx, vec![Event::PointerMoved(end)]);
+        zoom_frame(
+            &mut app,
+            &ctx,
+            vec![button(end, PointerButton::Middle, false)],
+        );
+        assert_eq!(app.view.pan, egui::vec2(12., 8.));
+        assert_eq!(app.view.zoom, zoom);
+        assert_eq!(app.doc.composite(), before);
+        zoom_frame(
+            &mut app,
+            &ctx,
+            vec![
+                button(end, PointerButton::Primary, true),
+                button(end, PointerButton::Primary, false),
+            ],
+        );
+        assert_ne!(app.doc.composite(), before);
     }
     #[test]
     fn hand_drag_moves_view_without_painting_then_pen_draws() {
