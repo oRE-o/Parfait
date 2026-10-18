@@ -74,7 +74,7 @@ Ctrl/Cmd + Plus/Minus no longer scales the UI. Space + pointer drag pans; pressi
 | Brush size | [ / ] |
 | Move canvas | Space + drag, or middle-button drag |
 | Rotate view | Shift + Space + drag |
-| Zoom view | Ctrl + Space + drag, or wheel |
+| Zoom view | Ctrl + `+` / `-` (`=` also zooms in); wheel or Ctrl + wheel at cursor; Ctrl + Space + drag |
 | Pick canvas color | Alt + click |
 | Fit and reset rotation | Ctrl + 0 |
 | Undo / redo | Ctrl + Z / Ctrl + Y or Ctrl + Shift + Z |

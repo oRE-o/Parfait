@@ -35,3 +35,5 @@ Standard buttons, combo boxes and numeric controls use visible one-pixel outline
 ## Brush properties and details
 
 `brush_details.rs` owns compact label/slider/numeric rows, a bounded cached tip preview, and a five-category detail window. The palette exposes frequent adjustments while the detail window exposes all implemented brush settings and pressure calibration. Category help describes actual parameter semantics and preview limits; unsupported engine features are not presented as working controls. Preview textures regenerate only when brush settings change and drawing is idle. Palette and detail edits share the active brush model and existing preference/preset persistence.
+
+Canvas zoom accepts Ctrl/Cmd + plus, equals and minus without changing UI scale. Keyboard zoom keeps the canvas viewport center fixed; wheel, Ctrl/Cmd-wheel and pinch use the pointer anchor. Canvas navigation is suppressed while a brush/calibration dialog or an active drawing stroke owns input.

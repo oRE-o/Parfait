@@ -80,12 +80,30 @@ impl Parfait {
                 }
             }
         }
-        if response.hovered() && !blocked && self.stroke.is_none() {
-            let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.
-                && let Some(pos) = ctx.input(|i| i.pointer.hover_pos())
-            {
-                self.view.zoom_at((scroll * 0.003).exp(), pos, rect, size);
+        if !blocked && self.stroke.is_none() {
+            if !ctx.egui_wants_keyboard_input() {
+                let step = ctx.input(|i| {
+                    if i.modifiers.command || i.modifiers.ctrl {
+                        i32::from(i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals))
+                            - i32::from(i.key_pressed(Key::Minus))
+                    } else {
+                        0
+                    }
+                });
+                if step != 0 {
+                    self.view
+                        .zoom_at(1.2_f32.powi(step), rect.center(), rect, size);
+                }
+            }
+            if response.hovered() {
+                // Ctrl/Cmd-wheel and pinch arrive through zoom_delta, not scroll_delta.
+                let factor =
+                    ctx.input(|i| (i.smooth_scroll_delta.y * 0.003).exp() * i.zoom_delta());
+                if factor != 1.
+                    && let Some(pos) = ctx.input(|i| i.pointer.hover_pos())
+                {
+                    self.view.zoom_at(factor, pos, rect, size);
+                }
             }
         }
         // Changes made outside this input batch (undo, layer edits, open) invalidate all pixels.
@@ -344,6 +362,134 @@ impl Parfait {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn zoom_frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<Event>) -> Rect {
+        let mut rect = Rect::NOTHING;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(400., 400.))),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                app.shortcuts(ui.ctx());
+                egui::CentralPanel::default().show(ui, |ui| {
+                    let outer = ui.available_rect_before_wrap();
+                    rect = Rect::from_min_max(outer.min + egui::vec2(18., 18.), outer.max);
+                    app.canvas(ui);
+                });
+            },
+        );
+        output.textures_delta.clear();
+        rect
+    }
+    #[test]
+    fn command_plus_equals_minus_zoom_canvas_without_scaling_ui() {
+        for (key, shift, factor) in [
+            (Key::Plus, true, 1.2),
+            (Key::Equals, false, 1.2),
+            (Key::Minus, false, 1. / 1.2),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+            app.doc = parfait_core::Document::new(64, 64);
+            let ctx = egui::Context::default();
+            crate::theme::apply(&ctx);
+            let rect = zoom_frame(&mut app, &ctx, vec![]);
+            app.view.pan = egui::vec2(35., -18.);
+            let size = egui::vec2(64., 64.);
+            let center = app.view.document(rect.center(), rect, size);
+            let zoom = app.view.zoom;
+            let modifiers = egui::Modifiers {
+                ctrl: true,
+                command: true,
+                shift,
+                ..Default::default()
+            };
+            let key_event = |pressed| Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers,
+            };
+            zoom_frame(
+                &mut app,
+                &ctx,
+                vec![Event::ModifiersChanged(modifiers), key_event(true)],
+            );
+            assert!((app.view.zoom - zoom * factor).abs() < 1e-6);
+            assert!((app.view.document(rect.center(), rect, size) - center).length() < 1e-4);
+            assert_eq!(ctx.zoom_factor(), 1.);
+            zoom_frame(&mut app, &ctx, vec![key_event(false)]);
+            app.brush_details.open = true;
+            let zoom = app.view.zoom;
+            zoom_frame(&mut app, &ctx, vec![key_event(true)]);
+            assert_eq!(app.view.zoom, zoom);
+        }
+    }
+    #[test]
+    fn wheel_with_or_without_control_and_pinch_zoom_at_pointer() {
+        for ctrl in [false, true] {
+            for delta in [-30., 30.] {
+                let dir = tempfile::tempdir().unwrap();
+                let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+                app.doc = parfait_core::Document::new(64, 64);
+                let ctx = egui::Context::default();
+                crate::theme::apply(&ctx);
+                let pointer = egui::pos2(170., 240.);
+                let rect = zoom_frame(&mut app, &ctx, vec![Event::PointerMoved(pointer)]);
+                let size = egui::vec2(64., 64.);
+                let anchor = app.view.document(pointer, rect, size);
+                let before = app.view.zoom;
+                let modifiers = egui::Modifiers {
+                    ctrl,
+                    command: ctrl,
+                    ..Default::default()
+                };
+                zoom_frame(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        Event::ModifiersChanged(modifiers),
+                        Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta: egui::vec2(0., delta),
+                            phase: egui::TouchPhase::Move,
+                            modifiers,
+                        },
+                    ],
+                );
+                assert!(
+                    (app.view.zoom - before) * delta > 0.,
+                    "ctrl={ctrl}, delta={delta}"
+                );
+                assert!((app.view.document(pointer, rect, size) - anchor).length() < 1e-4);
+                assert_eq!(ctx.zoom_factor(), 1.);
+                let before = app.view.zoom;
+                zoom_frame(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        Event::PointerMoved(egui::pos2(-10., -10.)),
+                        Event::Zoom(1.5),
+                    ],
+                );
+                assert_eq!(app.view.zoom, before);
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        app.doc = parfait_core::Document::new(64, 64);
+        let ctx = egui::Context::default();
+        zoom_frame(
+            &mut app,
+            &ctx,
+            vec![Event::PointerMoved(egui::pos2(150., 160.))],
+        );
+        let before = app.view.zoom;
+        zoom_frame(&mut app, &ctx, vec![Event::Zoom(1.1)]);
+        assert!((app.view.zoom - before * 1.1).abs() < 1e-6);
+    }
     #[test]
     fn hand_drag_moves_view_without_painting_then_pen_draws() {
         let dir = tempfile::tempdir().unwrap();
