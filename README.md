@@ -43,16 +43,16 @@ Run an isolated session with `parfait --data-dir PATH`. Otherwise recovery data 
 - Local `.parfait` projects, PNG export, background autosave and startup recovery.
 - Dark workspace: tools on the left, canvas in the middle, navigator and layers on the right.
 - Compact desktop palettes: icon tool rail, brush previews and size presets, hue/SV color wheel, canvas rulers and live layer thumbnails.
-- Draggable palettes: reorder or move between side docks, detach into in-app floating windows, resize and restore your layout on restart.
+- Draggable palettes: reorder or move between side docks, dock side by side, detach into in-app palettes or independent desktop windows, resize and restore your layout on restart.
 - Six built-in brush presets, persistent local brush library, batch PNG/JPEG tip import and portable `.pbrush` preset import/export.
 - Editable pressure curve, pressure-driven size/opacity, minimum size, flow, spacing, hardness, tip angle/roundness and smoothing.
 - Application-owned title bar with window dragging, maximize/restore, minimize, resize edges and save-aware close.
 
 ## Workspace and brush settings
 
-Drag a palette's **≡ header** to move it: the actual palette follows the pointer with its current width and body height. Docked and floating palettes use the same compact header and content; floating palettes have no extra window title bar. Drop over a palette to insert above it (blue insertion line), or at the left/right app edge to dock. Press **Escape** during a move to restore its original placement.
+Drag a palette's **≡ header** to move it: the actual palette follows the pointer with its current width and body height. Docked and floating palettes use the same compact header and content; floating palettes have no extra window title bar. Drop near the left/right quarter of a docked palette to place it beside that palette in the same row; the center upper/lower half inserts a row above/below. The filled blue rectangle previews the resulting footprint. Drop at the left/right app edge to append to that dock. Press **Escape** during a move to restore its original placement.
 
-The small **− / +** button collapses or expands the body without losing its height; **×** hides the palette. Reopen it from **View → Palettes**. These controls work in both docked and floating states, and visibility/collapse state persist on restart. Floating palettes remain inside the app window. Drag the bottom grip vertically to resize a docked body; in a floating palette the grip resizes width and height. Drag a dock boundary to resize the dock. **View → Reset palette layout** restores the defaults. See the [UI system](docs/ui-system.md).
+The small **− / +** button collapses or expands the body without losing its height; **×** hides the palette. Reopen it from **View → Palettes**. These controls work in both docked and floating states, and visibility/collapse state persist on restart. Floating palettes remain inside the app window. To create an independent desktop window, right-click a palette header and choose **Open in separate window**. Drag its header to move the OS window; use **Dock on left/right** or **Float inside main window** in the same menu to return it. Closing that window hides only its palette, which can be reopened from **View → Palettes**. Native window position/size are saved separately from in-app floating position. Windows creation and close were checked; macOS/Linux native behavior still needs validation. Drag the bottom grip vertically to resize a docked body; in a floating palette or separate window the grip resizes width and height. Rows share width evenly; a dock expands to fit side-by-side panels up to its width limit, then scrolls horizontally. Drag a dock boundary to resize the dock. **View → Reset palette layout** restores the defaults. See the [UI system](docs/ui-system.md).
 
 Layout, active brush settings and the local preset library are saved to `preferences.sqlite` in the recovery directory approximately once per second while not drawing, and on normal exit. Artwork remains in its separate recovery database. Settings changed immediately before a forced termination may not yet be saved.
 
@@ -107,7 +107,7 @@ docs/                    Architecture, testing, roadmap
 
 ## Current limits
 
-The prototype starts at 1024 × 768 and uses whole-layer CPU buffers with changed-region CPU compositing and partial texture updates during strokes. Large-canvas tiled rendering is planned. Physical pen pressure/tilt and device-specific behavior still need hardware validation. Independent OS palette windows, ABR/SUT import, advanced mixing, selection, transforms, and liquify are not implemented. Linux/macOS source portability has not yet been validated on hardware. See the [feature plan](docs/feature-plan.md) for remaining editing tools and UI groups.
+The prototype starts at 1024 × 768 and uses whole-layer CPU buffers with changed-region CPU compositing and partial texture updates during strokes. Large-canvas tiled rendering is planned. Physical pen pressure/tilt and device-specific behavior still need hardware validation. Cross-window drag docking, nested split layouts, ABR/SUT import, advanced mixing, selection, transforms, and liquify are not implemented. Linux/macOS source portability has not yet been validated on hardware. See the [feature plan](docs/feature-plan.md) for remaining editing tools and UI groups.
 
 ## License
 

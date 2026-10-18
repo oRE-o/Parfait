@@ -21,7 +21,7 @@ First consolidate the [workspace UI system](ui-system.md): consistent palette sh
 
 Each feature needs observable acceptance criteria. A parsed brush file is not evidence of matching brush behavior; a successful save call is not a substitute for a recovery test.
 
-Implemented after the initial prototype: draggable in-app palettes with persisted layout, pressure curves, persistent brush presets, additional procedural tips and custom window chrome. Remaining UI and editor groups are tracked in the [feature plan](feature-plan.md).
+Implemented after the initial prototype: draggable palettes with side-by-side docking, footprint previews, independent native windows and persisted layout, pressure curves, persistent brush presets, additional procedural tips and custom window chrome. Remaining UI and editor groups are tracked in the [feature plan](feature-plan.md).
 
 ## Mobile apps (later)
 

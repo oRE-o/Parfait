@@ -273,9 +273,7 @@ impl eframe::App for Parfait {
         ui.add_enabled_ui(self.calibration_dialog.is_none(), |ui| {
             self.top_panel(ui);
             self.bottom_panel(ui);
-            if !self.hide_panels {
-                self.workspace_ui(ui);
-            }
+            self.workspace_ui(ui);
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(44)))
                 .show(ui, |ui| self.canvas(ui));

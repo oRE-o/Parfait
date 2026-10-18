@@ -4,7 +4,7 @@ This is an independent product backlog. A listed item is not implemented unless 
 
 | Group | Current behavior | Follow-up work and acceptance criteria |
 | --- | --- | --- |
-| Workspace | Reorder/move side palettes, float inside app, resize, hide and persist layout | Named workspaces, dock tabs and independent OS windows; restore across changed monitor/DPI setups without losing palettes |
+| Workspace | Stack rows or dock side by side, filled drop previews, in-app/native window hosts, resize, hide and persist layout | Named workspaces, dock tabs, nested splits and cross-window drag docking; restore across changed monitor/DPI setups without losing palettes |
 | Window chrome | Custom title bar and native viewport controls | Verify OS move/resize/maximize behavior on Windows, macOS, X11 and Wayland |
 | Brush controls | Six presets; size, opacity, flow, spacing, hardness, aspect, angle, smoothing, pressure graph | Texture/scatter, tilt, stroke taper, dual tips and wet mixing; deterministic fixture strokes and latency budgets |
 | Materials | Persistent image tips and `.pbrush` settings | Tags, thumbnails, folders and more formats; report unsupported parameters instead of silently discarding them |

@@ -30,3 +30,5 @@ Device calibration tests validate monotonic interpolation, rejection of sparse/c
 Dialog regression tests click the actual cancel button at 960 × 640, check that it is on screen, and send Escape with a modified draft to verify dismissal without applying changes.
 
 Workspace checks assert live detachment before pointer release, preserved width/body height, shared collapse/hide controls in both hosts, persisted hidden/collapsed state, legacy preference compatibility and Escape restoring placement/order/geometry.
+
+A synthetic right-edge drag test compares the preview footprint with the actual side-by-side slot after drop. Additional checks cover row identity when moving a group owner and native placement/geometry preference round trips. Windows runtime QA observed a distinct palette OS window and closed it via Alt+F4 while the root window remained open and the palette visibility persisted as false. Native cross-monitor/DPI, resize and all target operating systems still require broader manual checks.
