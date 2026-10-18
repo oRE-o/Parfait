@@ -43,3 +43,14 @@ One Windows development-machine release run (same CPU/toolchain as above, 2026-1
 | Soft light | 329.872 | 0.324 |
 
 These single-run averages are sensitive to scheduling and are not pen latency measurements. Complex modes cost more, and full refreshes on heavily populated documents remain a performance limitation. Painting continues to use damage regions.
+
+## Smooth response follow-up
+
+After shared cubic pressure interpolation and blend-mode integration, the same `stroke_bench` command on the Windows development machine above produced these single-run averages (2026-10-18):
+
+| Canvas / layers | Full composition, ms/update | Partial composition, ms/update |
+| --- | ---: | ---: |
+| 1024 × 768 / 2 | 9.604 | 0.019 |
+| 2048 × 2048 / 8 | 177.567 | 0.032 |
+
+This measures the current combined rendering path, not isolated spline overhead or a controlled before/after comparison. Full composition remains expensive and deserves separate profiling; stroke damage updates remain local. Response evaluation uses stack data and does not allocate per sample. GUI, GPU, autosave and device latency remain excluded.

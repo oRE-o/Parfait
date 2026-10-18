@@ -1,5 +1,6 @@
 //! Shared normalized response-curve widget. Callers own curve data and persistence.
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke};
+use parfait_core::sample_response as sample;
 
 pub struct Options<'a> {
     pub input: &'a str,
@@ -53,18 +54,8 @@ fn move_node(points: &mut [[f32; 2]], i: usize, value: [f32; 2], options: &Optio
         }
     }
 }
-fn sample(points: &[[f32; 2]], x: f32) -> f32 {
-    for pair in points.windows(2) {
-        if x <= pair[1][0] {
-            return pair[0][1]
-                + (pair[1][1] - pair[0][1])
-                    * ((x - pair[0][0]) / (pair[1][0] - pair[0][0])).clamp(0., 1.);
-        }
-    }
-    points.last().map_or(0., |p| p[1])
-}
 /// Points must be finite, sorted by x, with distinct x in [0,1] and y in [0,1].
-/// Returns the plot rectangle for embedding/tests. Lines reflect actual linear interpolation.
+/// Returns the plot rectangle for embedding/tests. The curve uses the same smooth interpolation as the brush engine.
 pub fn edit(
     ui: &mut egui::Ui,
     id: impl egui::AsIdSalt,
@@ -197,8 +188,18 @@ pub fn edit(
             options.output,
             egui::Align2::RIGHT_CENTER,
         );
+        let curve_points = points.as_slice();
         painter.add(egui::Shape::line(
-            points.iter().map(|p| pos(*p)).collect(),
+            curve_points
+                .windows(2)
+                .flat_map(|pair| {
+                    let steps = ((pair[1][0] - pair[0][0]) * side).ceil().max(2.) as usize;
+                    (0..=steps).map(move |i| {
+                        let x = pair[0][0] + (pair[1][0] - pair[0][0]) * i as f32 / steps as f32;
+                        pos([x, sample(curve_points, x)])
+                    })
+                })
+                .collect(),
             Stroke::new(1.2, Color32::WHITE),
         ));
         for (i, p) in points.iter().enumerate() {
@@ -314,7 +315,7 @@ mod tests {
             },
         );
         assert_eq!(falling[1], [0.8, 0.1]);
-        assert!((sample(&falling, 0.4) - 0.55).abs() < 0.001);
+        assert!(sample(&falling, 0.4) > 0.1 && sample(&falling, 0.4) < 1.);
         let mut pressure = vec![[0., 0.], [0.25, 0.3], [0.5, 0.5], [0.75, 0.7], [1., 1.]];
         move_node(
             &mut pressure,

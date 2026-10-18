@@ -28,17 +28,15 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui:
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
     });
-    if selected || response.hovered() {
-        ui.painter().rect_filled(
-            rect,
-            0.,
-            if selected {
-                ui.visuals().selection.bg_fill
-            } else {
-                Color32::from_gray(83)
-            },
-        );
-    }
+    let visuals = ui.style().interact_selectable(&response, selected);
+    ui.painter()
+        .rect_filled(rect.shrink(1.), 0., visuals.weak_bg_fill);
+    ui.painter().rect_stroke(
+        rect.shrink(1.),
+        0.,
+        visuals.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
     let glyph = match kind {
         Icon::Pen => "\u{f5ad}",
         Icon::Eraser => "\u{f12d}",

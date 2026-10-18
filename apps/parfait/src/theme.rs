@@ -20,8 +20,17 @@ pub fn apply(ctx: &egui::Context) {
     ] {
         widget.corner_radius = egui::CornerRadius::ZERO;
     }
-    style.visuals.widgets.inactive.bg_fill = Color32::from_gray(72);
-    style.visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(65);
+    style.visuals.button_frame = true;
+    style.visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1., Color32::from_gray(133));
+    style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1., Color32::from_gray(183));
+    style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1., ACCENT);
+    style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1., ACCENT);
+    style.visuals.widgets.active.bg_fill = Color32::from_gray(58);
+    style.visuals.widgets.active.weak_bg_fill = Color32::from_gray(58);
+    style.visuals.widgets.open.bg_fill = Color32::from_rgb(91, 105, 126);
+    style.visuals.widgets.open.weak_bg_fill = Color32::from_rgb(91, 105, 126);
+    style.visuals.widgets.inactive.bg_fill = Color32::from_gray(87);
+    style.visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(87);
     style.visuals.widgets.hovered.bg_fill = Color32::from_gray(88);
     style.visuals.widgets.hovered.weak_bg_fill = Color32::from_gray(82);
     style.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1., Color32::from_gray(46));

@@ -11,3 +11,6 @@ pub use pressure::PressureCalibration;
 
 mod blend;
 pub use blend::BlendMode;
+
+mod response_curve;
+pub use response_curve::sample_response;

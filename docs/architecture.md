@@ -60,7 +60,7 @@ OS integration belongs behind application-level interfaces for file access, data
 
 Mobile suspension may skip normal exit callbacks. Recovery must rely on incremental committed saves, with lifecycle notifications used to request an additional save when possible. Touch and stylus input need normalized samples and gesture routing rather than simulated desktop shortcuts. See [platforms](platforms.md) for planned work and validation gates.
 
-`pressure.rs` provides a validated piecewise-linear device calibration independent of brush presets. `calibration.rs` owns a draft editor and bounded test-pad data (4096 marks/samples). Only Apply updates the global curve and persists preferences. A missing calibration field in older JSON defaults to identity; artwork and brush preset schemas are unchanged. Device calibration is applied before the brush's existing five-node response. Test-pad strokes are separate from artwork and undo history.
+`pressure.rs` provides a validated smooth device calibration independent of brush presets. `calibration.rs` owns a draft editor and bounded test-pad data (4096 marks/samples). Only Apply updates the global curve and persists preferences. A missing calibration field in older JSON defaults to identity; artwork and brush preset schemas are unchanged. Device calibration is applied before the brush's existing five-node response. Test-pad strokes are separate from artwork and undo history.
 
 Dock rows group palettes horizontally and retain vertical row order. `dock_layout` is shared by rendering and drop preview; simulation occurs on a cloned workspace before committing. Header context menus switch a palette into an immediate native viewport or back to an in-app host. Native close requests hide the palette, and an optional native rectangle stores screen position and expanded size independently from its in-app rectangle. Older preference records default to separate rows and no native rectangle.
 
@@ -69,3 +69,5 @@ Dock rows group palettes horizontally and retain vertical row order. `dock_layou
 ## Layer blending
 
 `parfait-core/src/blend.rs` defines 14 separable RGB blend modes and alpha-aware source-over composition. Blend functions operate on stored sRGB values. Transparent backdrop areas retain source color; source alpha is multiplied by layer opacity. Normal keeps the existing fast path. Full and damaged-region rendering share this implementation, also used by PNG export. `Layer::blend_mode` is included in snapshots, duplication and history; changing it increments the document revision for full texture invalidation.
+
+`response_curve.rs` evaluates shape-preserving cubic Hermite responses without heap allocation. It is shared by device calibration, brush pressure and graph rendering/markers so the displayed curve matches drawing behavior. Saved node coordinates remain compatible; non-linear responses now interpolate smoothly rather than linearly.

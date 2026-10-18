@@ -66,10 +66,8 @@ impl Brush {
         } else {
             1.
         };
-        let x = p * 4.;
-        let i = (x as usize).min(3);
-        self.pressure_curve[i]
-            + (self.pressure_curve[i + 1] - self.pressure_curve[i]) * (x - i as f32)
+        let points = std::array::from_fn::<_, 5, _>(|i| [i as f32 / 4., self.pressure_curve[i]]);
+        crate::sample_response(&points, p)
     }
     pub fn validate(&self) -> bool {
         let bounded = |v: f32, a, b| v.is_finite() && (a..=b).contains(&v);

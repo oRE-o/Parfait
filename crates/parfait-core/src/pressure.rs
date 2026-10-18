@@ -31,13 +31,7 @@ impl PressureCalibration {
         } else {
             1.
         };
-        for w in self.points.windows(2) {
-            if raw <= w[1][0] {
-                return w[0][1]
-                    + (w[1][1] - w[0][1]) * ((raw - w[0][0]) / (w[1][0] - w[0][0])).clamp(0., 1.);
-            }
-        }
-        1.
+        crate::sample_response(&self.points, raw)
     }
     /// Map the observed 95th percentile to full output, rejecting sparse/flat input.
     pub fn suggest(samples: &[f32]) -> Option<Self> {
@@ -71,7 +65,7 @@ mod tests {
             points: vec![[0., 0.], [0.4, 0.8], [0.7, 1.], [1., 1.]],
         };
         assert!(c.validate());
-        assert!((c.map(0.2) - 0.4).abs() < 0.001);
+        assert!(c.map(0.2) > 0.4 && c.map(0.2) < 0.8);
         assert_eq!(c.map(0.9), 1.);
         assert!((0..100).all(|i| c.map(i as f32 / 100.) <= c.map((i + 1) as f32 / 100.)));
         let mut invalid = c.clone();

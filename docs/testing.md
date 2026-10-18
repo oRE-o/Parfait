@@ -36,3 +36,5 @@ A synthetic right-edge drag test compares the preview footprint with the actual 
 Shared curve-editor tests cover declining responses, pressure monotonicity, fixed-x/endpoints and independent selection/edit/delete behavior for two adjacent graphs. Calibration interaction tests exercise the same widget, including fast point dragging.
 
 Blend tests cover known channel values, transparent/partial alpha, all-mode partial/full equivalence, undo/redo, canvas texture invalidation, v1 migration, mixed-generation fallback, saved-mode roundtrips and mode preservation after process termination.
+
+Smooth-response tests verify exact control points, identity, continuous tangents, monotonicity and bounded output across rising/falling/flat and tightly spaced segments, plus equality between brush and calibration evaluation.
