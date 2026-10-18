@@ -52,108 +52,18 @@ impl CalibrationDialog {
         }
     }
     fn graph(&mut self, ui: &mut egui::Ui) -> egui::Rect {
-        ui.label("Output ↑      Input pressure →");
-        let (rect, response) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), 210.),
-            Sense::click_and_drag(),
-        );
-        let r = rect.shrink(10.);
-        let position =
-            |v: [f32; 2]| egui::pos2(r.left() + v[0] * r.width(), r.bottom() - v[1] * r.height());
-        if ((response.is_pointer_button_down_on() && ui.input(|i| i.pointer.any_pressed()))
-            || response.clicked())
-            && let Some(p) = response.interact_pointer_pos()
-        {
-            self.selected = self
-                .draft
-                .points
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| {
-                    position(**a)
-                        .distance_sq(p)
-                        .total_cmp(&position(**b).distance_sq(p))
-                })
-                .and_then(|(i, v)| (position(*v).distance(p) < 14.).then_some(i));
-            if self.selected.is_none() && response.clicked() && self.draft.points.len() < 16 {
-                let x = ((p.x - r.left()) / r.width()).clamp(0., 1.);
-                let i = self.draft.points.partition_point(|v| v[0] < x);
-                if i > 0
-                    && i < self.draft.points.len()
-                    && x - self.draft.points[i - 1][0] > 0.005
-                    && self.draft.points[i][0] - x > 0.005
-                {
-                    let y = ((r.bottom() - p.y) / r.height())
-                        .clamp(self.draft.points[i - 1][1], self.draft.points[i][1]);
-                    self.draft.points.insert(i, [x, y]);
-                    self.selected = Some(i);
-                }
-            }
-        }
-        if response.dragged()
-            && let (Some(i), Some(p)) = (self.selected, response.interact_pointer_pos())
-            && i > 0
-            && i + 1 < self.draft.points.len()
-        {
-            let left = self.draft.points[i - 1][0] + 0.002;
-            let right = self.draft.points[i + 1][0] - 0.002;
-            let x = if left <= right {
-                ((p.x - r.left()) / r.width()).clamp(left, right)
-            } else {
-                self.draft.points[i][0]
-            };
-            self.draft.points[i] = [
-                x,
-                ((r.bottom() - p.y) / r.height())
-                    .clamp(self.draft.points[i - 1][1], self.draft.points[i + 1][1]),
-            ];
-        }
-        let painter = ui.painter();
-        painter.rect_filled(r, 0., Color32::from_gray(35));
-        for i in 0..=4 {
-            let t = i as f32 / 4.;
-            let ink = Stroke::new(1., Color32::from_gray(70));
-            painter.line_segment([position([t, 0.]), position([t, 1.])], ink);
-            painter.line_segment([position([0., t]), position([1., t])], ink);
-        }
-        painter.line_segment(
-            [position([0., 0.]), position([1., 1.])],
-            Stroke::new(1., Color32::GRAY),
-        );
-        painter.add(egui::Shape::line(
-            self.draft.points.iter().map(|p| position(*p)).collect(),
-            Stroke::new(2., Color32::LIGHT_BLUE),
-        ));
-        for (i, p) in self.draft.points.iter().enumerate() {
-            painter.circle_filled(
-                position(*p),
-                4.,
-                if self.selected == Some(i) {
-                    Color32::YELLOW
-                } else {
-                    Color32::WHITE
-                },
-            );
-        }
-        painter.circle_filled(
-            position([self.raw, self.draft.map(self.raw)]),
-            5.,
-            Color32::LIGHT_GREEN,
-        );
-        ui.small(
-            "Click to add (max 16). Drag to move. Endpoints stay fixed; output stays monotonic.",
-        );
-        let removable = self
-            .selected
-            .is_some_and(|i| i > 0 && i + 1 < self.draft.points.len());
-        if ui
-            .add_enabled(removable, egui::Button::new("Delete selected point"))
-            .clicked()
-            && let Some(i) = self.selected.take()
-        {
-            self.draft.points.remove(i);
-        }
-        r
+        crate::curve_editor::edit(
+            ui,
+            "device_pressure",
+            &mut self.draft.points,
+            &mut self.selected,
+            crate::curve_editor::Options {
+                input: "Pressure",
+                side: 210.,
+                marker: Some(self.raw),
+                ..Default::default()
+            },
+        )
     }
     fn pad(&mut self, ui: &mut egui::Ui) {
         ui.label("Test strokes — preview updates when you edit the curve");

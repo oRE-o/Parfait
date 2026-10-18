@@ -21,3 +21,11 @@ Settings dialogs have a single title and visible dismissal actions outside scrol
 ## Next UI work
 
 Prioritize consistent keyboard focus, docking-tab groups, arbitrary nested split layouts, accessible names for all header controls, touch target adaptation and cross-window drag docking before expanding the tool catalog. These remain planned. Current docks support rows of equal-width cells, not arbitrary nested split trees. Independent windows use menu commands to dock back; dragging across OS window boundaries is not implemented. Multi-monitor/DPI and macOS/Linux behavior still need native validation. Keep regression checks for drag continuity, docking order, cancellation, resizing, collapse/hide, reopening and preference compatibility.
+
+## Shared response-curve editor
+
+`apps/parfait/src/curve_editor.rs` is the single UI module for response graphs. It provides a square gray plot, quarter-step grid, input/output labels, percent endpoints, a thin white response line and small violet square control points. It handles point hit testing, selection, dragging, optional insertion/deletion, focused Delete/Backspace and an optional live input marker. Each instance has its own stable UI ID and caller-owned selection.
+
+Callers provide normalized points and constraints: fixed x coordinates versus editable points, fixed endpoints, nondecreasing output versus unrestricted output, maximum point count, labels and plot size. This permits decreasing responses for future tilt/speed settings without weakening pressure constraints. Invalid input is reported without editing it. The widget never owns persistence, device input or brush behavior.
+
+Both device calibration and brush pressure now use this widget. Device calibration has up to 16 movable points with fixed endpoints; brush pressure keeps its existing five x positions and movable output values. Stored formats and drawing interpolation are unchanged. Lines are piecewise linear, matching the current engine; smooth interpolation and actual tilt/speed dynamics are separate future core work, not merely a visual spline drawn over different behavior.

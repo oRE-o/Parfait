@@ -299,7 +299,11 @@ impl Parfait {
             } else {
                 "No pressure samples yet (mouse = 100%)".into()
             });
-            pressure_graph(ui, &mut self.brush.pressure_curve, self.pressure);
+            pressure_graph(
+                ui,
+                &mut self.brush.pressure_curve,
+                self.calibration.map(self.pressure),
+            );
             ui.horizontal(|ui| {
                 if ui.small_button("Linear").clicked() {
                     self.brush.pressure_curve = [0., 0.25, 0.5, 0.75, 1.];
@@ -318,66 +322,30 @@ impl Parfait {
     }
 }
 fn pressure_graph(ui: &mut egui::Ui, curve: &mut [f32; 5], pressure: f32) {
-    let (r, response) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width().min(300.), 130.),
-        egui::Sense::click_and_drag(),
-    );
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Pressure response curve")
-    });
-    let r = r.shrink(7.);
-    let node_id = response.id.with("node");
-    if (response.drag_started() || response.clicked())
-        && let Some(p) = response.interact_pointer_pos()
-    {
-        ui.data_mut(|d| {
-            d.insert_temp(
-                node_id,
-                (((p.x - r.left()) / r.width() * 4.).round() as usize).min(4),
-            )
-        });
-    }
-    if (response.dragged() || response.clicked())
-        && let Some(p) = response.interact_pointer_pos()
-    {
-        let i = ui.data(|d| d.get_temp::<usize>(node_id)).unwrap_or(2);
-        curve[i] = ((r.bottom() - p.y) / r.height()).clamp(
-            if i == 0 { 0. } else { curve[i - 1] },
-            if i == 4 { 1. } else { curve[i + 1] },
-        );
-    }
-    let p = ui.painter();
-    p.rect_filled(r, 0., egui::Color32::from_gray(35));
-    for i in 0..=4 {
-        let t = i as f32 / 4.;
-        p.line_segment(
-            [
-                r.min + egui::vec2(t * r.width(), 0.),
-                r.left_bottom() + egui::vec2(t * r.width(), 0.),
-            ],
-            egui::Stroke::new(1., egui::Color32::from_gray(58)),
-        );
-    }
-    let points: Vec<_> = curve
+    let id = ui.id().with("brush_pressure_selection");
+    let mut selected = ui.data(|d| d.get_temp::<Option<usize>>(id)).flatten();
+    let mut points: Vec<_> = curve
         .iter()
         .enumerate()
-        .map(|(i, v)| {
-            egui::pos2(
-                r.left() + i as f32 / 4. * r.width(),
-                r.bottom() - v * r.height(),
-            )
-        })
+        .map(|(i, y)| [i as f32 / 4., *y])
         .collect();
-    p.add(egui::Shape::line(
-        points.clone(),
-        egui::Stroke::new(2., egui::Color32::LIGHT_BLUE),
-    ));
-    for point in points {
-        p.circle_filled(point, 4., egui::Color32::WHITE);
-    }
-    let x = r.left() + pressure.clamp(0., 1.) * r.width();
-    p.line_segment(
-        [egui::pos2(x, r.top()), egui::pos2(x, r.bottom())],
-        egui::Stroke::new(1., egui::Color32::LIGHT_GREEN),
+    crate::curve_editor::edit(
+        ui,
+        "brush_pressure",
+        &mut points,
+        &mut selected,
+        crate::curve_editor::Options {
+            input: "Pressure",
+            side: 160.,
+            fixed_x: true,
+            fixed_endpoints: false,
+            max_points: 5,
+            marker: Some(pressure),
+            ..Default::default()
+        },
     );
+    for (value, p) in curve.iter_mut().zip(points) {
+        *value = p[1];
+    }
+    ui.data_mut(|d| d.insert_temp(id, selected));
 }

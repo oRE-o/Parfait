@@ -4,6 +4,7 @@ mod brushes;
 mod calibration;
 mod canvas;
 mod chrome;
+mod curve_editor;
 mod diagnostics;
 mod panels;
 mod preferences;
