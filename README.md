@@ -50,7 +50,9 @@ Run an isolated session with `parfait --data-dir PATH`. Otherwise recovery data 
 
 ## Workspace and brush settings
 
-Drag a palette's **≡ header** onto another palette to insert it above that palette. Drop over the canvas to detach it, or at the left/right app edge to dock it. Floating palettes stay inside the app window; use their inner ≡ header to dock again. Drag the side dock boundary for width, the bottom grip for palette height, or floating window edges for size. **View → Palettes** toggles visibility; **View → Reset palette layout** restores the default arrangement.
+Drag a palette's **≡ header** to move it: the actual palette follows the pointer with its current width and body height. Docked and floating palettes use the same compact header and content; floating palettes have no extra window title bar. Drop over a palette to insert above it (blue insertion line), or at the left/right app edge to dock. Press **Escape** during a move to restore its original placement.
+
+The small **− / +** button collapses or expands the body without losing its height; **×** hides the palette. Reopen it from **View → Palettes**. These controls work in both docked and floating states, and visibility/collapse state persist on restart. Floating palettes remain inside the app window. Drag the bottom grip vertically to resize a docked body; in a floating palette the grip resizes width and height. Drag a dock boundary to resize the dock. **View → Reset palette layout** restores the defaults. See the [UI system](docs/ui-system.md).
 
 Layout, active brush settings and the local preset library are saved to `preferences.sqlite` in the recovery directory approximately once per second while not drawing, and on normal exit. Artwork remains in its separate recovery database. Settings changed immediately before a forced termination may not yet be saved.
 

@@ -6,6 +6,8 @@ Basic drawing, layers, PNG tips, local projects and verified process-crash recov
 
 ## Next
 
+First consolidate the [workspace UI system](ui-system.md): consistent palette shells, docking behavior, dismissal and layout persistence before expanding the tool catalog.
+
 - Establish Windows, macOS and Linux build/test coverage and native packaging; validate each on real hardware before claiming support.
 - Configurable canvas dimensions and keyboard bindings.
 - Typed edit commands and grouped property edits.

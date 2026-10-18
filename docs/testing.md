@@ -28,3 +28,5 @@ Rendering regressions compare damaged-region patches with full composition acros
 Device calibration tests validate monotonic interpolation, rejection of sparse/constant samples, bounded collection, Cancel preserving state, Apply surviving restart and old preferences defaulting to identity. On a real tablet, open the pressure calibration window, draw light/firm strokes, suggest a curve, add/drag/delete points, test it, and verify Apply across restart. Confirm that mouse-only drawing does not produce a suggestion and Cancel/Escape/window close leave artwork and the previous curve unchanged. The test pad previews device calibration alone; individual brush dynamics apply afterward on the canvas.
 
 Dialog regression tests click the actual cancel button at 960 × 640, check that it is on screen, and send Escape with a modified draft to verify dismissal without applying changes.
+
+Workspace checks assert live detachment before pointer release, preserved width/body height, shared collapse/hide controls in both hosts, persisted hidden/collapsed state, legacy preference compatibility and Escape restoring placement/order/geometry.
