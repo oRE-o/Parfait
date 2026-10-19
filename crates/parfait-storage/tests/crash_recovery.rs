@@ -31,6 +31,7 @@ fn crash(mode: &str, expected_layers: usize) {
     let loaded = store.load().unwrap().unwrap();
     assert!(!loaded.fell_back);
     assert_eq!(loaded.document.layers.len(), expected_layers);
+    assert!(loaded.document.layers[1].reference && loaded.document.layers[1].draft);
     let mask = loaded.document.layers[1].mask.as_ref().unwrap();
     assert!(mask.enabled);
     match (&mask.coverage, mode) {

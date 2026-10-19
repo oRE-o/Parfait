@@ -197,7 +197,7 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     }
     assert_eq!(app.doc, before);
     assert_eq!(app.history.rows().count(), 0);
-    assert_eq!(Command::ALL.len(), 78);
+    assert_eq!(Command::ALL.len(), 81);
 }
 
 #[test]
@@ -384,6 +384,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
                                 Command::LayerVisibility
                                     | Command::LayerLock
                                     | Command::LayerAlphaLock
+                                    | Command::LayerReference
+                                    | Command::LayerDraft
                                     | Command::LayerClipping
                                     | Command::LayerMaskEnabled
                                     | Command::ShowMaskArea
@@ -429,8 +431,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (69, 325, 41));
-    assert_eq!(Command::ALL.len(), 78);
+    assert_eq!(counts, (72, 322, 41));
+    assert_eq!(Command::ALL.len(), 81);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",
         counts.0, counts.1, counts.2

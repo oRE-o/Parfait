@@ -7,12 +7,12 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     let pixels = u64::from(document.width)
         .checked_mul(u64::from(document.height))?
         .checked_mul(4)?;
-    let mut bytes = (super::SNAPSHOT_V5.len() as u64)
+    let mut bytes = (super::SNAPSHOT_V6.len() as u64)
         .checked_add(48)?
         .checked_add(document.name.len() as u64)?;
     for layer in &document.layers {
         bytes = bytes
-            .checked_add(37)?
+            .checked_add(39)?
             .checked_add(layer.name.len() as u64)?
             .checked_add(pixels)?;
         if let Some(mask) = &layer.mask {
@@ -45,7 +45,7 @@ pub fn layer_growth_count_error(
             .logical_pixel_bytes()
             .checked_add(pixels.checked_mul(additional as u64)?)?;
         let snapshot = snapshot_size(document)?
-            .checked_add(37u64.checked_mul(additional as u64)?)?
+            .checked_add(39u64.checked_mul(additional as u64)?)?
             .checked_add(name_bytes as u64)?
             .checked_add(pixels.checked_mul(additional as u64)?)?;
         Some(logical <= PIXEL_LIMIT && snapshot <= SNAPSHOT_LIMIT)
@@ -115,7 +115,7 @@ pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'
             logical =
                 logical.checked_add(pixels.checked_mul(4 + u64::from(layer.mask.is_some()))?)?;
             snapshot = snapshot
-                .checked_add(37)?
+                .checked_add(39)?
                 .checked_add(layer.name.len() as u64)?
                 .checked_add(5)?
                 .checked_add(pixels.checked_mul(4)?)?;
@@ -172,7 +172,7 @@ mod tests {
                         .with_fixint_encoding()
                         .serialized_size(&document)
                         .unwrap()
-                        + super::super::SNAPSHOT_V5.len() as u64
+                        + super::super::SNAPSHOT_V6.len() as u64
                 );
                 document.add_layer();
             }
@@ -201,7 +201,7 @@ mod tests {
                         .with_fixint_encoding()
                         .serialized_size(&document)
                         .unwrap()
-                        + super::super::SNAPSHOT_V5.len() as u64
+                        + super::super::SNAPSHOT_V6.len() as u64
                 );
                 assert!(layer_duplication_error(&document, 2).is_none());
             }

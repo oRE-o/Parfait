@@ -195,6 +195,8 @@ impl Document {
                 target.opacity = 1.;
                 target.blend_mode = BlendMode::Normal;
                 target.mask = None;
+                target.reference = false;
+                target.draft = false;
                 self.layers.drain(bottom + 1..=top);
                 self.active = bottom;
             }
@@ -215,6 +217,8 @@ impl Document {
                     blend_mode: BlendMode::Normal,
                     pixels: Arc::new(pixels),
                     mask: None,
+                    reference: false,
+                    draft: false,
                 };
                 if action != LayerCombine::CopyVisible {
                     let mut index = 0;

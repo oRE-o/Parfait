@@ -408,6 +408,16 @@ impl Parfait {
                 ui.horizontal_wrapped(|ui| {
                     for (icon, command, selected) in [
                         (
+                            Icon::Reference,
+                            Command::LayerReference,
+                            self.doc.layers[active].reference,
+                        ),
+                        (
+                            Icon::Pencil,
+                            Command::LayerDraft,
+                            self.doc.layers[active].draft,
+                        ),
+                        (
                             Icon::Clipping,
                             Command::LayerClipping,
                             self.doc.layers[active].clipped,

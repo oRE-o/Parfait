@@ -262,6 +262,12 @@ impl Keymap {
                 if command == Command::LayerClipping {
                     tooltip.push_str("\n아래 기준 레이어의 불투명한 영역에만 표시합니다.\n영역 밖의 원본 픽셀은 지우지 않습니다.");
                 }
+                if command == Command::LayerReference {
+                    tooltip.push_str("\n선택한 레이어를 참조 대상으로 표시합니다.\n참조 채우기와 경계 넘침 방지는 아직 지원하지 않습니다.");
+                }
+                if command == Command::LayerDraft {
+                    tooltip.push_str("\n캔버스에는 보이고 PNG 출력에서는 제외됩니다.\n작업 파일과 복구 기록에는 그대로 저장합니다.");
+                }
                 if command == Command::ShowMaskArea {
                     tooltip.push_str("\n활성 레이어의 숨긴 마스크 범위를 보라색으로 표시합니다.\n비활성 마스크도 진단하며, 저장·내보내기에는 포함하지 않습니다.\n다른 레이어와 재시작 시 표시 범위가 달라질 수 있는 세션 표시입니다.");
                 }

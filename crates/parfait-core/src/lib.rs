@@ -4,6 +4,7 @@ mod document;
 mod history;
 mod layer_mask;
 mod layer_ops;
+mod layer_settings;
 mod raster_brush;
 mod raster_conversion;
 mod smudge;

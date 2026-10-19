@@ -195,6 +195,8 @@ impl Parfait {
             Command::LayerLock => self.doc.layers[self.doc.active].locked,
             Command::LayerAlphaLock => self.doc.layers[self.doc.active].alpha_locked,
             Command::LayerClipping => self.doc.layers[self.doc.active].clipped,
+            Command::LayerReference => self.doc.layers[self.doc.active].reference,
+            Command::LayerDraft => self.doc.layers[self.doc.active].draft,
             Command::LayerMaskEnabled => self.doc.layers[self.doc.active]
                 .mask
                 .as_ref()
@@ -250,6 +252,9 @@ fn menu_label(command: Command) -> &'static str {
         Command::LayerAlphaLock => "투명 픽셀 잠금",
         Command::LayerClipping => "아래 레이어에 클리핑",
         Command::RenameLayer => "레이어 이름 변경…",
+        Command::LayerReference => "참조 레이어로 설정",
+        Command::LayerDraft => "밑그림 레이어로 설정",
+        Command::LayerDetails => "레이어 상세 설정…",
         Command::MoveActiveLayerUp => "앞으로",
         Command::MoveActiveLayerDown => "뒤로",
         Command::MoveActiveLayerToTop => "맨 위로 이동",

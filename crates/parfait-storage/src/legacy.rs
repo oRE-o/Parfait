@@ -40,6 +40,8 @@ impl From<LegacyDocument> for Document {
                     alpha_locked: false,
                     clipped: false,
                     mask: None,
+                    reference: false,
+                    draft: false,
                     opacity: l.opacity,
                     pixels: l.pixels,
                     blend_mode: BlendMode::Normal,

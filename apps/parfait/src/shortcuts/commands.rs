@@ -84,6 +84,9 @@ pub enum Command {
     ShowMaskArea,
     ConvertToDrawingColor,
     BrightnessToOpacity,
+    LayerReference,
+    LayerDraft,
+    LayerDetails,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,6 +206,9 @@ impl Command {
         Self::ShowMaskArea,
         Self::ConvertToDrawingColor,
         Self::BrightnessToOpacity,
+        Self::LayerReference,
+        Self::LayerDraft,
+        Self::LayerDetails,
     ];
 
     pub fn label(self) -> &'static str {
@@ -285,6 +291,9 @@ impl Command {
             Self::ShowMaskArea => "Show mask area",
             Self::ConvertToDrawingColor => "Convert to drawing color",
             Self::BrightnessToOpacity => "Convert brightness to opacity",
+            Self::LayerReference => "Set as reference layer",
+            Self::LayerDraft => "Set as draft layer",
+            Self::LayerDetails => "Layer details…",
         }
     }
 
@@ -331,6 +340,7 @@ impl Command {
             | Self::LayerMaskEnabled
             | Self::ClearLayerMask
             | Self::ShowMaskArea => Category::Layer,
+            Self::LayerReference | Self::LayerDraft | Self::LayerDetails => Category::Layer,
             Self::HidePalettes
             | Self::ResetPaletteLayout
             | Self::PaletteBrushes
@@ -470,7 +480,10 @@ impl Parfait {
             | Command::LayerVisibility
             | Command::LayerLock
             | Command::LayerAlphaLock
+            | Command::LayerReference
+            | Command::LayerDraft
             | Command::LayerClipping => self.execute_selected_layer_command(command),
+            Command::LayerDetails => self.open_layer_details(),
             Command::RenameLayer
             | Command::MoveActiveLayerUp
             | Command::MoveActiveLayerDown

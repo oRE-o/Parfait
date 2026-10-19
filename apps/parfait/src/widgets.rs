@@ -40,6 +40,7 @@ pub enum Icon {
     Merge,
     AlphaLock,
     Clipping,
+    Reference,
 }
 impl Icon {
     pub fn glyph(self) -> &'static str {
@@ -77,7 +78,7 @@ impl Icon {
             Icon::Material => "\u{f03e}",
             Icon::Settings => "\u{f0ad}",
             Icon::Blend => "\u{f043}",
-            Icon::Transfer | Icon::Merge | Icon::AlphaLock | Icon::Clipping => "",
+            Icon::Transfer | Icon::Merge | Icon::AlphaLock | Icon::Clipping | Icon::Reference => "",
         }
     }
 }
@@ -161,6 +162,31 @@ pub(crate) fn paint_flat_icon(ui: &egui::Ui, rect: Rect, kind: Icon, selected: b
     } else {
         Color32::from_gray(196)
     };
+    if matches!(kind, Icon::Reference) {
+        let center = rect.center();
+        let stroke = Stroke::new(1.3, color);
+        for (start, end) in [
+            ((-4., 7.), (-2., -2.)),
+            ((-2., -2.), (2., -2.)),
+            ((2., -2.), (4., 7.)),
+            ((-6., 7.), (6., 7.)),
+            ((-8., -4.), (-5., -4.)),
+            ((5., -4.), (8., -4.)),
+            ((-7., -8.), (-4., -6.)),
+            ((4., -6.), (7., -8.)),
+        ] {
+            ui.painter().line_segment(
+                [
+                    center + egui::vec2(start.0, start.1),
+                    center + egui::vec2(end.0, end.1),
+                ],
+                stroke,
+            );
+        }
+        ui.painter()
+            .circle_stroke(center - egui::vec2(0., 4.), 2., stroke);
+        return;
+    }
     if matches!(kind, Icon::Clipping) {
         let center = rect.center();
         let stroke = Stroke::new(1.4, color);

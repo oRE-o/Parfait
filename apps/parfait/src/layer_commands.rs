@@ -178,6 +178,8 @@ impl Parfait {
                 | Command::LayerVisibility
                 | Command::LayerLock
                 | Command::LayerAlphaLock
+                | Command::LayerReference
+                | Command::LayerDraft
                 | Command::LayerClipping
         ) {
             return;
@@ -216,6 +218,10 @@ impl Parfait {
             Command::LayerClipping => {
                 document.layers[layer].clipped = !document.layers[layer].clipped
             }
+            Command::LayerReference => {
+                document.layers[layer].reference = !document.layers[layer].reference
+            }
+            Command::LayerDraft => document.layers[layer].draft = !document.layers[layer].draft,
             _ => unreachable!(),
         });
         if self.doc.active != active_before && self.doc.revision == revision {

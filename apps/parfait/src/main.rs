@@ -13,6 +13,7 @@ mod display;
 mod editing;
 mod history_palette;
 mod layer_commands;
+mod layer_details;
 mod layer_mask;
 mod layer_organize;
 mod layers;

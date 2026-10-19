@@ -19,6 +19,8 @@ fn main() -> anyhow::Result<()> {
         },
     );
     doc.layers[1].blend_mode = parfait_core::BlendMode::Multiply;
+    doc.layers[1].reference = true;
+    doc.layers[1].draft = true;
     assert!(doc.create_layer_mask(1, 128));
     store.save(&doc)?;
     if args[3] == "during" {

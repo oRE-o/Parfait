@@ -1,5 +1,11 @@
 # Stroke performance
 
+## Layer Roles And Details
+
+Reference/draft roles add two persisted booleans per layer, at most 128 snapshot bytes across 64 layers. Metadata, History, duplicate and saved-state comparisons share existing pixel/mask buffers. The modal retains one shallow layer draft while editing is blocked and allocates no canvas-sized preview. PNG export bypasses role processing when there is no visible draft; otherwise it shallow-clones document metadata, hides drafts in that copy and reuses the compositor. It does not remove structural clipping bases or copy source pixel arrays. The normal RGBA output allocation and full export composition remain, and role edits currently follow ordinary revision-driven display invalidation. No runtime dependency, background service or persistent image cache is added.
+
+The arm64 release executable is 12,976,112 bytes, 49,904 above the save-state baseline. This is artifact size, not RAM or pen latency. All 14 file-backed Mach-O sections match the signed isolated QA executable. No new runtime speedup or frame/memory baseline is claimed. The synchronous-I/O measurements below describe the earlier v5-format revision `60650ea`; v6 adds two bytes per layer, so their serialized byte counts are historical rather than current-format assertions.
+
 ## Project Save State
 
 The saved-project marker compares metadata and shared-buffer identity across at most 64 layers. It does not scan pixel/mask bytes, serialize or clone a document for each comparison. One successful-save/open baseline shares its buffers with the document initially, but can keep up to one previous logical document alive after edits and History eviction. The existing 512 MiB logical limit is not a total RSS bound; retained baseline data is not free memory. No worker, periodic task, canvas cache or runtime dependency is added. Manual project writes, pre-replacement backups and PNG export remain synchronous; measuring and reducing their UI stalls is still roadmap work. No new pen-latency or memory-speedup claim follows from this increment.

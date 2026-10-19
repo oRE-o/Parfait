@@ -48,6 +48,10 @@ pub struct Layer {
     pub pixels: Arc<Vec<u8>>,
     #[serde(default)]
     pub mask: Option<crate::LayerMask>,
+    #[serde(default)]
+    pub reference: bool,
+    #[serde(default)]
+    pub draft: bool,
 }
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
@@ -86,6 +90,8 @@ impl Document {
                     blend_mode: BlendMode::Normal,
                     pixels: Arc::new(vec![255; len]),
                     mask: None,
+                    reference: false,
+                    draft: false,
                 },
                 Layer {
                     id: LayerId(2),
@@ -98,6 +104,8 @@ impl Document {
                     blend_mode: BlendMode::Normal,
                     pixels: Arc::new(vec![0; len]),
                     mask: None,
+                    reference: false,
+                    draft: false,
                 },
             ],
             active: 1,
@@ -147,6 +155,8 @@ impl Document {
                 .zip(&other.layers)
                 .all(|(current, previous)| {
                     current.id == previous.id
+                        && current.reference == previous.reference
+                        && current.draft == previous.draft
                         && current.alpha_locked == previous.alpha_locked
                         && current.clipped == previous.clipped
                         && current.name == previous.name
@@ -219,6 +229,8 @@ impl Document {
             blend_mode: BlendMode::Normal,
             pixels: Arc::new(vec![0; self.width as usize * self.height as usize * 4]),
             mask: None,
+            reference: false,
+            draft: false,
         };
         self.active += 1;
         self.layers.insert(self.active, layer);

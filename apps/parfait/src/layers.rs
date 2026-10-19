@@ -78,6 +78,8 @@ impl Parfait {
             Command::LayerVisibility
             | Command::LayerLock
             | Command::LayerAlphaLock
+            | Command::LayerReference
+            | Command::LayerDraft
             | Command::LayerClipping => {
                 let value = if command == Command::LayerLock {
                     !self.doc.layers[self.doc.active].locked
@@ -85,6 +87,10 @@ impl Parfait {
                     !self.doc.layers[self.doc.active].alpha_locked
                 } else if command == Command::LayerClipping {
                     !self.doc.layers[self.doc.active].clipped
+                } else if command == Command::LayerReference {
+                    !self.doc.layers[self.doc.active].reference
+                } else if command == Command::LayerDraft {
+                    !self.doc.layers[self.doc.active].draft
                 } else {
                     !self.doc.layers[self.doc.active].visible
                 };
@@ -97,6 +103,10 @@ impl Parfait {
                                 layer.alpha_locked = value;
                             } else if command == Command::LayerClipping {
                                 layer.clipped = value;
+                            } else if command == Command::LayerReference {
+                                layer.reference = value;
+                            } else if command == Command::LayerDraft {
+                                layer.draft = value;
                             } else {
                                 layer.visible = value;
                             }
@@ -444,6 +454,25 @@ impl Parfait {
                             .rect_filled(thumbnail, 0., Color32::from_gray(115));
                     }
                     self.layer_target_thumbnail(ui, layer, thumbnail, false);
+                    if self.doc.layers[layer].draft {
+                        ui.painter().rect_filled(
+                            Rect::from_min_max(
+                                thumbnail.left_top() - egui::vec2(7., 0.),
+                                thumbnail.left_bottom() - egui::vec2(5., 0.),
+                            ),
+                            0.,
+                            Color32::from_rgb(122, 170, 226),
+                        );
+                    }
+                    if self.doc.layers[layer].reference {
+                        let badge = Rect::from_min_size(
+                            thumbnail.right_top() - egui::vec2(18., 0.),
+                            egui::Vec2::splat(18.),
+                        );
+                        ui.painter()
+                            .rect_filled(badge, 1., Color32::from_black_alpha(200));
+                        crate::widgets::paint_flat_icon(ui, badge, Icon::Reference, true, 18.);
+                    }
                     let has_mask = self.doc.layers[layer].mask.is_some();
                     if has_mask {
                         self.layer_target_thumbnail(
@@ -484,9 +513,19 @@ impl Parfait {
                         rect.max - egui::vec2(44., 1.),
                     );
                     let text = format!(
-                        "{:.0}%  {}",
+                        "{:.0}%  {}{}{}",
                         self.doc.layers[layer].opacity * 100.,
                         self.doc.layers[layer].blend_mode.label(),
+                        if self.doc.layers[layer].reference {
+                            "  참조"
+                        } else {
+                            ""
+                        },
+                        if self.doc.layers[layer].draft {
+                            "  밑그림"
+                        } else {
+                            ""
+                        },
                     );
                     clipped_text(
                         ui,
@@ -615,6 +654,17 @@ impl Parfait {
                             Command::LayerClipping,
                             self.doc.layers[self.doc.active].clipped,
                         );
+                        self.command_toggle(
+                            ui,
+                            Command::LayerReference,
+                            self.doc.layers[self.doc.active].reference,
+                        );
+                        self.command_toggle(
+                            ui,
+                            Command::LayerDraft,
+                            self.doc.layers[self.doc.active].draft,
+                        );
+                        self.command_menu_item(ui, Command::LayerDetails);
                     });
                     if clip.is_positive() {
                         targets.push((layer, info.intersect(clip), rect));

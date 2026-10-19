@@ -313,8 +313,8 @@ const LAYER: &[MenuItem] = &[
     Group(
         "레이어 설정",
         &[
-            Planned("참조 레이어로 설정"),
-            Planned("밑그림 레이어로 설정"),
+            Toggle(Command::LayerReference),
+            Toggle(Command::LayerDraft),
             Toggle(Command::LayerClipping),
             Toggle(Command::LayerLock),
             Toggle(Command::LayerAlphaLock),
@@ -322,7 +322,7 @@ const LAYER: &[MenuItem] = &[
             Action(Command::RenameLayer),
             Planned("팔레트 색을 부모 폴더에 표시"),
             Planned("팔레트 색을 캔버스에 표시"),
-            Planned("레이어 상세 설정…"),
+            Action(Command::LayerDetails),
         ],
     ),
     Group(

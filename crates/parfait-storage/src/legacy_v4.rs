@@ -49,6 +49,8 @@ impl From<LegacyDocument> for Document {
                     blend_mode: layer.blend_mode,
                     pixels: layer.pixels,
                     mask: None,
+                    reference: false,
+                    draft: false,
                 })
                 .collect(),
         }

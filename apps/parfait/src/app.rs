@@ -36,6 +36,7 @@ pub struct Parfait {
     pub(crate) cancelled_layer_drag: bool,
     pub(crate) layer_list: crate::layers::LayerList,
     pub(crate) rename_layer: Option<crate::layer_organize::RenameLayer>,
+    pub(crate) layer_details: Option<crate::layer_details::LayerDetails>,
     pub view: View,
     pub display: crate::display::DisplaySettings,
     pub show_display_settings: bool,
@@ -115,6 +116,7 @@ impl Parfait {
             cancelled_layer_drag: false,
             layer_list: Default::default(),
             rename_layer: None,
+            layer_details: None,
             view: View::default(),
             display: Default::default(),
             show_display_settings: false,
@@ -146,6 +148,7 @@ impl Parfait {
     }
     pub fn dialog_open(&self) -> bool {
         self.rename_layer.is_some()
+            || self.layer_details.is_some()
             || self.calibration_dialog.is_some()
             || self.brush_details.dialog_open()
             || self.shortcut_editor.is_some()
@@ -266,7 +269,7 @@ impl Parfait {
         {
             match image::save_buffer_with_format(
                 path,
-                &self.doc.composite(),
+                &self.doc.composite_for_export(),
                 self.doc.width,
                 self.doc.height,
                 image::ColorType::Rgba8,
@@ -327,6 +330,7 @@ impl eframe::App for Parfait {
         self.display_settings_ui(&ctx);
         self.shortcut_settings_ui(&ctx);
         self.layer_rename_ui(&ctx);
+        self.layer_details_ui(&ctx);
         if self.show_help {
             let mut help_open = true;
             egui::Window::new("Keyboard shortcuts")

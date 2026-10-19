@@ -43,6 +43,8 @@ impl From<LegacyDocument> for Document {
                     alpha_locked: false,
                     clipped: false,
                     mask: None,
+                    reference: false,
+                    draft: false,
                     opacity: layer.opacity,
                     blend_mode: layer.blend_mode,
                     pixels: layer.pixels,

@@ -19,7 +19,115 @@ fn insert_raw(store: &Store, revision: u64, raw: &[u8]) {
 }
 
 #[test]
-fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_version_five() {
+fn exact_version_five_masks_migrate_without_inventing_layer_flags() {
+    use parfait_core::{LayerMask, MaskCoverage};
+    for coverage in [
+        None,
+        Some(MaskCoverage::Uniform(128)),
+        Some(MaskCoverage::Dense(Arc::new(vec![20, 230]))),
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("v5.parfait");
+        let mut store = Store::open(&path).unwrap();
+        let mut expected = Document::new(2, 1);
+        expected.layers[1].alpha_locked = true;
+        expected.layers[1].clipped = true;
+        expected.layers[1].mask = coverage.map(|coverage| LayerMask {
+            enabled: false,
+            coverage,
+        });
+        expected.layers[1].pixels = Arc::new(vec![30, 60, 90, 180, 90, 60, 30, 128]);
+        let legacy = legacy_v5::LegacyDocument {
+            width: expected.width,
+            height: expected.height,
+            name: expected.name.clone(),
+            active: expected.active,
+            revision: expected.revision,
+            next_layer_id: expected.next_layer_id,
+            layers: expected
+                .layers
+                .iter()
+                .map(|layer| legacy_v5::LegacyLayer {
+                    id: layer.id,
+                    name: layer.name.clone(),
+                    visible: layer.visible,
+                    locked: layer.locked,
+                    alpha_locked: layer.alpha_locked,
+                    clipped: layer.clipped,
+                    opacity: layer.opacity,
+                    blend_mode: layer.blend_mode,
+                    pixels: layer.pixels.clone(),
+                    mask: layer.mask.clone(),
+                })
+                .collect(),
+        };
+        let mut raw = SNAPSHOT_V5.to_vec();
+        bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .serialize_into(&mut raw, &legacy)
+            .unwrap();
+        insert_raw(&store, expected.revision, &raw);
+        store
+            .connection
+            .pragma_update(None, "user_version", 5)
+            .unwrap();
+        assert_eq!(store.load().unwrap().unwrap().document, expected);
+        expected.layers[1].reference = true;
+        expected.layers[1].draft = true;
+        expected.touch();
+        store.save(&expected).unwrap();
+        assert_eq!(
+            store
+                .connection
+                .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+                .unwrap(),
+            6
+        );
+        drop(store);
+        assert_eq!(
+            Store::open(&path)
+                .unwrap()
+                .load()
+                .unwrap()
+                .unwrap()
+                .document,
+            expected
+        );
+    }
+}
+
+#[test]
+fn version_six_flags_roundtrip_and_corrupt_head_falls_back() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("flags.parfait");
+    let mut store = Store::open(&path).unwrap();
+    let mut document = Document::new(2, 1);
+    for flags in 0..4 {
+        document.layers[1].reference = flags & 1 != 0;
+        document.layers[1].draft = flags & 2 != 0;
+        document.touch();
+        store.save(&document).unwrap();
+        assert_eq!(store.load().unwrap().unwrap().document, document);
+    }
+    let encoded = bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .serialize(&document)
+        .unwrap();
+    assert_eq!(
+        snapshot_size(&document).unwrap(),
+        SNAPSHOT_V6.len() as u64 + encoded.len() as u64
+    );
+    let mut broken = SNAPSHOT_V6.to_vec();
+    broken.extend_from_slice(&encoded[..encoded.len() - 1]);
+    insert_raw(&store, document.revision + 1, &broken);
+    let loaded = store.load().unwrap().unwrap();
+    assert!(loaded.fell_back);
+    document.revision = loaded.document.revision;
+    assert_eq!(loaded.document, document);
+}
+
+#[test]
+fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_version_six() {
     for mode in BlendMode::ALL {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("v4.parfait");
@@ -82,7 +190,7 @@ fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_ver
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            5
+            6
         );
         drop(store);
         let loaded = Store::open(&path).unwrap().load().unwrap().unwrap();
@@ -107,7 +215,7 @@ fn malformed_dense_masks_fall_back_to_valid_generation_without_changing_original
         document.touch();
         assert!(!document.validate());
         assert!(store.save(&document).is_err());
-        let mut raw = SNAPSHOT_V5.to_vec();
+        let mut raw = SNAPSHOT_V6.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .serialize_into(&mut raw, &document)
@@ -249,7 +357,7 @@ fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            5
+            6
         );
         drop(store);
         let loaded = Store::open(&path).unwrap().load().unwrap().unwrap();
@@ -275,7 +383,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
         }
         assert!(!document.validate());
         assert!(store.save(&document).is_err());
-        let mut raw = SNAPSHOT_V5.to_vec();
+        let mut raw = SNAPSHOT_V6.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .serialize_into(&mut raw, &document)
@@ -298,7 +406,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
 
 #[test]
 fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
-    for version in [-1, 6] {
+    for version in [-1, 7] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("future.parfait");
         let connection = Connection::open(&path).unwrap();
@@ -352,7 +460,7 @@ fn identity_exhaustion_and_alpha_flags_roundtrip_and_size_matches_exact_serializ
     assert!(layer_growth_error(&document, 5).is_some());
     assert_eq!(
         snapshot_size(&document).unwrap(),
-        SNAPSHOT_V5.len() as u64
+        SNAPSHOT_V6.len() as u64
             + bincode::DefaultOptions::new()
                 .with_fixint_encoding()
                 .serialized_size(&document)

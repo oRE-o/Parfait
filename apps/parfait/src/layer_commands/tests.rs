@@ -574,7 +574,7 @@ fn new_commands_ignore_key_repeat_and_text_focus() {
 
 #[test]
 fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
-    assert_eq!(Command::ALL.len(), 78);
+    assert_eq!(Command::ALL.len(), 81);
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.doc = Document::new(4, 4);
@@ -615,7 +615,7 @@ fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
     app.persist_preferences(true);
     let keys = app.keymap.clone();
     let mut saved: serde_json::Value = serde_json::from_str(&app.saved_preferences_json()).unwrap();
-    assert_eq!(saved["version"], 18);
+    assert_eq!(saved["version"], 19);
     drop(app);
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     assert!(app.keymap == keys);
@@ -829,7 +829,7 @@ fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindin
     app.persist_preferences(true);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
-        18
+        19
     );
 }
 
@@ -1018,7 +1018,7 @@ fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
     app.persist_preferences(true);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
-        18
+        19
     );
     drop(app);
     let app = Parfait::open(dir.path().to_owned()).unwrap();
