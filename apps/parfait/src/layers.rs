@@ -695,8 +695,15 @@ impl Parfait {
                             thumbnail.left_top() - egui::vec2(4., 0.),
                             thumbnail.left_bottom() - egui::vec2(2., 0.),
                         );
-                        ui.painter()
-                            .rect_filled(indicator, 1., Color32::from_rgb(211, 135, 157));
+                        ui.painter().rect_filled(
+                            indicator,
+                            1.,
+                            if self.doc.clipping_base(layer).is_some() {
+                                Color32::from_rgb(211, 135, 157)
+                            } else {
+                                Color32::from_gray(128)
+                            },
+                        );
                     }
                     let info = Rect::from_min_max(
                         rect.min + egui::vec2(text_left, 0.),
@@ -740,6 +747,13 @@ impl Parfait {
                         &text,
                         11.,
                         name.right() - name.left(),
+                        if self.doc.layers[layer].blend_mode == parfait_core::BlendMode::Through
+                            && self.doc.layers[layer].clipped
+                        {
+                            crate::layer_controls::SUPPRESSED_BLEND
+                        } else {
+                            ui.visuals().text_color()
+                        },
                     );
                     if self.layer_list.rename == Some(self.doc.layers[layer].id) {
                         self.layer_name_editor(ui, layer, name);
@@ -750,6 +764,7 @@ impl Parfait {
                             &self.doc.layers[layer].name,
                             12.,
                             name.width(),
+                            ui.visuals().text_color(),
                         );
                     }
                     let lock = Rect::from_min_size(
@@ -1192,11 +1207,11 @@ fn paint_icon(ui: &egui::Ui, rect: Rect, icon: Icon, color: Color32) {
         color,
     );
 }
-fn clipped_text(ui: &egui::Ui, origin: Pos2, text: &str, size: f32, width: f32) {
+fn clipped_text(ui: &egui::Ui, origin: Pos2, text: &str, size: f32, width: f32, color: Color32) {
     let galley = ui.painter().layout(
         text.to_owned(),
         egui::FontId::proportional(size),
-        ui.visuals().text_color(),
+        color,
         f32::INFINITY,
     );
     ui.painter()
@@ -1204,5 +1219,5 @@ fn clipped_text(ui: &egui::Ui, origin: Pos2, text: &str, size: f32, width: f32) 
             origin,
             egui::vec2(width.max(0.), size + 5.),
         )))
-        .galley(origin, galley, ui.visuals().text_color());
+        .galley(origin, galley, color);
 }

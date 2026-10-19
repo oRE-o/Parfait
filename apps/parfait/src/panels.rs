@@ -359,6 +359,8 @@ impl Parfait {
                     let blend = crate::layer_controls::blend_select(
                         ui,
                         &mut mode,
+                        self.doc.layers[active].kind == parfait_core::LayerKind::Folder,
+                        self.doc.layers[active].clipped,
                         (width * 0.4).clamp(72., 120.),
                     );
                     #[cfg(test)]

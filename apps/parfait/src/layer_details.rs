@@ -24,6 +24,10 @@ impl LayerDetails {
             Some("불투명도는 0부터 100% 사이의 숫자로 입력해 주세요.")
         } else if self.draft.name.len() > self.max_name_bytes {
             Some("이 이름은 작업 파일의 저장 크기 한도를 넘습니다.")
+        } else if self.draft.kind != parfait_core::LayerKind::Folder
+            && self.draft.blend_mode == parfait_core::BlendMode::Through
+        {
+            Some("통과 합성은 폴더에서만 사용할 수 있습니다.")
         } else {
             None
         }
@@ -73,9 +77,7 @@ impl Parfait {
         }
         let target = target.unwrap();
         let clipping_allowed = self.doc.layers[target].clipped
-            || self.doc.layers[..target]
-                .iter()
-                .any(|layer| !layer.clipped && layer.parent == self.doc.layers[target].parent);
+            || self.doc.layer_clipping_base_below(target, 0).is_some();
         let dialog = self.layer_details.as_mut().unwrap();
         let first_frame = dialog.focus;
         let was_composing = dialog.composing;
@@ -125,7 +127,11 @@ impl Parfait {
                     if field.changed() { dialog.needs_edit = false; }
                     ui.end_row();
                     ui.label("합성 모드");
-                    crate::layer_controls::blend_select(ui, &mut dialog.draft.blend_mode, 260.);
+                    let response = crate::layer_controls::blend_select(ui, &mut dialog.draft.blend_mode, dialog.draft.kind == parfait_core::LayerKind::Folder, dialog.draft.clipped, 260.);
+                    #[cfg(test)]
+                    ui.data_mut(|data| data.insert_temp(egui::Id::new("layer_details_blend"), response.rect));
+                    #[cfg(not(test))]
+                    let _ = response;
                     ui.end_row();
                     ui.label("불투명도");
                     ui.scope_builder(egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(ui.cursor().min, egui::vec2(260., 20.))), |ui| {
@@ -193,3 +199,5 @@ impl Parfait {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod through_tests;

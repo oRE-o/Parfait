@@ -169,18 +169,14 @@ impl Parfait {
                 .layers
                 .iter()
                 .enumerate()
-                .any(|(index, layer)| {
+                .any(|(index, _)| {
                     selection & (1 << index) != 0
-                        && !self.doc.layers[..index]
-                            .iter()
-                            .enumerate()
-                            .any(|(below, base)| {
-                                base.parent == layer.parent
-                                    && !base.clipped
-                                    && selection & (1 << below) == 0
-                            })
+                        && self
+                            .doc
+                            .layer_clipping_base_below(index, selection)
+                            .is_none()
                 })
-                .then_some("선택한 레이어 아래에 같은 폴더의 클리핑 기반을 남겨 주세요."),
+                .then_some("같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요."),
             _ => None,
         }
     }

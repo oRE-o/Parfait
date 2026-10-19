@@ -1,4 +1,5 @@
 use super::{FolderLayout, LayerKind};
+mod through;
 use crate::{
     BlendMode, Document, PixelRect,
     blend::{composite_blend, composite_opaque},
@@ -48,80 +49,84 @@ impl RowComposite<'_> {
                     count += 1;
                 }
             }
-            let source = self.source(index).as_chunks::<4>().0;
-            if count == 0 {
-                if base.has_effective_mask() {
-                    crate::document::composite_flat_row(
-                        output,
-                        source,
-                        base.opacity,
-                        base.blend_mode,
-                        |column, alpha| base.mask_alpha(self.start / 4 + column, alpha),
-                    );
-                } else {
-                    crate::document::composite_flat_row(
-                        output,
-                        source,
-                        base.opacity,
-                        base.blend_mode,
-                        |_, alpha| alpha,
-                    );
-                }
+            self.draw_group(index, &clips[..count], output);
+        }
+    }
+
+    fn draw_group(&self, index: usize, clips: &[usize], output: &mut [u8]) {
+        let base = &self.document.layers[index];
+        let source = self.source(index).as_chunks::<4>().0;
+        if clips.is_empty() {
+            if base.has_effective_mask() {
+                crate::document::composite_flat_row(
+                    output,
+                    source,
+                    base.opacity,
+                    base.blend_mode,
+                    |column, alpha| base.mask_alpha(self.start / 4 + column, alpha),
+                );
+            } else {
+                crate::document::composite_flat_row(
+                    output,
+                    source,
+                    base.opacity,
+                    base.blend_mode,
+                    |_, alpha| alpha,
+                );
+            }
+            return;
+        }
+        for (column, (destination, pixel)) in output
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(source)
+            .enumerate()
+        {
+            let alpha = base.mask_alpha(self.start / 4 + column, pixel[3]);
+            if alpha == 0 {
                 continue;
             }
-            for (column, (destination, pixel)) in output
-                .as_chunks_mut::<4>()
-                .0
-                .iter_mut()
-                .zip(source)
-                .enumerate()
-            {
-                let alpha = base.mask_alpha(self.start / 4 + column, pixel[3]);
+            let mut color = [pixel[0], pixel[1], pixel[2], 255];
+            let mut clipped = false;
+            for clip in clips {
+                let layer = &self.document.layers[*clip];
+                let pixel = &self.source(*clip)[column * 4..column * 4 + 4];
+                let alpha = layer.mask_alpha(self.start / 4 + column, pixel[3]);
                 if alpha == 0 {
                     continue;
                 }
-                let mut color = [pixel[0], pixel[1], pixel[2], 255];
-                let mut clipped = false;
-                for clip in &clips[..count] {
-                    let layer = &self.document.layers[*clip];
-                    let pixel = &self.source(*clip)[column * 4..column * 4 + 4];
-                    let alpha = layer.mask_alpha(self.start / 4 + column, pixel[3]);
-                    if alpha == 0 {
-                        continue;
-                    }
-                    if !clipped && base.blend_mode != BlendMode::Normal && destination[3] > 0 {
-                        let backdrop_alpha = f32::from(destination[3]) / 255.;
-                        for channel in 0..3 {
-                            let source = f32::from(color[channel]) / 255.;
-                            let blended = base
-                                .blend_mode
-                                .channel(f32::from(destination[channel]) / 255., source);
-                            color[channel] = ((source * (1. - backdrop_alpha)
-                                + blended * backdrop_alpha)
-                                * 255.)
+                if !clipped && base.blend_mode != BlendMode::Normal && destination[3] > 0 {
+                    let backdrop_alpha = f32::from(destination[3]) / 255.;
+                    for channel in 0..3 {
+                        let source = f32::from(color[channel]) / 255.;
+                        let blended = base
+                            .blend_mode
+                            .channel(f32::from(destination[channel]) / 255., source);
+                        color[channel] =
+                            ((source * (1. - backdrop_alpha) + blended * backdrop_alpha) * 255.)
                                 .round()
                                 .clamp(0., 255.) as u8;
-                        }
                     }
-                    clipped = true;
-                    composite_opaque(
-                        &mut color,
-                        [pixel[0], pixel[1], pixel[2]],
-                        f32::from(alpha) / 255. * layer.opacity,
-                        layer.blend_mode,
-                    );
                 }
-                composite_blend(
-                    destination,
-                    [color[0], color[1], color[2]],
-                    f32::from(alpha) / 255. * base.opacity,
-                    if clipped {
-                        BlendMode::Normal
-                    } else {
-                        base.blend_mode
-                    },
+                clipped = true;
+                composite_opaque(
+                    &mut color,
+                    [pixel[0], pixel[1], pixel[2]],
+                    f32::from(alpha) / 255. * layer.opacity,
+                    layer.blend_mode,
                 );
             }
+            composite_blend(
+                destination,
+                [color[0], color[1], color[2]],
+                f32::from(alpha) / 255. * base.opacity,
+                if clipped {
+                    BlendMode::Normal
+                } else {
+                    base.blend_mode
+                },
+            );
         }
     }
 }
@@ -177,6 +182,14 @@ impl Document {
             return output;
         };
         let mut folders = folder_rows(self, stride);
+        if self
+            .layers
+            .iter()
+            .any(|layer| layer.blend_mode == BlendMode::Through && !layer.clipped)
+        {
+            through::compose(self, &layout, &mut folders, rect, selection, &mut output);
+            return output;
+        }
         for (row, destination) in output.chunks_exact_mut(stride).enumerate() {
             let start = ((rect.y0 as usize + row) * self.width as usize + rect.x0 as usize) * 4;
             fill_folders(self, &layout, &mut folders, selection, start, stride);

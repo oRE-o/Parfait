@@ -7,7 +7,7 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     let pixels = u64::from(document.width)
         .checked_mul(u64::from(document.height))?
         .checked_mul(4)?;
-    let mut bytes = (super::SNAPSHOT_V7.len() as u64)
+    let mut bytes = (super::SNAPSHOT_V8.len() as u64)
         .checked_add(48)?
         .checked_add(document.name.len() as u64)?;
     for layer in &document.layers {

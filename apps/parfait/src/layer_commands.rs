@@ -153,11 +153,9 @@ impl Parfait {
             }
             if command == Command::LayerClipping
                 && !target.clipped
-                && !self.doc.layers[..layer]
-                    .iter()
-                    .any(|base| base.parent == target.parent && !base.clipped)
+                && self.doc.layer_clipping_base_below(layer, 0).is_none()
             {
-                return Some("같은 폴더 안에 클리핑 기반 레이어를 남겨 주세요.");
+                return Some("같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요.");
             }
         }
         if command.is_layer_mask() {

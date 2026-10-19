@@ -8,6 +8,8 @@ mod legacy_v5;
 mod legacy_v6;
 #[cfg(test)]
 mod migration_tests;
+#[cfg(test)]
+mod through_tests;
 mod worker;
 const SNAPSHOT_V2: &[u8] = b"PARFAIT\0SNAP2\0";
 const SNAPSHOT_V3: &[u8] = b"PARFAIT\0SNAP3\0";
@@ -15,6 +17,7 @@ const SNAPSHOT_V4: &[u8] = b"PARFAIT\0SNAP4\0";
 const SNAPSHOT_V5: &[u8] = b"PARFAIT\0SNAP5\0";
 const SNAPSHOT_V6: &[u8] = b"PARFAIT\0SNAP6\0";
 const SNAPSHOT_V7: &[u8] = b"PARFAIT\0SNAP7\0";
+const SNAPSHOT_V8: &[u8] = b"PARFAIT\0SNAP8\0";
 use anyhow::{Context, Result, bail, ensure};
 use bincode::Options;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
@@ -69,7 +72,7 @@ impl Store {
         connection.busy_timeout(Duration::from_secs(3))?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(
-            (0..=7).contains(&version),
+            (0..=8).contains(&version),
             "This project uses an unsupported format ({version})"
         );
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
@@ -103,10 +106,10 @@ impl Store {
             snapshot_size(doc).is_some_and(|bytes| bytes <= MAX_BYTES),
             "Snapshot exceeds 512 MiB before encoding"
         );
-        let mut raw = SNAPSHOT_V7.to_vec();
+        let mut raw = SNAPSHOT_V8.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .with_limit(MAX_BYTES - SNAPSHOT_V7.len() as u64)
+            .with_limit(MAX_BYTES - SNAPSHOT_V8.len() as u64)
             .serialize_into(&mut raw, doc)?;
         ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
         let checksum = Sha256::digest(&raw).to_vec();
@@ -119,7 +122,7 @@ impl Store {
             params![i64::try_from(doc.revision)?, checksum, payload],
         )?;
         tx.execute("DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 3)",[])?;
-        tx.pragma_update(None, "user_version", 7)?;
+        tx.pragma_update(None, "user_version", 8)?;
         tx.commit()?;
         Ok(())
     }
@@ -147,8 +150,17 @@ impl Store {
                     .with_fixint_encoding()
                     .with_limit(MAX_BYTES)
                     .reject_trailing_bytes();
-                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V7) {
+                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V8) {
                     options.deserialize(payload)?
+                } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V7) {
+                    let old: Document = options.deserialize(payload)?;
+                    ensure!(
+                        old.layers
+                            .iter()
+                            .all(|layer| layer.blend_mode != parfait_core::BlendMode::Through),
+                        "Version 7 cannot contain a pass-through folder"
+                    );
+                    old
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V6) {
                     let old: legacy_v6::LegacyDocument = options.deserialize(payload)?;
                     old.into()
@@ -299,7 +311,7 @@ mod tests {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         store
             .connection
             .execute("UPDATE snapshots SET payload=x'00' WHERE revision=2", [])

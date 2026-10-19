@@ -142,7 +142,8 @@ impl Document {
                 (if l.kind == crate::LayerKind::Folder {
                     l.pixels.is_empty() && !l.alpha_locked
                 } else {
-                    l.pixels.len() == self.width as usize * self.height as usize * 4
+                    l.blend_mode != BlendMode::Through
+                        && l.pixels.len() == self.width as usize * self.height as usize * 4
                 }) && l.mask.as_ref().is_none_or(|mask| match &mask.coverage {
                     crate::MaskCoverage::Uniform(_) => true,
                     crate::MaskCoverage::Dense(values) => {
@@ -213,10 +214,22 @@ impl Document {
             })
     }
     pub fn clipping_base(&self, index: usize) -> Option<usize> {
+        if !self.layers.get(index)?.clipped {
+            Some(index)
+        } else {
+            self.layer_clipping_base_below(index, 0)
+        }
+    }
+    pub fn layer_clipping_base_below(&self, index: usize, excluded: u64) -> Option<usize> {
         let parent = self.layers.get(index)?.parent;
-        self.layers[..=index]
+        self.layers[..index]
             .iter()
-            .rposition(|layer| layer.parent == parent && !layer.clipped)
+            .enumerate()
+            .rfind(|(below, layer)| {
+                layer.parent == parent && !layer.clipped && excluded & (1 << below) == 0
+            })
+            .map(|(below, _)| below)
+            .filter(|below| self.layers[*below].blend_mode != BlendMode::Through)
     }
     pub fn add_layer(&mut self) {
         let Some(active) = self.layers.get(self.active) else {

@@ -6,6 +6,8 @@ mod editing;
 mod render;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod through_tests;
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LayerKind {

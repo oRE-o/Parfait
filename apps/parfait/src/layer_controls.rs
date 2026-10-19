@@ -1,5 +1,6 @@
 use eframe::egui::{self, Color32, Rect, Response, Sense, Stroke};
 use parfait_core::BlendMode;
+pub(crate) const SUPPRESSED_BLEND: Color32 = Color32::from_rgb(232, 102, 102);
 
 pub(crate) fn blend_label(mode: BlendMode) -> &'static str {
     match mode {
@@ -17,16 +18,32 @@ pub(crate) fn blend_label(mode: BlendMode) -> &'static str {
         BlendMode::HardLight => "하드 라이트",
         BlendMode::Difference => "차이",
         BlendMode::Exclusion => "제외",
+        BlendMode::Through => "통과",
     }
 }
 
-pub(crate) fn blend_select(ui: &mut egui::Ui, mode: &mut BlendMode, width: f32) -> Response {
+pub(crate) fn blend_select(
+    ui: &mut egui::Ui,
+    mode: &mut BlendMode,
+    folder: bool,
+    clipped: bool,
+    width: f32,
+) -> Response {
     egui::ComboBox::from_id_salt("blend_mode")
         .width(width)
         .height(320.)
         .truncate()
-        .selected_text(blend_label(*mode))
+        .selected_text(blend_text(*mode, clipped))
         .show_ui(ui, |ui| {
+            if folder {
+                let response = ui.selectable_value(mode, BlendMode::Through, "통과");
+                #[cfg(test)]
+                ui.data_mut(|data| {
+                    data.insert_temp(egui::Id::new("blend_choice_through"), response.rect)
+                });
+                #[cfg(not(test))]
+                let _ = response;
+            }
             for candidate in [
                 BlendMode::Normal,
                 BlendMode::Darken,
@@ -47,7 +64,20 @@ pub(crate) fn blend_select(ui: &mut egui::Ui, mode: &mut BlendMode, width: f32) 
             }
         })
         .response
-        .on_hover_text("합성 모드")
+        .on_hover_text(if *mode == BlendMode::Through && clipped {
+            "클리핑 중에는 통과 효과가 억제됩니다. 클리핑을 해제하면 다시 적용됩니다."
+        } else {
+            "합성 모드"
+        })
+}
+
+pub(crate) fn blend_text(mode: BlendMode, clipped: bool) -> egui::RichText {
+    let text = egui::RichText::new(blend_label(mode));
+    if mode == BlendMode::Through && clipped {
+        text.color(SUPPRESSED_BLEND)
+    } else {
+        text
+    }
 }
 
 pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {

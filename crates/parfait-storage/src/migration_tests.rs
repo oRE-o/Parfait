@@ -56,7 +56,7 @@ fn exact_version_six_preserves_roles_masks_ids_and_migrates_to_root_rasters() {
             .connection
             .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        7
+        8
     );
     assert_eq!(store.load().unwrap().unwrap().document, expected);
 }
@@ -207,7 +207,7 @@ fn exact_version_five_masks_migrate_without_inventing_layer_flags() {
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            7
+            8
         );
         drop(store);
         assert_eq!(
@@ -316,7 +316,7 @@ fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_ver
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            7
+            8
         );
         drop(store);
         let loaded = Store::open(&path).unwrap().load().unwrap().unwrap();
@@ -483,7 +483,7 @@ fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            7
+            8
         );
         drop(store);
         let loaded = Store::open(&path).unwrap().load().unwrap().unwrap();
@@ -532,7 +532,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
 
 #[test]
 fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
-    for version in [-1, 8] {
+    for version in [-1, 9] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("future.parfait");
         let connection = Connection::open(&path).unwrap();

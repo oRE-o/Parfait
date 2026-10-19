@@ -1,5 +1,20 @@
 # Stroke performance
 
+## Through Folder Rows
+
+Through composition reuses one RGBA row per folder, using that row as a before-image only when group opacity or an enabled mask needs interpolation. It adds no folder-sized image, dependency or background task. At 64 nodes and width 4096, row pixels remain bounded by 1 MiB, excluding the normal output and vector metadata. A maximum-depth regression checks retained buffer pointers/capacities after traversal. Artwork v8 changes the allowed enum range, not metadata size or the logical 512 MiB limits.
+
+The arm64 release executable is 13,076,688 bytes, up 16,624 bytes from the preceding 13,060,064-byte folder-UI build. All 14 file-backed sections match the signed native QA executable. Artifact size is not process memory or input latency.
+
+Run `cargo test --release -p parfait-core composition_timing_workload -- --ignored --nocapture`. On Apple M1, macOS 15.7.5 arm64 and Rust 1.99.1, 25 full compositions per case use eight raster nodes in two folders. The preserved preceding test executable and current executable give the following isolated-folder comparison. Every result exactly matches the independently baked pixels.
+
+| Square size | Before p50/p95 ms | After p50/p95 ms |
+| --- | --- | --- |
+| 256 | 3.7845 / 3.9070 | 3.8206 / 4.0834 |
+| 512 | 15.4467 / 17.6431 | 14.4901 / 14.6707 |
+
+A separate Through workload uses alternating Normal/Multiply raster modes. Full-strength groups exactly match flat composition; an outer 63% opacity and Uniform-193 mask match an independent f64 premultiplied oracle within one byte. Through p50/p95 is 3.8485/3.9647 ms full-strength and 4.2587/4.3835 ms attenuated at 256, and 15.8837/16.2660 and 17.1574/17.4703 ms at 512. Two row buffers occupy 2048/4096 bytes. These different workloads and small noisy samples do not establish a general speedup, frame-rate guarantee, total RSS or physical pen latency. Larger documents and many active folders still require measurement.
+
 ## Folder UI Cost Check
 
 The arm64 macOS release executable is 13,060,064 bytes, up 50,512 bytes from the preceding 13,009,552-byte folder foundation. No dependency is added. Tree movement, grouping and duplication share pixel/mask buffers; view folding stores at most 64 stable IDs and never creates document History. Folder masks reuse scalar coverage painting, not an RGBA folder canvas. This is code/data accounting, not a process-memory or input-latency guarantee.
@@ -12,7 +27,7 @@ Flat documents retain the preceding path. Folders store no RGBA image; isolated 
 
 Run `cargo test --release -p parfait-core folder_composition_timing_workload -- --ignored --nocapture`. On arm64 macOS 15.7.5, a preserved before/after run of 25 full compositions uses eight raster nodes inside two isolated folders. Reusing the existing no-clipping row routine changes folder p50/p95 from 4.9910/8.2141 to 4.0842/5.7672 ms at 256 square, and 20.7692/22.7041 to 15.2735/16.1327 ms at 512 square. Every measured result equals the independently pre-baked expected pixels. This small two-run comparison includes timing noise and does not establish physical pen latency or a frame-rate guarantee.
 
-The same workload's single pre-baked raster takes p50/p95 0.6028/0.7027 ms at 256 and 1.2885/1.3995 ms at 512 after the change. It represents less work, not an equivalent live-layer baseline or a claimed folder speedup. The two row buffers occupy 2048/4096 bytes respectively. Large canvases, many active folders and Through blending still need further work.
+The same workload's single pre-baked raster takes p50/p95 0.6028/0.7027 ms at 256 and 1.2885/1.3995 ms at 512 after the change. It represents less work, not an equivalent live-layer baseline or a claimed folder speedup. The two row buffers occupy 2048/4096 bytes respectively. These historical measurements predate Through blending, measured separately above.
 
 The arm64 release executable is 13,009,552 bytes, 16,912 above the preceding control-layout build. Artifact size is not working-set memory or pen latency. The foundation does not add runtime dependencies or a background service.
 

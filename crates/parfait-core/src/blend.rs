@@ -18,6 +18,7 @@ pub enum BlendMode {
     Exclusion,
     Add,
     Subtract,
+    Through,
 }
 impl BlendMode {
     pub const ALL: [Self; 14] = [
@@ -52,6 +53,7 @@ impl BlendMode {
             Self::Exclusion => "Exclusion",
             Self::Add => "Add",
             Self::Subtract => "Subtract",
+            Self::Through => "Through",
         }
     }
     pub(crate) fn channel(self, b: f32, s: f32) -> f32 {
@@ -63,7 +65,7 @@ impl BlendMode {
             }
         };
         match self {
-            Self::Normal => s,
+            Self::Normal | Self::Through => s,
             Self::Multiply => b * s,
             Self::Screen => b + s - b * s,
             Self::Overlay => hard(s, b),

@@ -1074,19 +1074,24 @@ mod tests {
     }
     #[test]
     fn texture_updates_are_partial_for_strokes_and_full_for_external_edits() {
-        for folders in [false, true] {
-            verify_texture_updates(folders);
+        for folder_mode in [
+            None,
+            Some(parfait_core::BlendMode::Normal),
+            Some(parfait_core::BlendMode::Through),
+        ] {
+            verify_texture_updates(folder_mode);
         }
     }
 
-    fn verify_texture_updates(folders: bool) {
+    fn verify_texture_updates(folder_mode: Option<parfait_core::BlendMode>) {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
         app.doc = parfait_core::Document::new(128, 128);
         app.doc.layers[0].visible = false; // exercise checkerboard origin in partial updates
-        if folders {
+        if let Some(mode) = folder_mode {
             app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
             app.doc.layers[2].opacity = 0.63;
+            app.doc.layers[2].blend_mode = mode;
             assert!(app.doc.create_layer_mask(2, 193));
             app.doc.active = 1;
         }
