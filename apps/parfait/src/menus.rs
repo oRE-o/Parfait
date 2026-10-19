@@ -1,0 +1,283 @@
+use crate::{app::Parfait, shortcuts::Command, theme::ACCENT};
+use eframe::egui::{self, Color32, RichText};
+
+mod catalog;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum TopMenu {
+    File,
+    Edit,
+    Layer,
+    Select,
+    View,
+    Filter,
+    Window,
+    Help,
+}
+
+impl TopMenu {
+    const ALL: [Self; 8] = [
+        Self::File,
+        Self::Edit,
+        Self::Layer,
+        Self::Select,
+        Self::View,
+        Self::Filter,
+        Self::Window,
+        Self::Help,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::File => "파일",
+            Self::Edit => "편집",
+            Self::Layer => "레이어",
+            Self::Select => "선택",
+            Self::View => "표시",
+            Self::Filter => "필터",
+            Self::Window => "창",
+            Self::Help => "도움말",
+        }
+    }
+}
+
+impl Parfait {
+    pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::top("menu").show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                for menu in TopMenu::ALL {
+                    let response = ui.menu_button(menu.label(), |ui| {
+                        ui.set_min_width(188.);
+                        self.top_menu_contents(ui, menu);
+                    });
+                    #[cfg(test)]
+                    ui.data_mut(|data| {
+                        data.insert_temp(egui::Id::new(("top_menu", menu)), response.response.rect);
+                        if response.inner.is_some() {
+                            data.insert_temp(egui::Id::new("open_top_menu"), menu);
+                        }
+                    });
+                    let _ = response;
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let (color, label) = if self.saving_failed {
+                        (Color32::LIGHT_RED, "저장 실패")
+                    } else if self.saved >= self.doc.revision {
+                        (Color32::from_gray(184), "로컬 저장됨")
+                    } else {
+                        (ACCENT, "저장 중…")
+                    };
+                    let response = ui.label(RichText::new(label).color(color).size(11.));
+                    #[cfg(test)]
+                    ui.data_mut(|data| {
+                        data.insert_temp(egui::Id::new("menu_save_status"), response.rect)
+                    });
+                    let _ = response;
+                });
+            });
+        });
+    }
+
+    fn top_menu_contents(&mut self, ui: &mut egui::Ui, menu: TopMenu) {
+        let caption = ui.label(
+            RichText::new("미구현 표시 항목은 준비 중입니다.")
+                .small()
+                .weak(),
+        );
+        #[cfg(test)]
+        ui.data_mut(|data| {
+            data.insert_temp(egui::Id::new(("catalog_caption", menu)), caption.rect);
+        });
+        let _ = caption;
+        ui.separator();
+        if menu == TopMenu::View {
+            self.display_menu(ui);
+        } else {
+            self.catalog_menu(
+                ui,
+                catalog::entries(menu),
+                egui::Id::new(("catalog_root", menu)),
+            );
+        }
+    }
+
+    pub(crate) fn expanded_view_menu(&mut self, ui: &mut egui::Ui) {
+        self.catalog_menu(
+            ui,
+            catalog::VIEW,
+            egui::Id::new(("catalog_root", TopMenu::View)),
+        );
+    }
+
+    fn catalog_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        items: &'static [catalog::MenuItem],
+        path: egui::Id,
+    ) {
+        ui.set_min_width(252.);
+        let height = (ui.ctx().content_rect().height() - 112.).clamp(100., 680.);
+        let output = ui.scope(|ui| {
+            ui.set_max_height(height);
+            egui::ScrollArea::vertical()
+            .id_salt(path)
+            .max_height(height)
+            .show(ui, |ui| {
+                for (index, item) in items.iter().enumerate() {
+                    let id = path.with(index);
+                    ui.push_id(id, |ui| match item {
+                        catalog::MenuItem::Action(command) => self.top_menu_command(ui, *command),
+                        catalog::MenuItem::Toggle(command) => {
+                            let selected = self.menu_selected(*command);
+                            self.top_menu_toggle(ui, *command, selected);
+                        }
+                        catalog::MenuItem::Planned(label) => {
+                            let response = ui.add_enabled(
+                                false,
+                                egui::Button::new(*label).shortcut_text("미구현"),
+                            );
+                            #[cfg(test)]
+                            ui.data_mut(|data| {
+                                data.insert_temp(
+                                    egui::Id::new(("unsupported_menu", *label)),
+                                    (response.rect, response.enabled()),
+                                );
+                                data.insert_temp(
+                                    egui::Id::new(("catalog_planned", id)),
+                                    (response.rect, response.enabled()),
+                                );
+                            });
+                            response.on_disabled_hover_text(
+                                "아직 구현되거나 이 메뉴에 연결되지 않은 항목입니다. 실행 및 단축키 지정은 지원하지 않습니다.",
+                            );
+                        }
+                        catalog::MenuItem::Group(label, children) => {
+                            let response = ui.menu_button(*label, |ui| {
+                                self.catalog_menu(ui, children, id);
+                            });
+                            #[cfg(test)]
+                            ui.data_mut(|data| {
+                                data.insert_temp(
+                                    egui::Id::new(("catalog_group", id)),
+                                    (response.response.rect, response.inner.is_some()),
+                                );
+                            });
+                            let _ = response;
+                        }
+                        catalog::MenuItem::Separator => {
+                            ui.separator();
+                        }
+                    });
+                }
+            })
+        }).inner;
+        #[cfg(test)]
+        ui.data_mut(|data| {
+            data.insert_temp(egui::Id::new(("catalog_viewport", path)), output.inner_rect);
+        });
+        let _ = output;
+    }
+
+    fn menu_selected(&self, command: Command) -> bool {
+        match command {
+            Command::LayerVisibility => self.doc.layers[self.doc.active].visible,
+            Command::LayerLock => self.doc.layers[self.doc.active].locked,
+            Command::LayerAlphaLock => self.doc.layers[self.doc.active].alpha_locked,
+            Command::LayerClipping => self.doc.layers[self.doc.active].clipped,
+            Command::LayerMaskEnabled => self.doc.layers[self.doc.active]
+                .mask
+                .as_ref()
+                .is_some_and(|mask| mask.enabled),
+            Command::RulerBar => self.display.rulers,
+            Command::PixelGrid => self.display.pixel_grid,
+            Command::FlipHorizontal => self.view.flip_horizontal,
+            Command::FlipVertical => self.view.flip_vertical,
+            Command::HidePalettes => self.hide_panels,
+            _ => {
+                self.workspace.panels.iter().any(|placement| {
+                    Some(placement.palette) == command.palette() && placement.visible
+                })
+            }
+        }
+    }
+
+    pub(crate) fn top_menu_command(&mut self, ui: &mut egui::Ui, command: Command) {
+        self.command_menu_item_named(ui, command, menu_label(command));
+    }
+
+    pub(crate) fn top_menu_toggle(&mut self, ui: &mut egui::Ui, command: Command, selected: bool) {
+        self.command_toggle_named(ui, command, selected, menu_label(command));
+    }
+}
+
+fn menu_label(command: Command) -> &'static str {
+    match command {
+        Command::NewDrawing => "새 그림…",
+        Command::OpenProject => "열기…",
+        Command::SaveProject => "저장",
+        Command::SaveAs => "다른 이름으로 저장…",
+        Command::ExportPng => "PNG로 내보내기…",
+        Command::Undo => "실행 취소",
+        Command::Redo => "다시 실행",
+        Command::NewLayer => "새 래스터 레이어",
+        Command::DuplicateLayer => "레이어 복제",
+        Command::DeleteLayer => "레이어 삭제",
+        Command::TransferLayerDown => "아래 레이어로 전송",
+        Command::MergeLayerDown => "아래 레이어와 결합",
+        Command::MergeSelectedLayers => "선택 레이어 결합",
+        Command::MergeVisibleLayers => "표시 레이어 결합",
+        Command::CopyVisibleLayers => "표시 레이어 복사본 결합",
+        Command::FlattenImage => "이미지 통합",
+        Command::ClearLayer => "선택 레이어 비우기",
+        Command::MoveLayerUp => "위로 이동",
+        Command::MoveLayerDown => "아래로 이동",
+        Command::LayerVisibility => "레이어 표시",
+        Command::LayerLock => "레이어 잠금",
+        Command::LayerAlphaLock => "투명 픽셀 잠금",
+        Command::LayerClipping => "아래 레이어에 클리핑",
+        Command::RenameLayer => "레이어 이름 변경…",
+        Command::MoveActiveLayerUp => "앞으로",
+        Command::MoveActiveLayerDown => "뒤로",
+        Command::MoveActiveLayerToTop => "맨 위로 이동",
+        Command::MoveActiveLayerToBottom => "맨 아래로 이동",
+        Command::SelectLayerAbove => "위 레이어",
+        Command::SelectLayerBelow => "아래 레이어",
+        Command::LayerMaskRevealAll => "마스크 만들기 — 모두 표시",
+        Command::LayerMaskHideAll => "마스크 만들기 — 모두 숨기기",
+        Command::DeleteLayerMask => "마스크 삭제",
+        Command::ApplyLayerMask => "마스크를 레이어에 적용",
+        Command::LayerMaskEnabled => "마스크 활성화",
+        Command::ShortcutSettings => "단축키 설정…",
+        Command::ZoomIn => "확대",
+        Command::ZoomOut => "축소",
+        Command::ActualSize => "100% 표시",
+        Command::DoubleSize => "200% 표시",
+        Command::FitCanvas => "화면에 맞추기",
+        Command::ResetDisplay => "표시 초기화",
+        Command::RotateLeft => "왼쪽으로 회전",
+        Command::RotateRight => "오른쪽으로 회전",
+        Command::ResetRotation => "회전 초기화",
+        Command::ResetOrientation => "회전 / 반전 초기화",
+        Command::FlipHorizontal => "좌우 반전",
+        Command::FlipVertical => "상하 반전",
+        Command::RulerBar => "눈금자",
+        Command::PixelGrid => "픽셀 격자 (800% 이상)",
+        Command::DisplaySettings => "표시 설정…",
+        Command::PaletteBrushes => "보조 도구",
+        Command::PaletteProperties => "도구 속성",
+        Command::PaletteSizes => "브러시 크기",
+        Command::PaletteColor => "컬러 휠",
+        Command::PaletteNavigator => "내비게이터",
+        Command::PaletteLayers => "레이어",
+        Command::PaletteHistory => "작업 내역",
+        Command::HidePalettes => "모든 팔레트 숨기기",
+        Command::ResetPaletteLayout => "팔레트 배치 초기화",
+        Command::SubToolDetail => "보조 도구 상세…",
+        Command::ShortcutGuide => "키보드 단축키 안내",
+        Command::Notices => "오픈소스 라이선스",
+        _ => command.label(),
+    }
+}

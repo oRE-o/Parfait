@@ -1,7 +1,7 @@
 #[cfg(test)]
 use eframe::egui::Rect;
 use eframe::egui::{self, Sense, Stroke};
-use parfait_core::{Brush, GapMode};
+use parfait_core::{Brush, BrushOperation, GapMode};
 
 const MODES: [(GapMode, &str, usize, f32); 4] = [
     (GapMode::Fixed, "Fixed", 1, 0.),
@@ -47,7 +47,7 @@ pub fn gap_selector(ui: &mut egui::Ui, brush: &mut Brush) {
                 #[cfg(test)]
                 ui.data_mut(|data| data.insert_temp(egui::Id::new(("gap_mode", label)), rect));
                 response.on_hover_text(format!(
-                    "{}\nCurrent interval: {:.2} document px",
+                    "{}\nCurrent interval: {:.2} document px\nFixed pressure interval: {:.2}–{:.2} px (0–100% input)",
                     match mode {
                         GapMode::Fixed => "Fixed: use your spacing value below",
                         GapMode::Wide => "Wide: 50% of the maximum brush diameter",
@@ -56,7 +56,7 @@ pub fn gap_selector(ui: &mut egui::Ui, brush: &mut Brush) {
                             "Narrow: 10% of the maximum brush diameter; more dabs cost more work"
                         }
                     },
-                    brush.spacing_pixels()
+                    brush.spacing_pixels(), brush.spacing_pixels_at(0.), brush.spacing_pixels_at(1.)
                 ));
             }
         });
@@ -65,12 +65,13 @@ pub fn gap_selector(ui: &mut egui::Ui, brush: &mut Brush) {
 
 pub fn spray_controls(ui: &mut egui::Ui, brush: &mut Brush) {
     ui.separator();
-    let response = ui.checkbox(&mut brush.continuous_spray, "Continuous spraying").on_hover_text("Keep depositing paint while the pen stays down, even without moving. Flow controls each dab; Rate controls dabs per second.");
+    let supported = brush.operation() != BrushOperation::Smudge;
+    let response = ui.add_enabled(supported, egui::Checkbox::new(&mut brush.continuous_spray, "Continuous spraying")).on_hover_text("Accumulate the effect while held still. Smudge requires movement and does not use stationary spraying. Disabled values are retained for other operations.");
     #[cfg(test)]
     ui.data_mut(|data| data.insert_temp(egui::Id::new("continuous_spray"), response.rect));
     let _ = response;
     ui.push_id("spray_rate", |ui| {
-        ui.add_enabled_ui(brush.continuous_spray, |ui| {
+        ui.add_enabled_ui(supported && brush.continuous_spray, |ui| {
             crate::brush_widgets::parameter(
                 ui,
                 &mut brush.spray_rate,
@@ -86,9 +87,12 @@ pub fn spray_controls(ui: &mut egui::Ui, brush: &mut Brush) {
             );
         });
     });
+    if !supported {
+        ui.weak("Smudge needs movement; stationary spraying is not used.");
+    }
     ui.collapsing("Other stroke settings", |ui| {
-        ui.label("Spacing uses maximum diameter. Narrow gaps and higher spray rates do more work. The preview does not simulate a stationary hold.");
-        ui.label("Ribbon, multiple-tip repeat order and pressure/velocity-driven spacing are not implemented yet.");
+        ui.label("Spacing uses maximum diameter. Fixed spacing can use its own pressure curve via the dynamics button. Narrow gaps and higher spray rates do more work. The preview does not simulate a stationary hold.");
+        ui.label("Ribbon, multiple-tip repeat order and velocity-driven spacing are not implemented yet.");
     });
 }
 
@@ -149,5 +153,11 @@ mod tests {
         assert!(brush.continuous_spray);
         brush.continuous_spray = false;
         assert!(brush == before);
+        brush.operation = BrushOperation::Smudge;
+        brush.continuous_spray = true;
+        let retained = brush.clone();
+        frame(&mut brush, vec![]);
+        click(&mut brush, egui::Id::new("continuous_spray"));
+        assert!(brush == retained);
     }
 }

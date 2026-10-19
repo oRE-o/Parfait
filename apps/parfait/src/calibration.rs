@@ -1,4 +1,4 @@
-use crate::app::Parfait;
+use crate::{app::Parfait, widgets};
 use eframe::egui::{self, Color32, Event, Pos2, Sense, Stroke, TouchPhase};
 use parfait_core::PressureCalibration;
 
@@ -68,6 +68,7 @@ impl CalibrationDialog {
     fn pad(&mut self, ui: &mut egui::Ui) {
         ui.label("Test strokes — preview updates when you edit the curve");
         let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 180.), Sense::drag());
+        let visible = r.intersect(ui.clip_rect());
         let events = ui.input(|i| i.events.clone());
         let has_touch = events.iter().any(|e| matches!(e, Event::Touch { .. }));
         for event in events {
@@ -76,7 +77,7 @@ impl CalibrationDialog {
                     phase, pos, force, ..
                 } => {
                     if phase == TouchPhase::Start {
-                        self.active = r.contains(pos);
+                        self.active = visible.contains(pos);
                         self.connected = false;
                     }
                     if self.active && matches!(phase, TouchPhase::Start | TouchPhase::Move) {
@@ -98,7 +99,7 @@ impl CalibrationDialog {
                     pressed,
                     ..
                 } if !has_touch => {
-                    self.active = pressed && r.contains(pos);
+                    self.active = pressed && visible.contains(pos);
                     self.connected = false;
                     if self.active {
                         self.record(pos, 1., r, false);
@@ -114,7 +115,7 @@ impl CalibrationDialog {
                 _ => {}
             }
         }
-        let p = ui.painter().with_clip_rect(r);
+        let p = ui.painter().with_clip_rect(visible);
         p.rect_filled(r, 0., Color32::from_gray(245));
         let mut previous = None;
         for (v, raw, connected) in &self.marks {
@@ -145,21 +146,13 @@ impl Parfait {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
+        let body_height = (ctx.content_rect().height() - 180.).clamp(180., 520.);
         egui::Window::new("Tablet pressure calibration")
             .open(&mut open).collapsible(false).resizable(false)
             .default_pos(ctx.content_rect().center() - egui::vec2(260., 250.))
             .constrain_to(ctx.content_rect()).default_width(500.).show(ctx,|ui| {
-            // Keep dismissal outside the scrolling body, even on small/high-DPI windows.
-            ui.horizontal(|ui| {
-                apply = ui.add_enabled(dialog.draft.validate(),
-                    egui::Button::new("Apply & close").min_size(egui::vec2(120., 30.))).clicked();
-                let close = ui.add(egui::Button::new("Cancel / close").min_size(egui::vec2(120., 30.)))
-                    .on_hover_text("Close without applying changes (Escape)");
-                #[cfg(test)] { dialog.cancel_rect = Some(close.rect); }
-                cancel = close.clicked();
-            });
-            ui.separator();
-            egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 180.).max(100.))
+            egui::ScrollArea::vertical().max_height(body_height)
+                .min_scrolled_height(body_height).auto_shrink([false, false])
                 .show(ui, |ui| {
             ui.label("Device calibration · applies to all brushes before their individual pressure settings.");
             dialog.graph(ui); dialog.pad(ui);
@@ -174,6 +167,16 @@ impl Parfait {
                 if ui.button("Reset curve").clicked() { dialog.draft=Default::default(); dialog.selected=None; }
             });
             ui.label(&dialog.message);
+            });
+            ui.separator();
+            widgets::action_row(ui, |ui| {
+                ui.add_enabled_ui(dialog.draft.validate(), |ui| {
+                    apply = widgets::action_button(ui, "Apply & close", 110.).clicked();
+                });
+                let close = widgets::action_button(ui, "Cancel / close", 110.)
+                    .on_hover_text("Close without applying changes (Escape)");
+                #[cfg(test)] { dialog.cancel_rect = Some(close.rect); }
+                cancel = close.clicked();
             });
         });
         if apply || cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -230,6 +233,19 @@ mod tests {
             modifiers: Default::default(),
         };
         frame(&mut app, vec![Event::PointerMoved(p), button(true)]);
+        assert!(
+            app.calibration_dialog.as_ref().unwrap().marks.is_empty(),
+            "Footer input reached the clipped test pad"
+        );
+        assert_eq!(
+            app.calibration_dialog
+                .as_ref()
+                .unwrap()
+                .cancel_rect
+                .unwrap(),
+            rect,
+            "Footer moved during pointer-down"
+        );
         frame(&mut app, vec![button(false)]);
         assert!(app.calibration_dialog.is_none());
         app.calibration_dialog = Some(CalibrationDialog::new(PressureCalibration {

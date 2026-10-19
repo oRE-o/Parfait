@@ -1,72 +1,91 @@
 use crate::app::Parfait;
 use eframe::egui::{self, Key};
+mod commands;
+mod editor;
+mod keymap;
+pub use commands::{Category, Command};
+pub use editor::ShortcutEditor;
+pub use keymap::{Chord, Keymap};
 pub const HELP: &[&str] = &[
-    "P    Pen       K    Pencil       B    Paint / marker",
-    "A    Airbrush       E    Eraser       H    Hand       I    Eyedropper",
-    "[ / ]    Smaller / larger brush",
+    "Fixed pointer gestures (not key bindings):",
     "Space + drag    Pan canvas",
     "Shift + Space + drag    Rotate view",
     "Ctrl + Space + drag    Zoom view",
     "Mouse wheel / Ctrl + wheel    Zoom at cursor",
-    "Ctrl + + / -    Zoom canvas (Ctrl + = also zooms in)",
     "Alt + click    Pick color",
-    "Ctrl + 0    Fit canvas / reset rotation",
-    "Ctrl + Z    Undo       Ctrl + Y    Redo",
-    "Ctrl + Shift + Z    Redo",
-    "Ctrl + Shift + N    New layer",
-    "Ctrl + N    New drawing",
-    "Ctrl + O    Open project",
-    "Ctrl + S    Save project       Ctrl + Shift + S    Save as",
-    "Ctrl + Shift + E    Export PNG",
-    "Tab    Hide side panels",
-    "F1    This guide",
+    "Escape    Close guide / settings (cancel shortcut draft)",
 ];
 impl Parfait {
     pub fn shortcuts(&mut self, ctx: &egui::Context) {
-        if self.calibration_dialog.is_some()
-            || self.brush_details.dialog_open()
+        if self.shortcut_editor.is_some() {
+            return;
+        }
+        if self.show_help || self.show_licenses || self.show_display_settings {
+            if ctx.input(|input| input.key_pressed(Key::Escape)) {
+                self.show_help = false;
+                self.show_licenses = false;
+                self.show_display_settings = false;
+            } else if self.show_help
+                && ctx.input(|input| {
+                    input.events.iter().any(|event| {
+                        if let egui::Event::Key {
+                            key,
+                            pressed: true,
+                            repeat: false,
+                            modifiers,
+                            ..
+                        } = event
+                        {
+                            self.keymap
+                                .resolve(Chord::from_event(*key, *modifiers), None)
+                                == Some(Command::ShortcutGuide)
+                        } else {
+                            false
+                        }
+                    })
+                })
+            {
+                self.show_help = false;
+            }
+            return;
+        }
+        if self.dialog_open()
             || ctx.egui_wants_keyboard_input()
             || self.stroke.is_some()
-            || self.confirm_new
-            || self.error.is_some()
+            || self.layer_list.owns_pointer()
         {
             return;
         }
-        let events = ctx.input(|i| i.events.clone());
-        for event in events {
-            let egui::Event::Key {
-                key,
-                pressed: true,
-                modifiers,
-                ..
-            } = event
-            else {
-                continue;
-            };
-            let command = (modifiers.command || modifiers.ctrl) && !modifiers.alt;
-            // Only registered combinations take precedence. An unused modifier falls
-            // through to the ordinary key action instead of disabling all tool keys.
-            match (key, command, modifiers.shift) {
-                (Key::Z, true, false) => self.undo(),
-                (Key::Z, true, true) | (Key::Y, true, false) => self.redo(),
-                (Key::S, true, shift) => self.save_project(shift),
-                (Key::O, true, false) => self.open_project(),
-                (Key::N, true, true) => self.edit(|d| d.add_layer()),
-                (Key::N, true, false) => self.confirm_new = true,
-                (Key::E, true, true) => self.export(),
-                (Key::Num0, true, false) => self.view = Default::default(),
-                (Key::P, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Ink),
-                (Key::B, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Paint),
-                (Key::K, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Sketch),
-                (Key::A, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Airbrush),
-                (Key::E, _, _) => self.select_brush_group(crate::brushes::BrushGroup::Eraser),
-                (Key::H, _, _) => self.navigation_tool = 1,
-                (Key::I, _, _) => self.navigation_tool = 2,
-                (Key::OpenBracket, _, _) => self.brush.size = (self.brush.size / 1.2).max(1.),
-                (Key::CloseBracket, _, _) => self.brush.size = (self.brush.size * 1.2).min(512.),
-                (Key::Tab, _, _) => self.hide_panels = !self.hide_panels,
-                (Key::F1, _, _) => self.show_help = !self.show_help,
-                _ => {}
+        let keys: Vec<_> = ctx.input(|input| {
+            input
+                .events
+                .iter()
+                .filter_map(|event| {
+                    if let egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        repeat,
+                        ..
+                    } = event
+                    {
+                        Some((*key, *modifiers, *repeat))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        });
+        for (key, modifiers, repeat) in keys {
+            if let Some(command) = self.keymap.resolve(
+                Chord::from_event(key, modifiers),
+                self.active_tool_command(),
+            ) && (!repeat || command.repeatable())
+            {
+                self.execute_command(command, ctx);
+            }
+            if self.dialog_open() {
+                break;
             }
         }
     }
@@ -74,6 +93,120 @@ impl Parfait {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn key_frame(
+        app: &mut Parfait,
+        ctx: &egui::Context,
+        key: Key,
+        modifiers: egui::Modifiers,
+        repeat: bool,
+        focus: bool,
+    ) {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                events: vec![
+                    egui::Event::ModifiersChanged(modifiers),
+                    egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat,
+                        modifiers,
+                    },
+                ],
+                ..Default::default()
+            },
+            |ui| {
+                if focus {
+                    ui.text_edit_singleline(&mut String::new()).request_focus();
+                }
+                app.shortcuts(ui.ctx());
+            },
+        );
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn view_shortcuts_respect_repeat_text_stroke_and_modal_ownership() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let ctx = egui::Context::default();
+        let shift = egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        let control = egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..Default::default()
+        };
+        key_frame(&mut app, &ctx, Key::H, shift, false, false);
+        assert!(app.view.flip_horizontal);
+        assert_eq!(app.navigation_tool, 0);
+        key_frame(&mut app, &ctx, Key::H, shift, true, false);
+        assert!(app.view.flip_horizontal);
+        key_frame(&mut app, &ctx, Key::V, shift, false, false);
+        assert!(app.view.flip_vertical);
+        app.display.rotation_step = 15.;
+        key_frame(&mut app, &ctx, Key::ArrowRight, shift, false, false);
+        assert!((app.view.angle.to_degrees() - 15.).abs() < 0.001);
+        key_frame(&mut app, &ctx, Key::R, control, false, false);
+        assert!(!app.display.rulers);
+        key_frame(&mut app, &ctx, Key::R, control, true, false);
+        assert!(!app.display.rulers);
+        key_frame(
+            &mut app,
+            &ctx,
+            Key::G,
+            egui::Modifiers {
+                shift: true,
+                ..control
+            },
+            false,
+            false,
+        );
+        assert!(app.display.pixel_grid);
+        key_frame(&mut app, &ctx, Key::K, control, false, false);
+        assert!(app.show_display_settings);
+        key_frame(&mut app, &ctx, Key::H, shift, false, false);
+        assert!(app.view.flip_horizontal);
+        key_frame(
+            &mut app,
+            &ctx,
+            Key::Escape,
+            Default::default(),
+            false,
+            false,
+        );
+        assert!(!app.show_display_settings);
+        for modal in 0..4 {
+            app.show_help = modal == 0;
+            app.show_licenses = modal == 1;
+            app.confirm_new = modal == 2;
+            app.error = (modal == 3).then(|| "test error".into());
+            key_frame(&mut app, &ctx, Key::V, shift, false, false);
+            assert!(app.view.flip_vertical);
+        }
+        app.error = None;
+        app.show_help = false;
+        app.show_licenses = false;
+        app.confirm_new = false;
+        app.stroke = Some(parfait_core::Stroke::begin(
+            &mut app.doc,
+            app.brush.clone(),
+            parfait_core::Point {
+                x: 12.,
+                y: 12.,
+                pressure: 1.,
+            },
+        ));
+        key_frame(&mut app, &ctx, Key::H, shift, false, false);
+        assert!(app.view.flip_horizontal);
+        app.stroke = None;
+        key_frame(&mut app, &ctx, Key::H, shift, false, true);
+        assert!(app.view.flip_horizontal);
+        assert!(ctx.egui_wants_keyboard_input());
+    }
     #[test]
     fn unused_control_combinations_fall_through_and_registered_ones_win() {
         let dir = tempfile::tempdir().unwrap();

@@ -243,6 +243,13 @@ pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> 
     if let Some(active) = options.dynamics {
         let button_rect = geometry.dynamics;
         let button = ui.interact(button_rect, ui.id().with("dynamics"), Sense::click());
+        #[cfg(test)]
+        ui.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new(("parameter_dynamics", options.label)),
+                button_rect,
+            )
+        });
         button.widget_info(|| {
             egui::WidgetInfo::labeled(
                 egui::WidgetType::Button,

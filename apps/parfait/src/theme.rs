@@ -11,6 +11,20 @@ pub fn apply(ctx: &egui::Context) {
     style.visuals.override_text_color = Some(Color32::from_gray(209));
     style.visuals.selection.bg_fill = Color32::from_rgb(91, 105, 126);
     style.visuals.selection.stroke.color = ACCENT;
+    style.visuals.window_corner_radius = egui::CornerRadius::ZERO;
+    style.visuals.menu_corner_radius = egui::CornerRadius::ZERO;
+    style.visuals.window_shadow = egui::epaint::Shadow {
+        offset: [0, 4],
+        blur: 12,
+        spread: 0,
+        color: Color32::from_black_alpha(72),
+    };
+    style.visuals.popup_shadow = egui::epaint::Shadow {
+        offset: [0, 2],
+        blur: 6,
+        spread: 0,
+        color: Color32::from_black_alpha(64),
+    };
     for widget in [
         &mut style.visuals.widgets.noninteractive,
         &mut style.visuals.widgets.inactive,
@@ -37,6 +51,7 @@ pub fn apply(ctx: &egui::Context) {
     style.spacing.item_spacing = egui::vec2(4., 4.);
     style.spacing.button_padding = egui::vec2(5., 2.);
     style.spacing.interact_size = egui::vec2(20., 20.);
+    style.spacing.scroll = egui::style::ScrollStyle::solid();
     style.spacing.slider_width = 100.;
     for text in [
         egui::TextStyle::Body,
@@ -49,7 +64,25 @@ pub fn apply(ctx: &egui::Context) {
     }
     ctx.set_style_of(egui::Theme::Dark, style);
     ctx.set_theme(egui::ThemePreference::Dark);
+    ctx.set_fonts(font_definitions());
+}
+
+fn font_definitions() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "Pretendard".into(),
+        egui::FontData::from_static(include_bytes!(
+            "../assets/pretendard/Pretendard-Regular.otf"
+        ))
+        .into(),
+    );
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .entry(family)
+            .or_default()
+            .insert(0, "Pretendard".into());
+    }
     fonts.font_data.insert(
         "fontawesome-solid".into(),
         egui::FontData::from_static(include_bytes!("../assets/fontawesome/fa-solid-900.ttf"))
@@ -59,31 +92,54 @@ pub fn apply(ctx: &egui::Context) {
         egui::FontFamily::Name("icons".into()),
         vec!["fontawesome-solid".into()],
     );
-    // Use a system CJK font if available; no system font binaries are distributed.
-    for path in [
-        "C:/Windows/Fonts/malgun.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-    ] {
-        if let Ok(bytes) = std::fs::read(path) {
-            fonts.font_data.insert(
-                "system-cjk".into(),
-                egui::FontData::from_owned(bytes).into(),
-            );
-            fonts
-                .families
-                .entry(egui::FontFamily::Proportional)
-                .or_default()
-                .push("system-cjk".into());
-            break;
-        }
-    }
-    ctx.set_fonts(fonts);
+    fonts
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pretendard_is_shared_by_all_text_families_and_icons_remain_separate() {
+        let definitions = font_definitions();
+        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            assert_eq!(definitions.families[&family][0], "Pretendard");
+        }
+        assert_eq!(
+            definitions.families[&egui::FontFamily::Name("icons".into())],
+            vec!["fontawesome-solid"]
+        );
+        assert!(!definitions.font_data.contains_key("system-cjk"));
+        let ctx = egui::Context::default();
+        apply(&ctx);
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            ui.label("가나다 브러시 설정 100% 200px");
+            ui.ctx().fonts_mut(|fonts| {
+                for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                    assert!(
+                        fonts.has_glyphs(&egui::FontId::new(12., family), "가나다힣ABC0123%°×")
+                    );
+                }
+                let icon_font = egui::FontId::new(14., egui::FontFamily::Name("icons".into()));
+                let missing =
+                    fonts.layout_no_wrap("\u{10ffff}".into(), icon_font.clone(), Color32::WHITE);
+                for kind in [crate::widgets::Icon::Pen, crate::widgets::Icon::Grip] {
+                    let icon = fonts.layout_no_wrap(
+                        kind.glyph().into(),
+                        icon_font.clone(),
+                        Color32::WHITE,
+                    );
+                    assert!(!icon.rows[0].visuals.mesh.vertices.is_empty());
+                    assert_ne!(
+                        icon.rows[0].glyphs[0].uv_rect,
+                        missing.rows[0].glyphs[0].uv_rect
+                    );
+                }
+            });
+        });
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+    }
+
     #[test]
     fn control_plus_does_not_change_ui_scale() {
         let ctx = egui::Context::default();

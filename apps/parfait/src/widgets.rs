@@ -3,6 +3,7 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 
 #[derive(Clone, Copy)]
 pub enum Icon {
+    Grip,
     Pen,
     Pencil,
     Brush,
@@ -23,6 +24,9 @@ pub enum Icon {
     Trash,
     Up,
     Down,
+    Lock,
+    Unlock,
+    Check,
     Close,
     Maximize,
     Restore,
@@ -30,10 +34,17 @@ pub enum Icon {
     Favorite,
     More,
     Material,
+    Settings,
+    Blend,
+    Transfer,
+    Merge,
+    AlphaLock,
+    Clipping,
 }
 impl Icon {
     pub fn glyph(self) -> &'static str {
         match self {
+            Icon::Grip => "\u{f58e}",
             Icon::Pen => "\u{f5ad}",
             Icon::Pencil => "\u{f303}",
             Icon::Brush => "\u{f55d}",
@@ -54,6 +65,9 @@ impl Icon {
             Icon::Trash => "\u{f2ed}",
             Icon::Up => "\u{f062}",
             Icon::Down => "\u{f063}",
+            Icon::Lock => "\u{f023}",
+            Icon::Unlock => "\u{f09c}",
+            Icon::Check => "\u{f00c}",
             Icon::Close => "\u{f00d}",
             Icon::Maximize => "\u{f2d0}",
             Icon::Restore => "\u{f2d2}",
@@ -61,8 +75,54 @@ impl Icon {
             Icon::Favorite => "\u{f005}",
             Icon::More => "\u{f141}",
             Icon::Material => "\u{f03e}",
+            Icon::Settings => "\u{f0ad}",
+            Icon::Blend => "\u{f043}",
+            Icon::Transfer | Icon::Merge | Icon::AlphaLock | Icon::Clipping => "",
         }
     }
+}
+
+pub fn action_button(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
+    let response = ui.add_sized([width, 24.], egui::Button::new(label));
+    #[cfg(test)]
+    ui.data_mut(|data| data.insert_temp(egui::Id::new(("action_button", label)), response.rect));
+    response
+}
+
+pub fn action_row<Result>(
+    ui: &mut egui::Ui,
+    contents: impl FnOnce(&mut egui::Ui) -> Result,
+) -> egui::InnerResponse<Result> {
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 6.;
+            ui.spacing_mut().interact_size.y = 24.;
+            contents(ui)
+        })
+        .inner
+    })
+}
+
+pub fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> egui::Response {
+    let response = ui.add(egui::Button::new(label).shortcut_text(shortcut));
+    #[cfg(test)]
+    ui.data_mut(|data| data.insert_temp(egui::Id::new(("menu_item", label)), response.rect));
+    response
+}
+
+pub fn menu_toggle(
+    ui: &mut egui::Ui,
+    label: &str,
+    shortcut: &str,
+    selected: bool,
+) -> egui::Response {
+    let check = egui::RichText::new(if selected { "\u{f14a}" } else { "\u{f0c8}" })
+        .family(egui::FontFamily::Name("icons".into()));
+    let response = ui.add(egui::Button::new((check, label)).shortcut_text(shortcut));
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), selected, label)
+    });
+    response
 }
 
 pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui::Response {
@@ -93,6 +153,99 @@ pub fn icon(ui: &mut egui::Ui, kind: Icon, selected: bool, label: &str) -> egui:
     response.on_hover_text(label)
 }
 
+pub(crate) fn paint_flat_icon(ui: &egui::Ui, rect: Rect, kind: Icon, selected: bool, side: f32) {
+    let color = if !ui.is_enabled() {
+        Color32::from_gray(100)
+    } else if selected {
+        Color32::from_gray(239)
+    } else {
+        Color32::from_gray(196)
+    };
+    if matches!(kind, Icon::Clipping) {
+        let center = rect.center();
+        let stroke = Stroke::new(1.4, color);
+        ui.painter().rect_stroke(
+            Rect::from_center_size(center + egui::vec2(2., -3.), egui::vec2(10., 8.)),
+            1.,
+            stroke,
+            egui::StrokeKind::Inside,
+        );
+        ui.painter().line_segment(
+            [center + egui::vec2(-7., -1.), center + egui::vec2(-7., 6.)],
+            stroke,
+        );
+        ui.painter().line_segment(
+            [center + egui::vec2(-7., 6.), center + egui::vec2(6., 6.)],
+            stroke,
+        );
+        ui.painter().line_segment(
+            [center + egui::vec2(3., 3.), center + egui::vec2(6., 6.)],
+            stroke,
+        );
+        return;
+    }
+    if matches!(kind, Icon::AlphaLock) {
+        let origin = rect.center() - egui::vec2(8., 8.);
+        for row in 0..4 {
+            for column in 0..4 {
+                if (row + column) % 2 == 0 {
+                    ui.painter().rect_filled(
+                        Rect::from_min_size(
+                            origin + egui::vec2(column as f32 * 3., row as f32 * 3.),
+                            Vec2::splat(3.),
+                        ),
+                        0.,
+                        color.gamma_multiply(0.65),
+                    );
+                }
+            }
+        }
+        let lock = Rect::from_min_size(rect.center() + egui::vec2(-1., -1.), egui::vec2(8., 8.));
+        ui.painter().rect_filled(lock, 1., color);
+        ui.painter().rect_stroke(
+            lock.translate(egui::vec2(0., -4.))
+                .shrink2(egui::vec2(1., 0.)),
+            3.,
+            Stroke::new(1.3, color),
+            egui::StrokeKind::Inside,
+        );
+        return;
+    }
+    if matches!(kind, Icon::Transfer | Icon::Merge) {
+        let point = |column: f32, row: f32| rect.min + egui::vec2(column, row) * (side / 22.);
+        let stroke = Stroke::new(1.2, color);
+        for (left, top) in [(4., 3.), (2., 7.)] {
+            ui.painter().rect_stroke(
+                Rect::from_min_max(point(left, top), point(left + 9., top + 11.)),
+                1.,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+        }
+        ui.painter()
+            .line_segment([point(17., 4.), point(17., 17.)], stroke);
+        ui.painter()
+            .line_segment([point(14., 14.), point(17., 17.)], stroke);
+        ui.painter()
+            .line_segment([point(17., 17.), point(20., 14.)], stroke);
+        if matches!(kind, Icon::Merge) {
+            ui.painter()
+                .line_segment([point(13., 20.), point(21., 20.)], stroke);
+        }
+        return;
+    }
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        kind.glyph(),
+        egui::FontId::new(
+            (side * 0.6).max(12.),
+            egui::FontFamily::Name("icons".into()),
+        ),
+        color,
+    );
+}
+
 pub fn flat_icon(
     ui: &mut egui::Ui,
     kind: Icon,
@@ -101,6 +254,8 @@ pub fn flat_icon(
     side: f32,
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::click());
+    #[cfg(test)]
+    ui.data_mut(|data| data.insert_temp(egui::Id::new(("flat_icon", label)), rect));
     response.widget_info(|| {
         egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), selected, label)
     });
@@ -128,22 +283,7 @@ pub fn flat_icon(
             egui::StrokeKind::Inside,
         );
     }
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        kind.glyph(),
-        egui::FontId::new(
-            (side * 0.6).max(12.),
-            egui::FontFamily::Name("icons".into()),
-        ),
-        if !ui.is_enabled() {
-            Color32::from_gray(100)
-        } else if selected {
-            Color32::from_gray(239)
-        } else {
-            Color32::from_gray(196)
-        },
-    );
+    paint_flat_icon(ui, rect, kind, selected, side);
     response.on_hover_text(label)
 }
 
@@ -311,6 +451,52 @@ pub fn color_wheel_sized(ui: &mut egui::Ui, color: &mut [u8; 3], max_side: f32) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn action_rows_align_equal_height_buttons_to_the_right_without_wrapping() {
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        let mut targets = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.))),
+                ..Default::default()
+            },
+            |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    ui.scope_builder(
+                        egui::UiBuilder::new()
+                            .max_rect(Rect::from_min_size(ui.cursor().min, egui::vec2(380., 100.))),
+                        |ui| {
+                            ui.set_width(380.);
+                            action_row(ui, |ui| {
+                                for (name, width) in
+                                    [("Close", 56.), ("Save preset", 82.), ("Restore saved", 96.)]
+                                {
+                                    targets.push(action_button(ui, name, width).rect);
+                                }
+                            });
+                        },
+                    );
+                });
+            },
+        );
+        output.textures_delta.clear();
+        assert_eq!(targets[0].right(), 388.);
+        assert!(
+            targets
+                .iter()
+                .all(|rect| rect.height() == 24. && rect.center().y == targets[0].center().y)
+        );
+        assert!(
+            targets
+                .windows(2)
+                .all(|pair| pair[1].right() + 6. <= pair[0].left())
+        );
+        let style = ctx.style_of(egui::Theme::Dark);
+        assert!(!style.spacing.scroll.floating);
+        assert!(!style.spacing.scroll.foreground_color);
+    }
+
     #[test]
     fn hue_selection_survives_black_until_value_is_raised() {
         let ctx = egui::Context::default();

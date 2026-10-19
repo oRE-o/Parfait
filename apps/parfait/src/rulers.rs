@@ -83,7 +83,7 @@ pub fn paint(
     outer: Rect,
     viewport: Rect,
     document_start: Vec2,
-    units_per_point: f32,
+    units_per_point: Vec2,
 ) {
     let horizontal = Rect::from_min_max(
         egui::pos2(viewport.left(), outer.top()),
@@ -113,7 +113,12 @@ pub fn paint(
     for (index, (clip, start, end, origin)) in axes.into_iter().enumerate() {
         let painter = ui.painter().with_clip_rect(clip);
         painter.rect_filled(clip, 0., Color32::from_gray(66));
-        for tick in Axis::new(start, end, origin, units_per_point)
+        let slope = if index == 0 {
+            units_per_point.x
+        } else {
+            units_per_point.y
+        };
+        for tick in Axis::new(start, end, origin, slope)
             .into_iter()
             .flat_map(Axis::ticks)
         {
@@ -230,7 +235,7 @@ mod tests {
                     screen_rect: Some(outer),
                     ..Default::default()
                 },
-                |ui| paint(ui, outer, viewport, -pan, 1.),
+                |ui| paint(ui, outer, viewport, -pan, Vec2::splat(1.)),
             );
             output.textures_delta.clear();
             let labels: Vec<_> = output
@@ -260,6 +265,57 @@ mod tests {
             assert!((vertical.1.pos.y - (viewport.top() + 100. + pan.y - 3.)).abs() < 0.001);
             assert_eq!(vertical.0.right(), viewport.left());
             assert!(labels.iter().any(|(_, text)| text.galley.job.text == "px"));
+        }
+    }
+
+    #[test]
+    fn independently_flipped_axes_keep_document_pixel_labels() {
+        let ctx = egui::Context::default();
+        let outer = Rect::from_min_size(Pos2::ZERO, egui::vec2(600., 400.));
+        let viewport = Rect::from_min_max(egui::pos2(18., 18.), outer.max);
+        for slope in [
+            egui::vec2(-1., 1.),
+            egui::vec2(1., -1.),
+            egui::vec2(-1., -1.),
+        ] {
+            let origin = egui::vec2(
+                if slope.x < 0. { 300. } else { 0. },
+                if slope.y < 0. { 300. } else { 0. },
+            );
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(outer),
+                    ..Default::default()
+                },
+                |ui| {
+                    paint(ui, outer, viewport, origin, slope);
+                },
+            );
+            for (horizontal, offset) in [
+                (true, (100. - origin.x) / slope.x),
+                (false, (100. - origin.y) / slope.y),
+            ] {
+                let label = output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| {
+                        if let egui::Shape::Text(text) = &shape.shape
+                            && text.galley.job.text == "100"
+                            && (text.angle == 0.) == horizontal
+                        {
+                            Some(text)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap();
+                if horizontal {
+                    assert!((label.pos.x - viewport.left() - offset - 3.).abs() < 0.001);
+                } else {
+                    assert!((label.pos.y - viewport.top() - offset + 3.).abs() < 0.001);
+                }
+            }
+            output.textures_delta.clear();
         }
     }
 }

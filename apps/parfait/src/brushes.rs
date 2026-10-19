@@ -2,8 +2,9 @@
 use crate::brush_details::PropertyLayout;
 use crate::{app::Parfait, widgets};
 use eframe::egui;
-use parfait_core::{Brush, BrushTip, Document, Point, Stroke};
+use parfait_core::{Brush, BrushOperation, BrushTip, Document, Point, Stroke};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Preset {
@@ -22,6 +23,7 @@ pub enum BrushGroup {
     Paint,
     Airbrush,
     Eraser,
+    Blend,
     Materials,
 }
 impl BrushGroup {
@@ -32,15 +34,17 @@ impl BrushGroup {
             Self::Paint => widgets::Icon::Brush,
             Self::Airbrush => widgets::Icon::Airbrush,
             Self::Eraser => widgets::Icon::Eraser,
+            Self::Blend => widgets::Icon::Blend,
             Self::Materials => widgets::Icon::Material,
         }
     }
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Ink,
         Self::Sketch,
         Self::Paint,
         Self::Airbrush,
         Self::Eraser,
+        Self::Blend,
         Self::Materials,
     ];
     pub fn label(self) -> &'static str {
@@ -50,11 +54,18 @@ impl BrushGroup {
             Self::Paint => "Paint",
             Self::Airbrush => "Airbrush",
             Self::Eraser => "Eraser",
+            Self::Blend => "Blend",
             Self::Materials => "Materials",
         }
     }
     pub fn of(brush: &Brush) -> Self {
-        if brush.erase {
+        if matches!(
+            brush.operation(),
+            BrushOperation::Blend | BrushOperation::Blur | BrushOperation::Smudge
+        ) {
+            return Self::Blend;
+        }
+        if brush.operation() == BrushOperation::Erase {
             return Self::Eraser;
         }
         match brush.tip {
@@ -231,6 +242,60 @@ pub fn defaults() -> Vec<Preset> {
                 ..Default::default()
             },
         },
+        Preset {
+            name: "Color blend".into(),
+            favorite: false,
+            properties: PropertyLayout::blending(false),
+            brush: Brush {
+                operation: BrushOperation::Blend,
+                size: 48.,
+                flow: 0.35,
+                pressure: false,
+                hardness: 0.5,
+                ..Default::default()
+            },
+        },
+        Preset {
+            name: "Local blur".into(),
+            favorite: false,
+            properties: PropertyLayout::blending(true),
+            brush: Brush {
+                operation: BrushOperation::Blur,
+                size: 64.,
+                flow: 0.5,
+                pressure: false,
+                hardness: 0.5,
+                ..Default::default()
+            },
+        },
+        Preset {
+            name: "Smudge".into(),
+            favorite: false,
+            properties: PropertyLayout::blending(false),
+            brush: Brush {
+                operation: BrushOperation::Smudge,
+                size: 30.,
+                flow: 0.75,
+                color_stretch: 0.7,
+                pressure: false,
+                hardness: 0.6,
+                ..Default::default()
+            },
+        },
+        Preset {
+            name: "Capped marker".into(),
+            favorite: false,
+            properties: Default::default(),
+            brush: Brush {
+                opacity_mode: parfait_core::OpacityMode::PerStroke,
+                tip: BrushTip::Flat,
+                size: 30.,
+                opacity: 0.4,
+                flow: 0.35,
+                pressure: false,
+                ..Default::default()
+            },
+        },
     ]
 }
 
@@ -254,6 +319,29 @@ fn stroke_preview(brush: &Brush, background: [u8; 4], ink: [u8; 3]) -> egui::Col
     preview.size = preview.size.min(38.);
     preview.color = ink;
     preview.erase = false;
+    if matches!(
+        preview.operation(),
+        BrushOperation::Blend | BrushOperation::Blur | BrushOperation::Smudge
+    ) {
+        let pixels = Arc::make_mut(&mut doc.layers[1].pixels);
+        for row in 18..38 {
+            for column in 16..224 {
+                let index = ((row * 240 + column) * 4) as usize;
+                let color = if column < 120 {
+                    if preview.operation() == BrushOperation::Smudge && (row / 3) % 2 == 0 {
+                        ink.map(|component| 255 - component)
+                    } else {
+                        ink
+                    }
+                } else {
+                    ink.map(|component| component / 2)
+                };
+                pixels[index..index + 4].copy_from_slice(&[color[0], color[1], color[2], 255]);
+            }
+        }
+    } else {
+        preview.operation = BrushOperation::Paint;
+    }
     let point = |step: usize| {
         let t = step as f32 / 64.;
         Point {
@@ -294,6 +382,21 @@ impl Parfait {
         }
     }
     pub fn select_brush_group(&mut self, group: BrushGroup) {
+        if group == BrushGroup::Blend {
+            for preset in defaults()
+                .into_iter()
+                .filter(|preset| BrushGroup::of(&preset.brush) == BrushGroup::Blend)
+            {
+                if self.presets.len() < 64
+                    && !self
+                        .presets
+                        .iter()
+                        .any(|existing| existing.name == preset.name)
+                {
+                    self.presets.push(preset);
+                }
+            }
+        }
         self.navigation_tool = 0;
         self.brush_library.group = Some(group);
         self.brush_library.query.clear();
@@ -301,6 +404,7 @@ impl Parfait {
         if BrushGroup::of(&self.brush) == group {
             return;
         }
+        self.brush_details.clear_help();
         self.remember_brush();
         let color = self.brush.color;
         if let Some((_, brush, name, properties)) = self
@@ -334,6 +438,7 @@ impl Parfait {
         self.brush.color = color;
     }
     fn select_preset(&mut self, index: usize) {
+        self.brush_details.clear_help();
         self.remember_brush();
         let color = self.brush.color;
         self.brush = self.presets[index].brush.clone();
@@ -519,7 +624,7 @@ impl Parfait {
                     rect,
                     &self.presets[index].name,
                     self.tip_name == self.presets[index].name
-                        && self.brush.erase == self.presets[index].brush.erase,
+                        && self.brush.operation() == self.presets[index].brush.operation(),
                     BrushGroup::of(&self.presets[index].brush).icon(),
                     preview,
                 );
@@ -654,7 +759,7 @@ impl Parfait {
                 {
                     let file: BrushFile = serde_json::from_slice(&std::fs::read(&path)?)?;
                     anyhow::ensure!(
-                        (1..=4).contains(&file.version),
+                        (1..=8).contains(&file.version),
                         "Unsupported brush format version"
                     );
                     file.preset
@@ -739,7 +844,7 @@ impl Parfait {
             .save_file()
         {
             let file = BrushFile {
-                version: 4,
+                version: 8,
                 preset: Preset {
                     name: self.tip_name.clone(),
                     brush: self.brush.clone(),
@@ -795,6 +900,141 @@ pub(crate) fn pressure_graph(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn smudge_preset_drafts_portable_v6_and_restart_keep_spatial_operation() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let artwork = app.doc.clone();
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        app.select_brush_group(BrushGroup::Blend);
+        library_frame(&mut app, &ctx, 210., vec![]);
+        library_click(&mut app, &ctx, "Smudge");
+        assert_eq!(app.brush.operation(), BrushOperation::Smudge);
+        app.brush.color_stretch = 0.91;
+        let color = app.brush.color;
+        app.select_brush_group(BrushGroup::Ink);
+        app.select_brush_group(BrushGroup::Blend);
+        assert_eq!(app.brush.operation(), BrushOperation::Smudge);
+        assert_eq!(app.brush.color_stretch, 0.91);
+        assert_eq!(app.brush.color, color);
+        app.save_current_preset();
+        let preset = app
+            .presets
+            .iter()
+            .find(|preset| preset.name == "Smudge")
+            .unwrap()
+            .clone();
+        let file: BrushFile = serde_json::from_str(
+            &serde_json::to_string(&BrushFile { version: 6, preset }).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(file.version, 6);
+        assert!(file.preset.brush == app.brush);
+        assert_eq!(file.preset.properties, app.brush_details.properties);
+        let mut changed = app.brush.clone();
+        changed.operation = BrushOperation::Blend;
+        assert_ne!(
+            preview_image(&app.brush).pixels,
+            preview_image(&changed).pixels
+        );
+        changed = app.brush.clone();
+        changed.color = [220, 10, 200];
+        assert_eq!(
+            preview_image(&app.brush).pixels,
+            preview_image(&changed).pixels
+        );
+        assert_eq!(app.doc, artwork);
+        app.persist_preferences(true);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
+            16
+        );
+        drop(app);
+        let app = Parfait::open(dir.path().to_owned()).unwrap();
+        assert_eq!(app.brush.operation(), BrushOperation::Smudge);
+        assert_eq!(app.brush.color_stretch, 0.91);
+        for version in 1..=5 {
+            let encoded = serde_json::json!({"version":version,"preset":{"name":"old","brush":{}}});
+            let old: BrushFile = serde_json::from_value(encoded).unwrap();
+            assert_eq!(old.preset.brush.operation(), BrushOperation::Paint);
+        }
+    }
+
+    #[test]
+    fn blend_group_restores_drafts_and_exchange_preserves_operations() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        app.presets
+            .retain(|preset| BrushGroup::of(&preset.brush) != BrushGroup::Blend);
+        let color = [15, 210, 98];
+        app.brush.color = color;
+        app.select_brush_group(BrushGroup::Blend);
+        assert_eq!(app.brush.operation(), BrushOperation::Blend);
+        assert_eq!(app.brush.color, color);
+        assert_eq!(
+            app.presets
+                .iter()
+                .filter(|preset| BrushGroup::of(&preset.brush) == BrushGroup::Blend)
+                .count(),
+            3
+        );
+        app.brush.color_stretch = 0.19;
+        app.select_brush_group(BrushGroup::Ink);
+        app.select_brush_group(BrushGroup::Blend);
+        assert_eq!(app.brush.color_stretch, 0.19);
+        app.brush.operation = BrushOperation::Blur;
+        app.brush.blur_automatic = false;
+        app.brush.blur_radius = 13.;
+        app.save_current_preset();
+        let preset = app
+            .presets
+            .iter()
+            .find(|preset| preset.name == app.tip_name)
+            .unwrap()
+            .clone();
+        let encoded = serde_json::to_value(BrushFile { version: 5, preset }).unwrap();
+        let decoded: BrushFile = serde_json::from_value(encoded.clone()).unwrap();
+        assert_eq!(decoded.version, 5);
+        assert!(decoded.preset.brush == app.brush);
+        let sample = preview_image(&app.brush);
+        let mut recolored = app.brush.clone();
+        recolored.color = [250, 0, 20];
+        assert_eq!(sample.pixels, preview_image(&recolored).pixels);
+        recolored.operation = BrushOperation::Blend;
+        assert_ne!(sample.pixels, preview_image(&recolored).pixels);
+        app.persist_preferences(true);
+        drop(app);
+        let restored = Parfait::open(dir.path().to_owned()).unwrap();
+        assert_eq!(restored.brush.operation(), BrushOperation::Blur);
+        assert!(!restored.brush.blur_automatic);
+        assert_eq!(restored.brush.blur_radius, 13.);
+        for version in 1..=4 {
+            let mut legacy = encoded.clone();
+            legacy["version"] = version.into();
+            for name in [
+                "operation",
+                "color_stretch",
+                "blur_automatic",
+                "blur_radius",
+            ] {
+                legacy["preset"]["brush"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(name);
+            }
+            let decoded: BrushFile = serde_json::from_value(legacy.clone()).unwrap();
+            assert_eq!(decoded.preset.brush.operation(), BrushOperation::Paint);
+            assert!(decoded.preset.brush.validate());
+            legacy["preset"]["brush"]["erase"] = true.into();
+            let decoded: BrushFile = serde_json::from_value(legacy).unwrap();
+            assert_eq!(decoded.preset.brush.operation(), BrushOperation::Erase);
+        }
+        let mut invalid = encoded;
+        invalid["preset"]["brush"]["operation"] = "FutureOperation".into();
+        assert!(serde_json::from_value::<BrushFile>(invalid).is_err());
+    }
+
     fn library_frame(
         app: &mut Parfait,
         ctx: &egui::Context,
@@ -1159,7 +1399,7 @@ mod tests {
         app.persist_preferences(true);
         assert!(app.error.is_none());
         let saved: serde_json::Value = serde_json::from_str(&app.saved_preferences_json()).unwrap();
-        assert_eq!(saved["version"], 4);
+        assert_eq!(saved["version"], 16);
         drop(app);
         let restored = Parfait::open(dir.path().to_owned()).unwrap();
         assert_eq!(restored.brush.pressure_curve, curve);
@@ -1299,5 +1539,123 @@ mod tests {
             preview_image(&Brush::default()).pixels,
             preview_image(&file.preset.brush).pixels
         );
+    }
+}
+#[cfg(test)]
+mod pressure_spacing_tests {
+    use super::*;
+    #[test]
+    fn opacity_mode_portable_restart_and_legacy_preferences_keep_explicit_semantics() {
+        use parfait_core::OpacityMode;
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let marker = app
+            .presets
+            .iter()
+            .find(|preset| preset.name == "Capped marker")
+            .unwrap()
+            .clone();
+        assert_eq!(marker.brush.opacity_mode, OpacityMode::PerStroke);
+        let encoded = serde_json::to_value(BrushFile {
+            version: 8,
+            preset: marker.clone(),
+        })
+        .unwrap();
+        let decoded: BrushFile = serde_json::from_value(encoded.clone()).unwrap();
+        assert!(decoded.preset == marker);
+        for version in 1..=7 {
+            let mut legacy = encoded.clone();
+            legacy["version"] = version.into();
+            legacy["preset"]["brush"]
+                .as_object_mut()
+                .unwrap()
+                .remove("opacity_mode");
+            let decoded: BrushFile = serde_json::from_value(legacy).unwrap();
+            assert_eq!(decoded.preset.brush.opacity_mode, OpacityMode::PerDab);
+        }
+        app.brush = marker.brush;
+        app.tip_name = marker.name;
+        app.persist_preferences(true);
+        let json = app.saved_preferences_json();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
+            16
+        );
+        drop(app);
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        assert_eq!(app.brush.opacity_mode, OpacityMode::PerStroke);
+        let path = dir.path().join("preferences.sqlite");
+        for version in 1..=8 {
+            let mut legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+            legacy["version"] = version.into();
+            legacy["brush"]
+                .as_object_mut()
+                .unwrap()
+                .remove("opacity_mode");
+            for preset in legacy["presets"].as_array_mut().unwrap() {
+                preset["brush"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("opacity_mode");
+            }
+            parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
+            app.restore_preferences();
+            assert!(!app.preferences_read_failed);
+            assert_eq!(app.brush.opacity_mode, OpacityMode::PerDab);
+        }
+        let mut invalid: serde_json::Value = serde_json::from_str(&json).unwrap();
+        invalid["brush"]["opacity_mode"] = "Unknown mode".into();
+        let invalid = invalid.to_string();
+        parfait_storage::save_preferences(&path, &invalid).unwrap();
+        app.restore_preferences();
+        assert!(app.preferences_read_failed);
+        app.persist_preferences(true);
+        assert_eq!(app.saved_preferences_json(), invalid);
+    }
+    #[test]
+    fn pressure_spacing_exchange_restart_and_old_file_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        app.brush.pressure_spacing = true;
+        app.brush.minimum_spacing = 0.32;
+        app.brush.spacing_curve = [1., 0.9, 0.3, 0.1, 0.].into();
+        app.save_current_preset();
+        let expected = app.brush.clone();
+        let file = BrushFile {
+            version: 7,
+            preset: app
+                .presets
+                .iter()
+                .find(|preset| preset.name == app.tip_name)
+                .unwrap()
+                .clone(),
+        };
+        let encoded = serde_json::to_value(file).unwrap();
+        let decoded: BrushFile = serde_json::from_value(encoded.clone()).unwrap();
+        assert!(decoded.preset.brush == expected);
+        app.persist_preferences(true);
+        drop(app);
+        let app = Parfait::open(dir.path().to_owned()).unwrap();
+        assert!(app.brush == expected);
+        for version in 1..=6 {
+            let mut legacy = encoded.clone();
+            legacy["version"] = version.into();
+            for field in ["pressure_spacing", "minimum_spacing", "spacing_curve"] {
+                legacy["preset"]["brush"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(field);
+            }
+            let restored: BrushFile = serde_json::from_value(legacy).unwrap();
+            assert!(!restored.preset.brush.pressure_spacing);
+            assert_eq!(restored.preset.brush.minimum_spacing, 0.1);
+            assert_eq!(restored.preset.brush.spacing_curve, Default::default());
+        }
+        for invalid in [serde_json::json!(-0.1), serde_json::json!(1.1)] {
+            let mut file = encoded.clone();
+            file["preset"]["brush"]["minimum_spacing"] = invalid;
+            let restored: BrushFile = serde_json::from_value(file).unwrap();
+            assert!(!restored.preset.brush.validate());
+        }
     }
 }

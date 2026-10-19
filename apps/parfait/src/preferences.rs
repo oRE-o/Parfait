@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default)]
+    pub keymap: crate::shortcuts::Keymap,
+    #[serde(default)]
+    pub display: crate::display::DisplaySettings,
+    #[serde(default)]
     pub calibration: parfait_core::PressureCalibration,
     pub version: u32,
     pub workspace: Workspace,
@@ -22,7 +26,9 @@ impl Preferences {
     fn current(app: &Parfait) -> Self {
         Self {
             calibration: app.calibration.clone(),
-            version: 4,
+            version: 16,
+            keymap: app.keymap.preferences(),
+            display: app.display,
             workspace: app.workspace.clone(),
             presets: app.presets.clone(),
             brush: app.brush.clone(),
@@ -33,8 +39,10 @@ impl Preferences {
         }
     }
 
-    fn matches(&self, app: &Parfait) -> bool {
-        self.version == 4
+    pub(crate) fn matches(&self, app: &Parfait) -> bool {
+        self.version == 16
+            && self.keymap == app.keymap
+            && self.display == app.display
             && self.calibration == app.calibration
             && self.workspace.same_preferences(&app.workspace)
             && self.presets == app.presets
@@ -47,7 +55,9 @@ impl Preferences {
     }
 
     pub fn validate(&self) -> bool {
-        (1..=4).contains(&self.version)
+        (1..=16).contains(&self.version)
+            && self.keymap.validate()
+            && self.display.validate()
             && self.calibration.validate()
             && self.workspace.validate()
             && self.presets.len() <= 64
@@ -66,9 +76,15 @@ impl Parfait {
                 &self.recovery_path.with_file_name("preferences.sqlite"),
             )? {
                 anyhow::ensure!(json.len() <= 32 * 1024 * 1024, "Preferences too large");
-                let pref: Preferences = serde_json::from_str(&json)?;
+                let mut pref: Preferences = serde_json::from_str(&json)?;
+                if (1..=9).contains(&pref.version) {
+                    pref.workspace.upgrade_history();
+                }
                 anyhow::ensure!(pref.validate(), "Invalid or unsupported preferences");
                 self.calibration = pref.calibration.clone();
+                self.display = pref.display;
+                self.keymap = pref.keymap.clone();
+                self.keymap.refresh();
                 self.workspace = pref.workspace.clone();
                 self.presets = pref.presets.clone();
                 self.brush = pref.brush.clone();
@@ -127,6 +143,59 @@ impl Parfait {
 }
 
 #[cfg(test)]
+mod history_migration_tests {
+    use super::*;
+    use crate::workspace::{Location, Palette};
+
+    #[test]
+    fn six_palette_versions_upgrade_without_moving_existing_layouts_or_resetting_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        app.workspace.panels[0].location = Location::Floating;
+        app.workspace.panels[0].rect = [130., 90., 320., 410.];
+        app.persist_preferences(true);
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(&app.saved_preferences_json()).unwrap();
+        legacy["workspace"]["panels"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|placement| placement["palette"] != "History");
+        let expected = legacy["workspace"]["panels"].clone();
+        let keys = app.keymap.clone();
+        drop(app);
+        let path = dir.path().join("preferences.sqlite");
+        for version in 1..=9 {
+            legacy["version"] = version.into();
+            parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
+            let mut restored = Parfait::open(dir.path().to_owned()).unwrap();
+            assert!(!restored.preferences_read_failed);
+            assert!(restored.keymap == keys);
+            assert_eq!(restored.workspace.panels.len(), 7);
+            let history = restored
+                .workspace
+                .panels
+                .iter()
+                .find(|placement| placement.palette == Palette::History)
+                .unwrap();
+            assert!(!history.visible);
+            let actual = serde_json::to_value(&restored.workspace).unwrap();
+            assert_eq!(
+                &actual["panels"].as_array().unwrap()[..6],
+                expected.as_array().unwrap().as_slice()
+            );
+            restored.persist_preferences(true);
+            assert_eq!(restored.preferences_saved.as_ref().unwrap().version, 16);
+        }
+        legacy["version"] = 10.into();
+        parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
+        let mut restored = Parfait::open(dir.path().to_owned()).unwrap();
+        assert!(restored.preferences_read_failed);
+        restored.persist_preferences(true);
+        assert_eq!(restored.saved_preferences_json(), legacy.to_string());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -135,7 +204,26 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
         app.persist_preferences(true);
-        let changes: [fn(&mut Parfait); 12] = [
+        let changes: [fn(&mut Parfait); 24] = [
+            |app| app.brush.opacity_mode = parfait_core::OpacityMode::PerStroke,
+            |app| {
+                app.keymap.remove(
+                    crate::shortcuts::Command::ToolInk,
+                    crate::shortcuts::Chord::new(eframe::egui::Key::P, false, false, false),
+                )
+            },
+            |app| app.display.rulers = !app.display.rulers,
+            |app| app.display.pixel_grid = !app.display.pixel_grid,
+            |app| app.display.brush_cursor = !app.display.brush_cursor,
+            |app| app.display.background = 80,
+            |app| app.display.rotation_step = 15.,
+            |app| app.brush.operation = parfait_core::BrushOperation::Blur,
+            |app| app.brush.color_stretch = 0.1,
+            |app| app.brush.blur_automatic = false,
+            |app| app.brush.blur_radius = 12.,
+            |app| {
+                app.brush_details.properties = crate::brush_details::PropertyLayout::blending(false)
+            },
             |app| app.calibration.points.insert(1, [0.5, 0.8]),
             |app| app.workspace.left_width += 10.,
             |app| app.workspace.panels[0].collapsed = !app.workspace.panels[0].collapsed,
@@ -216,7 +304,7 @@ mod tests {
         parfait_storage::save_preferences(&path, &json.to_string()).unwrap();
         app.restore_preferences();
         app.persist_preferences(true);
-        assert_eq!(app.preferences_saved.as_ref().unwrap().version, 4);
+        assert_eq!(app.preferences_saved.as_ref().unwrap().version, 16);
         json["version"] = serde_json::json!(999);
         let future = json.to_string();
         parfait_storage::save_preferences(&path, &future).unwrap();
@@ -267,5 +355,101 @@ mod tests {
             elapsed.as_secs_f64() * 1000.,
             elapsed.as_secs_f64() * 50.
         );
+    }
+
+    #[test]
+    fn display_settings_roundtrip_legacy_defaults_and_invalid_values_are_protected() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        app.display = crate::display::DisplaySettings {
+            rulers: false,
+            pixel_grid: true,
+            brush_cursor: false,
+            background: 72,
+            rotation_step: 17.,
+        };
+        app.view.flip_horizontal = true;
+        app.persist_preferences(true);
+        let expected = app.display;
+        let json = app.saved_preferences_json();
+        drop(app);
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        assert_eq!(app.display, expected);
+        assert!(!app.view.flip_horizontal);
+        let path = dir.path().join("preferences.sqlite");
+        for version in 1..=6 {
+            let mut legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+            legacy["version"] = version.into();
+            legacy.as_object_mut().unwrap().remove("display");
+            parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
+            app.restore_preferences();
+            assert!(!app.preferences_read_failed);
+            assert_eq!(app.display, Default::default());
+        }
+        for display in [
+            serde_json::json!({"rotation_step":0}),
+            serde_json::json!({"rotation_step":91}),
+            serde_json::json!({"background":19}),
+            serde_json::json!({"background":97}),
+        ] {
+            let mut invalid: serde_json::Value = serde_json::from_str(&json).unwrap();
+            invalid["display"] = display;
+            let invalid = invalid.to_string();
+            parfait_storage::save_preferences(&path, &invalid).unwrap();
+            app.restore_preferences();
+            assert!(app.preferences_read_failed);
+            app.persist_preferences(true);
+            assert_eq!(app.saved_preferences_json(), invalid);
+        }
+        assert!(
+            !crate::display::DisplaySettings {
+                rotation_step: f32::NAN,
+                ..Default::default()
+            }
+            .validate()
+        );
+    }
+
+    #[test]
+    fn keymap_restart_legacy_defaults_and_corrupt_data_protection() {
+        use crate::shortcuts::{Chord, Command, Keymap};
+        use eframe::egui;
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        app.keymap
+            .assign(
+                Command::ToolInk,
+                Some(Chord::new(egui::Key::P, false, false, false)),
+                Chord::new(egui::Key::F8, false, false, false),
+                false,
+            )
+            .unwrap();
+        app.persist_preferences(true);
+        let json = app.saved_preferences_json();
+        drop(app);
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        assert_eq!(
+            app.keymap
+                .resolve(Chord::new(egui::Key::F8, false, false, false), None),
+            Some(Command::ToolInk)
+        );
+        let path = dir.path().join("preferences.sqlite");
+        for version in 1..=7 {
+            let mut legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+            legacy["version"] = version.into();
+            legacy.as_object_mut().unwrap().remove("keymap");
+            parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
+            app.restore_preferences();
+            assert!(!app.preferences_read_failed);
+            assert!(app.keymap == Keymap::default());
+        }
+        let mut invalid: serde_json::Value = serde_json::from_str(&json).unwrap();
+        invalid["keymap"]["bindings"][0]["chord"]["key"] = "Space".into();
+        let invalid = invalid.to_string();
+        parfait_storage::save_preferences(&path, &invalid).unwrap();
+        app.restore_preferences();
+        assert!(app.preferences_read_failed);
+        app.persist_preferences(true);
+        assert_eq!(app.saved_preferences_json(), invalid);
     }
 }
