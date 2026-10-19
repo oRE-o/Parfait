@@ -54,7 +54,7 @@ impl BlendMode {
             Self::Subtract => "Subtract",
         }
     }
-    fn channel(self, b: f32, s: f32) -> f32 {
+    pub(crate) fn channel(self, b: f32, s: f32) -> f32 {
         let hard = |b: f32, s: f32| {
             if s <= 0.5 {
                 2. * b * s
@@ -126,6 +126,33 @@ pub(crate) fn composite_blend(dst: &mut [u8], rgb: [u8; 3], alpha: f32, mode: Bl
     }
     dst[3] = (a * 255.).round() as u8;
 }
+pub(crate) fn composite_opaque(dst: &mut [u8; 4], rgb: [u8; 3], alpha: f32, mode: BlendMode) {
+    debug_assert_eq!(dst[3], 255);
+    let source_alpha = alpha.clamp(0., 1.);
+    if source_alpha == 0. {
+        return;
+    }
+    if mode == BlendMode::Normal {
+        if source_alpha == 1. {
+            dst[..3].copy_from_slice(&rgb);
+            return;
+        }
+        for channel in 0..3 {
+            dst[channel] = (rgb[channel] as f32 * source_alpha
+                + dst[channel] as f32 * (1. - source_alpha))
+                .round() as u8;
+        }
+    } else {
+        for channel in 0..3 {
+            let backdrop = dst[channel] as f32 / 255.;
+            let source = rgb[channel] as f32 / 255.;
+            let color =
+                source_alpha * mode.channel(backdrop, source) + (1. - source_alpha) * backdrop;
+            dst[channel] = (color * 255.).round().clamp(0., 255.) as u8;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +178,50 @@ mod tests {
         assert_eq!(dst, [107, 107, 107, 192]);
         assert_eq!(BlendMode::ColorDodge.channel(0., 1.), 0.);
         assert_eq!(BlendMode::ColorBurn.channel(1., 0.), 1.);
+    }
+
+    #[test]
+    fn opaque_specialization_matches_general_blending_for_byte_pairs_and_opacity_edges() {
+        for mode in BlendMode::ALL {
+            for backdrop in 0..=255u8 {
+                for source in 0..=255u8 {
+                    for alpha in [
+                        0.,
+                        1. / 255.,
+                        0.5,
+                        127. / 255.,
+                        128. / 255.,
+                        254. / 255.,
+                        1.,
+                        0.7,
+                    ] {
+                        let mut expected = [backdrop, source, 255 - backdrop, 255];
+                        let mut actual = expected;
+                        let rgb = [source, 255 - backdrop, backdrop];
+                        composite_blend(&mut expected, rgb, alpha, mode);
+                        composite_opaque(&mut actual, rgb, alpha, mode);
+                        assert_eq!(actual, expected, "{mode:?} {backdrop} {source} {alpha}");
+                    }
+                }
+            }
+        }
+        let mut seed = 7u32;
+        for mode in BlendMode::ALL {
+            for _ in 0..20_000 {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                let mut actual = [
+                    (seed >> 24) as u8,
+                    (seed >> 16) as u8,
+                    (seed >> 8) as u8,
+                    255,
+                ];
+                let mut expected = actual;
+                let rgb = [seed as u8, (seed >> 9) as u8, (seed >> 17) as u8];
+                let alpha = (seed & 0xFFFFFF) as f32 / 0xFFFFFF as f32;
+                composite_blend(&mut expected, rgb, alpha, mode);
+                composite_opaque(&mut actual, rgb, alpha, mode);
+                assert_eq!(actual, expected, "{mode:?} {seed} {alpha}");
+            }
+        }
     }
 }

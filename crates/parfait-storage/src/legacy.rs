@@ -1,5 +1,5 @@
 //! Exact version-1 binary layout. Keep separate: bincode cannot default new struct fields.
-use parfait_core::{BlendMode, Document, Layer};
+use parfait_core::{BlendMode, Document, Layer, LayerId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[derive(Serialize, Deserialize)]
@@ -27,13 +27,19 @@ impl From<LegacyDocument> for Document {
             name: old.name,
             active: old.active,
             revision: old.revision,
+            next_layer_id: old.layers.len() as u64 + 1,
             layers: old
                 .layers
                 .into_iter()
-                .map(|l| Layer {
+                .enumerate()
+                .map(|(index, l)| Layer {
+                    id: LayerId(index as u64 + 1),
                     name: l.name,
                     visible: l.visible,
                     locked: l.locked,
+                    alpha_locked: false,
+                    clipped: false,
+                    mask: None,
                     opacity: l.opacity,
                     pixels: l.pixels,
                     blend_mode: BlendMode::Normal,

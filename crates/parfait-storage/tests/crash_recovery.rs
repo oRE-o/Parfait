@@ -31,6 +31,15 @@ fn crash(mode: &str, expected_layers: usize) {
     let loaded = store.load().unwrap().unwrap();
     assert!(!loaded.fell_back);
     assert_eq!(loaded.document.layers.len(), expected_layers);
+    let mask = loaded.document.layers[1].mask.as_ref().unwrap();
+    assert!(mask.enabled);
+    match (&mask.coverage, mode) {
+        (parfait_core::MaskCoverage::Uniform(128), "during") => {}
+        (parfait_core::MaskCoverage::Dense(values), "after") => {
+            assert_eq!(values.as_slice(), [127; 64 * 64])
+        }
+        _ => panic!("the last committed mask did not survive the process kill"),
+    }
     assert_eq!(
         loaded.document.layers[1].blend_mode,
         parfait_core::BlendMode::Multiply

@@ -1,8 +1,13 @@
-use parfait_core::{Brush, BrushTip, Document, PixelRect, Point, Stroke};
+use parfait_core::{Brush, BrushOperation, BrushTip, Document, PixelRect, Point, Stroke};
 use std::sync::Arc;
 
 #[test]
-fn incremental_pixels_match_full_composite_for_all_tips_and_eraser() {
+fn incremental_pixels_match_full_composite_for_all_tips_and_operations() {
+    check_incremental_pixels(parfait_core::OpacityMode::PerDab);
+    check_incremental_pixels(parfait_core::OpacityMode::PerStroke);
+}
+
+fn check_incremental_pixels(opacity_mode: parfait_core::OpacityMode) {
     for tip in [
         BrushTip::Round,
         BrushTip::Soft,
@@ -14,20 +19,37 @@ fn incremental_pixels_match_full_composite_for_all_tips_and_eraser() {
             mask: Arc::new(vec![0, 80, 170, 255]),
         },
     ] {
-        for erase in [false, true] {
+        for operation in [
+            BrushOperation::Paint,
+            BrushOperation::Erase,
+            BrushOperation::Blend,
+            BrushOperation::Blur,
+            BrushOperation::Smudge,
+        ] {
             let mut doc = Document::new(96, 80);
             doc.layers[0].visible = false;
             doc.layers[1].opacity = 0.63;
-            Arc::make_mut(&mut doc.layers[1].pixels).fill(120);
+            for (index, pixel) in Arc::make_mut(&mut doc.layers[1].pixels)
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .enumerate()
+            {
+                pixel.copy_from_slice(&[(index % 251) as u8, 120, (index % 173) as u8, 180]);
+            }
             let mut cached = doc.composite();
             let brush = Brush {
                 tip: tip.clone(),
-                erase,
+                operation,
+                opacity_mode,
                 size: 27.,
                 angle: 37.,
                 aspect: 0.5,
                 pressure_opacity: true,
-                gap_mode: parfait_core::GapMode::Narrow,
+                gap_mode: parfait_core::GapMode::Fixed,
+                pressure_spacing: true,
+                minimum_spacing: 0.2,
+                spacing_curve: [1., 0.8, 0.4, 0.2, 0.].into(),
                 continuous_spray: true,
                 pressure_curve: parfait_core::ResponseCurve {
                     points: vec![[0., 0.], [0.17, 0.9], [0.62, 0.2], [1., 1.]],

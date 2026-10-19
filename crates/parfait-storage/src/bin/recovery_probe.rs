@@ -19,6 +19,7 @@ fn main() -> anyhow::Result<()> {
         },
     );
     doc.layers[1].blend_mode = parfait_core::BlendMode::Multiply;
+    assert!(doc.create_layer_mask(1, 128));
     store.save(&doc)?;
     if args[3] == "during" {
         let conn = rusqlite::Connection::open(&path)?;
@@ -29,6 +30,9 @@ fn main() -> anyhow::Result<()> {
         }
     } else {
         doc.add_layer();
+        doc.layers[1].mask.as_mut().unwrap().coverage =
+            parfait_core::MaskCoverage::Dense(std::sync::Arc::new(vec![127; 64 * 64]));
+        doc.touch();
         store.save(&doc)?;
         std::fs::write(ready, "committed")?;
         loop {

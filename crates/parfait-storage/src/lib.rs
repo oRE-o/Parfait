@@ -1,7 +1,16 @@
 //! Transactional project snapshots. No UI dependency; disk work belongs to the worker.
+mod budget;
 mod legacy;
+mod legacy_v2;
+mod legacy_v3;
+mod legacy_v4;
+#[cfg(test)]
+mod migration_tests;
 mod worker;
 const SNAPSHOT_V2: &[u8] = b"PARFAIT\0SNAP2\0";
+const SNAPSHOT_V3: &[u8] = b"PARFAIT\0SNAP3\0";
+const SNAPSHOT_V4: &[u8] = b"PARFAIT\0SNAP4\0";
+const SNAPSHOT_V5: &[u8] = b"PARFAIT\0SNAP5\0";
 use anyhow::{Context, Result, bail, ensure};
 use bincode::Options;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
@@ -17,7 +26,11 @@ use std::{
 };
 pub use worker::{Autosave, SaveEvent};
 
-const MAX_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_BYTES: u64 = budget::SNAPSHOT_LIMIT;
+pub use budget::{
+    layer_duplication_error, layer_growth_count_error, layer_growth_error,
+    layer_mask_creation_error, snapshot_size,
+};
 
 /// Workspace and brush preferences are separate from artwork and committed atomically.
 pub fn load_preferences(path: &Path) -> Result<Option<String>> {
@@ -51,7 +64,10 @@ impl Store {
         let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(3))?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        ensure!(version <= 2, "This project uses a newer format ({version})");
+        ensure!(
+            (0..=5).contains(&version),
+            "This project uses an unsupported format ({version})"
+        );
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
             CREATE TABLE IF NOT EXISTS snapshots(revision INTEGER PRIMARY KEY, checksum BLOB NOT NULL, payload BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY CHECK(id=1), clean INTEGER NOT NULL);
@@ -75,10 +91,18 @@ impl Store {
     }
     pub fn save(&mut self, doc: &Document) -> Result<()> {
         ensure!(doc.validate(), "Invalid document");
-        let mut raw = SNAPSHOT_V2.to_vec();
+        ensure!(
+            doc.logical_pixel_bytes() <= MAX_BYTES,
+            "Drawing exceeds 512 MiB logical pixel budget"
+        );
+        ensure!(
+            snapshot_size(doc).is_some_and(|bytes| bytes <= MAX_BYTES),
+            "Snapshot exceeds 512 MiB before encoding"
+        );
+        let mut raw = SNAPSHOT_V5.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .with_limit(MAX_BYTES - SNAPSHOT_V2.len() as u64)
+            .with_limit(MAX_BYTES - SNAPSHOT_V5.len() as u64)
             .serialize_into(&mut raw, doc)?;
         ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
         let checksum = Sha256::digest(&raw).to_vec();
@@ -91,7 +115,7 @@ impl Store {
             params![i64::try_from(doc.revision)?, checksum, payload],
         )?;
         tx.execute("DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 3)",[])?;
-        tx.pragma_update(None, "user_version", 2)?;
+        tx.pragma_update(None, "user_version", 5)?;
         tx.commit()?;
         Ok(())
     }
@@ -119,9 +143,22 @@ impl Store {
                     .with_fixint_encoding()
                     .with_limit(MAX_BYTES)
                     .reject_trailing_bytes();
-                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V2) {
+                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V5) {
                     options.deserialize(payload)?
+                } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V4) {
+                    let old: legacy_v4::LegacyDocument = options.deserialize(payload)?;
+                    old.into()
+                } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V3) {
+                    let old: legacy_v3::LegacyDocument = options.deserialize(payload)?;
+                    old.into()
+                } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V2) {
+                    let old: legacy_v2::LegacyDocument = options.deserialize(payload)?;
+                    old.into()
                 } else {
+                    ensure!(
+                        !raw.starts_with(b"PARFAIT\0"),
+                        "Unsupported snapshot version"
+                    );
                     let old: legacy::LegacyDocument = options.deserialize(&raw)?;
                     old.into()
                 };
@@ -252,7 +289,7 @@ mod tests {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 5);
         store
             .connection
             .execute("UPDATE snapshots SET payload=x'00' WHERE revision=2", [])
