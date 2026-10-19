@@ -40,7 +40,8 @@ pub use worker::{Autosave, SaveEvent};
 const MAX_BYTES: u64 = budget::SNAPSHOT_LIMIT;
 pub use budget::{
     layer_duplication_error, layer_folder_growth_error, layer_growth_count_error,
-    layer_growth_error, layer_mask_creation_error, layer_reparent_error, snapshot_size,
+    layer_growth_error, layer_mask_creation_error, layer_reparent_error, mask_edit_error,
+    selection_update_error, snapshot_size,
 };
 
 /// Workspace and brush preferences are separate from artwork and committed atomically.

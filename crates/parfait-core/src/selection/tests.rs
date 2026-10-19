@@ -151,7 +151,7 @@ fn nested_folder_selection_normalizes_roots_and_uses_masks_once() {
     );
     document.layers[2].visible = false;
     assert!(document.selection_from_layers(8, SelectionMode::Replace));
-    assert_eq!(document.selection, Some(MaskCoverage::Uniform(0)));
+    assert_eq!(document.selection, None);
 }
 
 #[test]
@@ -179,7 +179,9 @@ fn empty_none_invalid_and_noop_selections_keep_history_and_shared_data_predictab
     assert_eq!(document.selection_value(0), 255);
     assert!(document.select_all_pixels());
     assert!(document.invert_pixel_selection());
-    assert_eq!(document.selection, Some(MaskCoverage::Uniform(0)));
+    assert_eq!(document.selection, None);
+    assert!(!document.deselect_pixels());
+    assert!(document.set_selection(Some(MaskCoverage::Uniform(0))));
     assert!(document.deselect_pixels());
     assert_eq!(document.selection_value(0), 255);
 }
@@ -187,7 +189,12 @@ fn empty_none_invalid_and_noop_selections_keep_history_and_shared_data_predictab
 #[test]
 fn selection_masks_share_coverage_obey_locks_and_leave_original_pixels_unchanged() {
     let mut document = source();
-    assert!(!document.create_mask_from_selection(1, true));
+    assert!(document.create_mask_from_selection(1, true));
+    assert_eq!(
+        document.layers[1].mask.as_ref().unwrap().coverage,
+        MaskCoverage::Uniform(255)
+    );
+    assert!(document.remove_layer_mask(1));
     document.selection_from_layers(2, SelectionMode::Replace);
     let before = document.clone();
     for outside in [true, false] {

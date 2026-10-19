@@ -2,6 +2,73 @@ use super::*;
 use parfait_core::Document;
 
 #[test]
+fn selection_and_mask_menu_items_apply_real_edits_and_undo_once() {
+    use parfait_core::MaskCoverage;
+    for command in [
+        Command::LayerSelectionCreate,
+        Command::LayerSelectionAdd,
+        Command::LayerSelectionSubtract,
+        Command::LayerSelectionIntersect,
+        Command::LayerMaskOutsideSelection,
+        Command::LayerMaskSelection,
+        Command::SelectAll,
+        Command::Deselect,
+        Command::InvertSelection,
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+        app.doc = Document::new(8, 8);
+        app.doc.layers[1].pixels = std::sync::Arc::new([20, 40, 60, 128].repeat(64));
+        if command != Command::LayerSelectionCreate && command != Command::SelectAll {
+            app.doc.set_selection(Some(MaskCoverage::Uniform(64)));
+        }
+        let before = app.doc.clone();
+        let rows = app.history.rows().count();
+        let context = egui::Context::default();
+        crate::theme::apply(&context);
+        frame(&mut app, &context, vec![], 960.);
+        frame(&mut app, &context, vec![], 960.);
+        let menu = if matches!(
+            command,
+            Command::SelectAll | Command::Deselect | Command::InvertSelection
+        ) {
+            TopMenu::Select
+        } else {
+            TopMenu::Layer
+        };
+        open(&mut app, &context, menu);
+        let mut path = root_path(menu);
+        if menu == TopMenu::Layer {
+            let group = if command.selection_mode().is_some() {
+                "레이어에서 선택 범위"
+            } else {
+                "레이어 마스크"
+            };
+            let index = catalog::entries(menu)
+                .iter()
+                .position(
+                    |item| matches!(item, catalog::MenuItem::Group(label, _) if *label == group),
+                )
+                .unwrap();
+            path = open_group(&mut app, &context, path, index);
+        }
+        let target = reveal(&mut app, &context, path, |context| {
+            rect(context, ("menu_item", command.label()))
+        });
+        click(&mut app, &context, target);
+        assert!(!egui::Popup::is_any_open(&context));
+        assert!(!app.doc.same_edit_state(&before), "{command:?}");
+        assert!(app.doc.validate());
+        assert_eq!(app.history.rows().count(), rows.max(1) + 1);
+        let edited = app.doc.clone();
+        app.undo();
+        assert!(app.doc.same_edit_state(&before), "{command:?}");
+        app.redo();
+        assert!(app.doc.same_edit_state(&edited), "{command:?}");
+    }
+}
+
+#[test]
 fn folder_menu_actions_create_group_and_ungroup_with_one_edit() {
     for command in [
         Command::NewLayerFolder,
@@ -243,7 +310,7 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     }
     assert_eq!(app.doc, before);
     assert_eq!(app.history.rows().count(), 0);
-    assert_eq!(Command::ALL.len(), 84);
+    assert_eq!(Command::ALL.len(), 93);
 }
 
 #[test]
@@ -386,7 +453,7 @@ fn unimplemented_selection_and_filter_items_are_disabled_and_never_paint() {
     frame(&mut app, &ctx, vec![], 960.);
     frame(&mut app, &ctx, vec![], 960.);
     for (menu, label) in [
-        (TopMenu::Select, "선택 범위 반전"),
+        (TopMenu::Select, "선택 범위 확장…"),
         (TopMenu::Filter, "선명하게"),
     ] {
         open(&mut app, &ctx, menu);
@@ -477,8 +544,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (75, 320, 41));
-    assert_eq!(Command::ALL.len(), 84);
+    assert_eq!(counts, (84, 311, 41));
+    assert_eq!(Command::ALL.len(), 93);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",
         counts.0, counts.1, counts.2

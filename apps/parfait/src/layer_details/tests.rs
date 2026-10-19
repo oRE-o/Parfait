@@ -291,7 +291,7 @@ fn previous_keymap_ownership_survives_and_new_layer_keys_reopen() {
             .unwrap();
     }
     app.persist_preferences(true);
-    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 20);
+    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
     drop(app);
     let app = Parfait::open(directory.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::LayerReference), "F7");

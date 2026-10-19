@@ -90,6 +90,15 @@ pub enum Command {
     NewLayerFolder,
     GroupLayersInFolder,
     UngroupLayerFolder,
+    LayerSelectionCreate,
+    LayerSelectionAdd,
+    LayerSelectionSubtract,
+    LayerSelectionIntersect,
+    LayerMaskOutsideSelection,
+    LayerMaskSelection,
+    SelectAll,
+    Deselect,
+    InvertSelection,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -215,6 +224,15 @@ impl Command {
         Self::NewLayerFolder,
         Self::GroupLayersInFolder,
         Self::UngroupLayerFolder,
+        Self::LayerSelectionCreate,
+        Self::LayerSelectionAdd,
+        Self::LayerSelectionSubtract,
+        Self::LayerSelectionIntersect,
+        Self::LayerMaskOutsideSelection,
+        Self::LayerMaskSelection,
+        Self::SelectAll,
+        Self::Deselect,
+        Self::InvertSelection,
     ];
 
     pub fn label(self) -> &'static str {
@@ -303,11 +321,27 @@ impl Command {
             Self::NewLayerFolder => "New layer folder",
             Self::GroupLayersInFolder => "Create folder and insert layers",
             Self::UngroupLayerFolder => "Ungroup layer folder",
+            Self::LayerSelectionCreate => "Create selection from layers",
+            Self::LayerSelectionAdd => "Add layers to selection",
+            Self::LayerSelectionSubtract => "Subtract layers from selection",
+            Self::LayerSelectionIntersect => "Intersect selection with layers",
+            Self::LayerMaskOutsideSelection => "Mask outside selection",
+            Self::LayerMaskSelection => "Mask selection",
+            Self::SelectAll => "Select all",
+            Self::Deselect => "Deselect",
+            Self::InvertSelection => "Invert selection",
         }
     }
 
     pub fn category(self) -> Category {
         match self {
+            Self::SelectAll | Self::Deselect | Self::InvertSelection => Category::Edit,
+            Self::LayerSelectionCreate
+            | Self::LayerSelectionAdd
+            | Self::LayerSelectionSubtract
+            | Self::LayerSelectionIntersect
+            | Self::LayerMaskOutsideSelection
+            | Self::LayerMaskSelection => Category::Layer,
             Self::NewDrawing
             | Self::OpenProject
             | Self::SaveProject
@@ -403,6 +437,27 @@ impl Command {
                 | Self::ShowMaskArea
         )
     }
+    pub(crate) fn selection_mode(self) -> Option<parfait_core::SelectionMode> {
+        use parfait_core::SelectionMode;
+        Some(match self {
+            Self::LayerSelectionCreate => SelectionMode::Replace,
+            Self::LayerSelectionAdd => SelectionMode::Add,
+            Self::LayerSelectionSubtract => SelectionMode::Subtract,
+            Self::LayerSelectionIntersect => SelectionMode::Intersect,
+            _ => return None,
+        })
+    }
+    pub(crate) fn is_pixel_selection(self) -> bool {
+        self.selection_mode().is_some()
+            || matches!(
+                self,
+                Self::SelectAll
+                    | Self::Deselect
+                    | Self::InvertSelection
+                    | Self::LayerMaskOutsideSelection
+                    | Self::LayerMaskSelection
+            )
+    }
     pub fn layer_combine(self) -> Option<parfait_core::LayerCombine> {
         use parfait_core::LayerCombine;
         Some(match self {
@@ -459,6 +514,7 @@ impl Parfait {
             return;
         }
         match command {
+            command if command.is_pixel_selection() => self.execute_pixel_selection(command),
             Command::NewDrawing => self.confirm_new = true,
             Command::OpenProject => self.open_project(),
             Command::SaveProject => self.save_project(false),

@@ -94,6 +94,51 @@ impl Parfait {
 mod tests {
     use super::*;
 
+    #[test]
+    fn selection_keys_respect_text_focus_and_preserve_artwork() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+        app.doc = parfait_core::Document::new(8, 8);
+        let original = app.doc.layers.clone();
+        let context = egui::Context::default();
+        let primary = egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..Default::default()
+        };
+        key_frame(&mut app, &context, Key::A, primary, false, false);
+        assert_eq!(
+            app.doc.selection,
+            Some(parfait_core::MaskCoverage::Uniform(255))
+        );
+        key_frame(&mut app, &context, Key::D, primary, false, false);
+        assert!(app.doc.selection.is_none());
+        app.doc
+            .set_selection(Some(parfait_core::MaskCoverage::Uniform(64)));
+        key_frame(
+            &mut app,
+            &context,
+            Key::I,
+            egui::Modifiers {
+                shift: true,
+                ..primary
+            },
+            false,
+            false,
+        );
+        assert_eq!(
+            app.doc.selection,
+            Some(parfait_core::MaskCoverage::Uniform(191))
+        );
+        key_frame(&mut app, &context, Key::D, primary, false, true);
+        assert!(context.egui_wants_keyboard_input());
+        assert_eq!(
+            app.doc.selection,
+            Some(parfait_core::MaskCoverage::Uniform(191))
+        );
+        assert_eq!(app.doc.layers, original);
+    }
+
     fn key_frame(
         app: &mut Parfait,
         ctx: &egui::Context,

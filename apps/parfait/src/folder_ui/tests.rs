@@ -99,7 +99,7 @@ fn previous_preferences_keep_existing_keys_and_new_folder_bindings_roundtrip() {
             .unwrap();
     }
     app.persist_preferences(true);
-    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 20);
+    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
     let keys = app.keymap.clone();
     drop(app);
     let app = Parfait::open(directory.path().to_owned()).unwrap();

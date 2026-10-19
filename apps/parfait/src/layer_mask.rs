@@ -126,6 +126,12 @@ impl Parfait {
         if target.mask.is_none() {
             return Some("This layer has no mask.");
         }
+        if command == Command::ClearLayerMask
+            && self.doc.selection.is_some()
+            && let Some(reason) = parfait_storage::mask_edit_error(&self.doc, layer)
+        {
+            return Some(reason);
+        }
         if !matches!(command, Command::LayerMaskEnabled | Command::ShowMaskArea)
             && !self.doc.layer_ancestors_unlocked(layer)
         {
@@ -202,6 +208,9 @@ impl Parfait {
     }
 
     pub(crate) fn mask_brush_disabled_reason(&self) -> Option<&'static str> {
+        if let Some(reason) = parfait_storage::mask_edit_error(&self.doc, self.doc.active) {
+            return Some(reason);
+        }
         let target = &self.doc.layers[self.doc.active];
         if target.mask.as_ref().is_none_or(|mask| !mask.enabled) {
             return Some("Enable the layer mask before drawing on it.");

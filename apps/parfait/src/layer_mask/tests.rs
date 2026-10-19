@@ -274,7 +274,7 @@ fn mask_menu_keys_and_preferences_version_keep_existing_bindings() {
     app.persist_preferences(true);
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
-    assert_eq!(legacy["version"], 20);
+    assert_eq!(legacy["version"], 21);
     legacy["version"] = 15.into();
     legacy["keymap"]["bindings"]
         .as_array_mut()

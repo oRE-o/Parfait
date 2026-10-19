@@ -1,5 +1,11 @@
 # Stroke performance
 
+## Selection Boundary Display
+
+The selection overlay adds no runtime dependency, worker or image texture. It caches two vector dash phases, bounded to 16,384 quads per phase and 3.25 MiB combined vertex/index payload. Temporary contour segments are also bounded by that quad budget. Coverage is shared, not copied into the cache. Viewport-limited document-grid traversal uses a 262,144-cell preflight with conservative margins; power-of-two display LOD reduces dense boundaries and is labelled on the canvas. This can simplify small islands at low zoom or very high complexity, but never changes writing coverage. Unrelated pixel edits reuse the mesh; animation only chooses an Arc-backed phase every 200 ms. The unsigned release executable is 13,126,736 bytes, up 33,312 bytes from the preceding integrated engine checkpoint; this is binary size, not total process memory.
+
+Run `cargo test -p parfait --release selection_boundary_release_workload -- --ignored --nocapture`. On Apple M1/macOS 15.7.5 arm64/Rust 1.99.1, 21 rebuild samples per case produce these median/p95 CPU times: 512² ring 0.7427/0.8485 ms, 512² checker 0.8800/0.9382 ms, 2048² ring 0.7543/0.8340 ms and 2048² checker 0.6365/0.6562 ms. The 800×600-point viewport uses zoom 1 or 0.25 and two physical pixels per point. Chosen grid steps are 2 and 8; mesh capacities total 107,328–108,160 bytes. These coarse checker samples intentionally exercise simplified display, not exact per-pixel contours. Cached Arc phase cloning alone measures 5.23–8.90 ns per iteration, not a complete UI frame. These are added CPU costs, not speedups, measured working-set memory or physical pen latency.
+
 ## Pixel Selection Foundation
 
 No runtime dependency, worker or canvas-sized selection buffer is added to selection-free drawings. Active Dense selection uses one shared byte per pixel, at most 16 MiB at 4096²; Uniform selection has no canvas payload. Explicit layer-geometry extraction uses one scalar row per folder, at most 256 KiB, plus its ordinary scalar output. Mask creation can share selection coverage, while inversion/combination explicitly allocate a new scalar result. These are payload/scratch bounds, not total RSS; existing pixel COW, capped-stroke scratch and retained History still apply. Selection is borrowed directly by writers, not cloned into each Dab.

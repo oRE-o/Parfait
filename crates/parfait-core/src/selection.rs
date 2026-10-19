@@ -154,7 +154,11 @@ impl Document {
                 canonical(values.iter().map(|value| 255 - value).collect())
             }
         };
-        self.set_selection(Some(inverted))
+        self.set_selection(if matches!(inverted, MaskCoverage::Uniform(0)) {
+            None
+        } else {
+            Some(inverted)
+        })
     }
 
     pub fn selection_from_layers(&mut self, selected: u64, mode: SelectionMode) -> bool {
@@ -230,7 +234,12 @@ impl Document {
                 *target = mode.combine(self.selection_value(pixel), alpha);
             }
         }
-        self.set_selection(Some(canonical(result)))
+        let result = canonical(result);
+        self.set_selection(if matches!(result, MaskCoverage::Uniform(0)) {
+            None
+        } else {
+            Some(result)
+        })
     }
 
     pub fn create_mask_from_selection(&mut self, layer: usize, outside: bool) -> bool {
@@ -238,7 +247,7 @@ impl Document {
             return false;
         }
         let Some(selection) = &self.selection else {
-            return false;
+            return self.create_layer_mask(layer, 255);
         };
         let coverage = if outside {
             selection.clone()

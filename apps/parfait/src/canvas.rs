@@ -51,11 +51,11 @@ impl View {
         )
     }
 
-    fn screen(&self, p: Vec2, rect: Rect, size: Vec2) -> Pos2 {
+    pub(crate) fn screen(&self, p: Vec2, rect: Rect, size: Vec2) -> Pos2 {
         let p = (p - size / 2.) * self.flip_sign() * self.zoom;
         rect.center() + self.pan + rotate(p, self.angle)
     }
-    fn document(&self, p: Pos2, rect: Rect, size: Vec2) -> Vec2 {
+    pub(crate) fn document(&self, p: Pos2, rect: Rect, size: Vec2) -> Vec2 {
         rotate(p - rect.center() - self.pan, -self.angle) * self.flip_sign() / self.zoom + size / 2.
     }
     fn zoom_at(&mut self, factor: f32, anchor: Pos2, rect: Rect, size: Vec2) {
@@ -383,6 +383,8 @@ impl Parfait {
         if self.display.pixel_grid {
             self.view.paint_pixel_grid(ui, rect, size);
         }
+        self.pixel_selection_view
+            .paint(ui, &self.doc, &self.view, rect);
         if self.display.rulers {
             crate::rulers::paint(
                 ui,

@@ -3,6 +3,51 @@ use parfait_core::{Document, LayerMask, MaskCoverage};
 pub(crate) const SNAPSHOT_LIMIT: u64 = 512 * 1024 * 1024;
 const PIXEL_LIMIT: u64 = 512 * 1024 * 1024;
 
+fn coverage_size(coverage: &MaskCoverage) -> Option<u64> {
+    match coverage {
+        MaskCoverage::Uniform(_) => Some(5),
+        MaskCoverage::Dense(values) => 12u64.checked_add(values.len() as u64),
+    }
+}
+
+pub fn selection_update_error(document: &Document, dense: bool) -> Option<&'static str> {
+    if let Some(reason) = document.selection_creation_reason() {
+        return Some(reason);
+    }
+    let allowed = || -> Option<bool> {
+        let previous = document.selection.as_ref().map_or(Some(0), coverage_size)?;
+        let proposed = if dense {
+            12 + u64::from(document.width) * u64::from(document.height)
+        } else {
+            5
+        };
+        Some(
+            snapshot_size(document)?
+                .checked_sub(previous)?
+                .checked_add(proposed)?
+                <= SNAPSHOT_LIMIT,
+        )
+    };
+    (allowed() != Some(true)).then_some("The selection would exceed the 512 MiB snapshot budget.")
+}
+
+pub fn mask_edit_error(document: &Document, layer: usize) -> Option<&'static str> {
+    if !document.validate() {
+        return Some("The drawing has invalid image data.");
+    }
+    let mask = document.layers.get(layer)?.mask.as_ref()?;
+    let allowed = || -> Option<bool> {
+        Some(
+            snapshot_size(document)?
+                .checked_sub(mask_payload_size(mask)?)?
+                .checked_add(13 + u64::from(document.width) * u64::from(document.height))?
+                <= SNAPSHOT_LIMIT,
+        )
+    };
+    (allowed() != Some(true))
+        .then_some("Editing this mask would exceed the 512 MiB snapshot budget.")
+}
+
 pub fn snapshot_size(document: &Document) -> Option<u64> {
     let pixels = u64::from(document.width)
         .checked_mul(u64::from(document.height))?
@@ -243,6 +288,57 @@ pub fn layer_reparent_error(
 mod tests {
     use super::*;
     use bincode::Options;
+
+    #[test]
+    fn selection_and_mask_edit_guards_reserve_dense_payload_metadata() {
+        use std::sync::Arc;
+        let mut document = Document::new(1, 1);
+        document.width = 4096;
+        document.height = 4096;
+        document.layers.resize(7, document.layers[1].clone());
+        document.next_layer_id = 8;
+        let pixels = Arc::new(vec![0; 4096 * 4096 * 4]);
+        let coverage = Arc::new(vec![255; 4096 * 4096]);
+        for (index, layer) in document.layers.iter_mut().enumerate() {
+            layer.id = parfait_core::LayerId(index as u64 + 1);
+            layer.pixels = pixels.clone();
+            if index < 3 {
+                layer.mask = Some(LayerMask {
+                    enabled: true,
+                    coverage: MaskCoverage::Dense(coverage.clone()),
+                });
+            }
+        }
+        assert!(document.validate());
+        assert!(selection_update_error(&document, false).is_none());
+        assert!(selection_update_error(&document, true).is_some());
+        assert!(mask_edit_error(&document, 0).is_none());
+        assert!(document.select_all_pixels());
+        assert!(selection_update_error(&document, false).is_none());
+        assert!(selection_update_error(&document, true).is_some());
+        document.layers[3].mask = Some(LayerMask {
+            enabled: true,
+            coverage: MaskCoverage::Uniform(255),
+        });
+        assert!(mask_edit_error(&document, 3).is_some());
+        assert!(mask_edit_error(&document, 0).is_some());
+        document.selection = None;
+        assert!(document.validate());
+        assert!(mask_edit_error(&document, 0).is_none());
+        assert!(selection_update_error(&document, false).is_some());
+        assert!(mask_edit_error(&document, 3).is_some());
+        document.layers[2].mask = None;
+        assert!(selection_update_error(&document, true).is_none());
+        assert!(mask_edit_error(&document, 3).is_none());
+        assert!(
+            document
+                .layers
+                .iter()
+                .all(|layer| Arc::ptr_eq(&layer.pixels, &pixels))
+        );
+        document.width = u32::MAX;
+        assert!(selection_update_error(&document, true).is_some());
+    }
 
     #[test]
     fn folder_tree_edits_count_parent_links_masks_and_no_folder_canvas() {

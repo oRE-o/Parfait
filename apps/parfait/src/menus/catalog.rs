@@ -267,8 +267,8 @@ const LAYER: &[MenuItem] = &[
     Group(
         "레이어 마스크",
         &[
-            Planned("선택 범위 이외를 마스크"),
-            Planned("선택 범위를 마스크"),
+            Action(Command::LayerMaskOutsideSelection),
+            Action(Command::LayerMaskSelection),
             Action(Command::LayerMaskRevealAll),
             Action(Command::LayerMaskHideAll),
             Action(Command::DeleteLayerMask),
@@ -330,10 +330,10 @@ const LAYER: &[MenuItem] = &[
     Group(
         "레이어에서 선택 범위",
         &[
-            Planned("선택 범위 만들기"),
-            Planned("선택 범위에 추가"),
-            Planned("선택 범위에서 빼기"),
-            Planned("선택 범위와 교차"),
+            Action(Command::LayerSelectionCreate),
+            Action(Command::LayerSelectionAdd),
+            Action(Command::LayerSelectionSubtract),
+            Action(Command::LayerSelectionIntersect),
         ],
     ),
     Separator,
@@ -365,10 +365,10 @@ const LAYER: &[MenuItem] = &[
 ];
 
 const SELECT: &[MenuItem] = &[
-    Planned("전체 선택"),
-    Planned("선택 해제"),
+    Action(Command::SelectAll),
+    Action(Command::Deselect),
     Planned("다시 선택"),
-    Planned("선택 범위 반전"),
+    Action(Command::InvertSelection),
     Separator,
     Planned("선택 범위 확장…"),
     Planned("선택 범위 축소…"),

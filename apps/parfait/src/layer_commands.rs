@@ -14,6 +14,9 @@ impl Parfait {
     }
 
     pub(crate) fn command_disabled_reason(&self, command: Command) -> Option<&'static str> {
+        if command.is_pixel_selection() {
+            return self.pixel_selection_reason(command);
+        }
         if self.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
