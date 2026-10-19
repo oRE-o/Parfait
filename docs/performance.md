@@ -6,6 +6,23 @@ The saved-project marker compares metadata and shared-buffer identity across at 
 
 The 2026-10-20 arm64 unsigned release executable is 12,926,208 bytes, 256 bytes above the preceding raster-conversion build. This is artifact size, not memory use or speed. The signed isolated QA executable matches all 14 file-backed Mach-O sections of that release build; signature/load-command differences are excluded from the comparison.
 
+## Synchronous Project And PNG Baseline
+
+Run `cargo test --release -p parfait synchronous_project_and_png_baseline -- --ignored --nocapture`. On Apple M1/macOS 15.7.5/arm64/Rust 1.99.1, three serial process runs take three samples per case. Fixtures fill every layer with either a structured pattern or fixed-seed noise and include one dense mask. Their logical sizes are 7,077,888 and 53,477,376 bytes; serialized snapshot sizes are 7,078,057 and 53,477,633 bytes. These synthetic fixtures bracket different compression costs, not typical artwork or the largest supported document.
+
+| Fixture | Fresh project mean ms range | Existing project mean ms range | PNG mean ms range |
+| --- | ---: | ---: | ---: |
+| 1024×768, 2 layers, structured | 30.02–32.38 | 59.88–60.61 | 9.98–10.36 |
+| 1024×768, 2 layers, noise | 115.99–148.28 | 159.72–194.24 | 16.66–20.80 |
+| 2048×1536, 4 layers, structured | 221.64–234.73 | 451.45–489.60 | 73.12–76.45 |
+| 2048×1536, 4 layers, noise | 1023.85–1241.37 | 1403.55–1514.48 | 100.22–111.46 |
+
+Project timing calls the application's actual synchronous writer, including open, existing snapshot read/validation when present, encoding/compression, FULL SQLite commit, clean marking and checkpoint. PNG timing includes full composition, encoding and the current ordinary image-file write; it does not have the project's SQLite durability contract. Creation of input buffers, roundtrip verification and cleanup are outside timers. Every project and decoded PNG matches its expected bytes, and all four composite checksums repeat across the three runs. The largest overwrite sample is 1596.50 ms. Three samples do not establish p95/p99.
+
+The calls currently run on the UI thread, making project saving the first background-job priority, followed by PNG export. These numbers measure those synchronous workloads, not actual event-to-display latency, UI frames, concurrent autosave or process RSS. Other desktop apps were present; local filesystem/cache and limited free disk space affect results. An initial larger noisy fixture encountered a full disk; those failed/overlapping process runs are excluded. Final runs use one process at a time, four rather than eight large layers and immediate cleanup of verified test-owned output files. No user data or existing caches were deleted. Keep ample free space when reproducing.
+
+This is an ignored test-only workload. It adds no production task, dependency or image cache, changes no format/durability rule, and is not a claimed runtime optimization. The normal release executable's SHA-256 remains identical to the preceding save-state build. After all checks, `cargo clean --profile dev` removed 1.4 GiB of regenerable development artifacts only; that disk cleanup is not a product memory/performance improvement. Background project saving/export and representative device/frame/memory baselines remain unimplemented.
+
 ## Raster Conversions
 
 Run `cargo run --release -p parfait-core --example raster_conversion_bench`. Three Apple M1/macOS 15.7.5/arm64/Rust 1.99.1 release runs convert a deterministic 1024×768 active RGBA layer, with twenty iterations per operation/buffer-ownership case. Timers include core validation, conversion and shared-buffer COW, but exclude fixture/reset, independent per-pixel checksums, History, composition, UI/GPU, input and storage. Unique-buffer setup copies outside the timed interval. Every output byte is compared with independent arithmetic; a second conversion verifies no-op Arc/revision preservation. All four case checksums agree across runs.
