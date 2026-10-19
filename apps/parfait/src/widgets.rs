@@ -422,13 +422,8 @@ pub fn brush_row(
     response.on_hover_text(name)
 }
 
-#[cfg(test)]
-pub fn color_wheel(ui: &mut egui::Ui, color: &mut [u8; 3]) {
-    color_wheel_sized(ui, color, 204.);
-}
-
 pub fn color_wheel_sized(ui: &mut egui::Ui, color: &mut [u8; 3], max_side: f32) {
-    let side = ui.available_width().min(max_side).clamp(80., 204.);
+    let side = ui.available_width().min(max_side).max(80.);
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::click_and_drag());
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
@@ -438,8 +433,8 @@ pub fn color_wheel_sized(ui: &mut egui::Ui, color: &mut [u8; 3], max_side: f32) 
         )
     });
     let c = rect.center();
-    let outer = side / 2. - 4.;
-    let inner = outer - 14.;
+    let outer = side / 2. - 4.; // 98
+    let inner = outer * (84. / 98.); // iner = outer - 14
     let mut hsv = egui::ecolor::Hsva::from(Color32::from_rgb(color[0], color[1], color[2]));
     let hue_id = ui.id().with("wheel_hue");
     if hsv.s < 0.001 || hsv.v < 0.001 {
@@ -495,7 +490,7 @@ pub fn color_wheel_sized(ui: &mut egui::Ui, color: &mut [u8; 3], max_side: f32) 
     }
     ui.painter().add(egui::Shape::mesh(square));
     for point in [
-        c + Vec2::angled(hsv.h * std::f32::consts::TAU) * (inner + 7.),
+        c + Vec2::angled(hsv.h * std::f32::consts::TAU) * ((inner + outer) / 2.),
         egui::pos2(
             sq.left() + hsv.s * sq.width(),
             sq.bottom() - hsv.v * sq.height(),
@@ -558,22 +553,110 @@ mod tests {
     }
 
     #[test]
-    fn hue_selection_survives_black_until_value_is_raised() {
+    fn color_wheel_geometry_scales_together_and_follows_both_host_dimensions() {
+        let ctx = egui::Context::default();
+        let mut color = [128, 64, 192];
+        for (width, height, side) in [
+            (80., 400., 80.),
+            (112., 400., 112.),
+            (204., 400., 204.),
+            (360., 400., 360.),
+            (400., 112., 112.),
+            (400., 360., 360.),
+            (400., 60., 80.),
+        ] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::splat(600.))),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        ui.scope_builder(
+                            egui::UiBuilder::new().max_rect(Rect::from_min_size(
+                                ui.cursor().min,
+                                egui::vec2(width, 500.),
+                            )),
+                            |ui| color_wheel_sized(ui, &mut color, height),
+                        );
+                    });
+                },
+            );
+            output.textures_delta.clear();
+            let meshes: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Mesh(mesh) => Some(mesh),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(meshes.len(), 2);
+            let bounds = |mesh: &egui::Mesh| {
+                mesh.vertices.iter().fold(Rect::NOTHING, |rect, vertex| {
+                    rect.union(Rect::from_min_max(vertex.pos, vertex.pos))
+                })
+            };
+            let ring = bounds(meshes[0]);
+            let square = bounds(meshes[1]);
+            let outer = ring.width() / 2.;
+            let inner = meshes[0].vertices[0].pos.distance(ring.center());
+            let close = |actual: f32, expected: f32| {
+                assert!(
+                    (actual - expected).abs() < 0.001,
+                    "host {width} x {height}: {actual} != {expected}"
+                );
+            };
+            close(ring.width(), side - 8.);
+            close(ring.height(), ring.width());
+            close(inner / outer, 84. / 98.);
+            close(square.width() / ring.width(), 84. * 1.32 / 196.);
+            close(square.height(), square.width());
+            close(square.center().distance(ring.center()), 0.);
+            assert!(square.left_top().distance(ring.center()) < inner);
+            let markers: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Circle(circle) => Some(circle.center),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(markers.len(), 4);
+            close(markers[0].distance(ring.center()), (inner + outer) / 2.);
+            close(markers[1].distance(ring.center()), (inner + outer) / 2.);
+            assert_eq!(color, [128, 64, 192]);
+        }
+    }
+
+    #[test]
+    fn hue_selection_survives_black_until_value_is_raised_at_every_wheel_size() {
+        for side in [80., 112., 204., 360.] {
+            check_hue_selection_survives_black(side);
+        }
+    }
+
+    fn check_hue_selection_survives_black(side: f32) {
         let ctx = egui::Context::default();
         let mut color = [0, 0, 0];
         let mut origin = Pos2::ZERO;
         let mut frame = |color: &mut [u8; 3], events| {
             let mut output = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::splat(300.))),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::splat(500.))),
                     events,
                     ..Default::default()
                 },
                 |ui| {
                     egui::CentralPanel::default().show(ui, |ui| {
-                        ui.set_width(204.);
-                        origin = ui.cursor().min;
-                        color_wheel(ui, color);
+                        ui.scope_builder(
+                            egui::UiBuilder::new()
+                                .max_rect(Rect::from_min_size(ui.cursor().min, Vec2::splat(side))),
+                            |ui| {
+                                origin = ui.cursor().min;
+                                color_wheel_sized(ui, color, side);
+                            },
+                        );
                     });
                 },
             );
@@ -581,7 +664,8 @@ mod tests {
             origin
         };
         let origin = frame(&mut color, vec![]);
-        let center = origin + Vec2::splat(102.);
+        let center = origin + Vec2::splat(side / 2.);
+        let scale = (side / 2. - 4.) / 98.;
         let click = |p| {
             vec![
                 egui::Event::PointerMoved(p),
@@ -600,11 +684,11 @@ mod tests {
             ]
         };
         // Select green on the hue ring while value is zero, then brighten the SV square.
-        let ring = center + Vec2::angled(std::f32::consts::TAU / 3.) * 91.;
+        let ring = center + Vec2::angled(std::f32::consts::TAU / 3.) * (91. * scale);
         frame(&mut color, vec![egui::Event::PointerMoved(ring)]);
         frame(&mut color, click(ring));
         assert_eq!(color, [0, 0, 0]);
-        let square = center + egui::vec2(50., -50.);
+        let square = center + egui::vec2(50., -50.) * scale;
         frame(&mut color, vec![egui::Event::PointerMoved(square)]);
         frame(&mut color, click(square));
         assert!(
