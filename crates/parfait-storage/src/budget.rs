@@ -93,7 +93,32 @@ pub fn layer_mask_creation_error(document: &Document, layer: usize) -> Option<&'
 
 pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'static str> {
     if document.has_folders() {
-        return Some("Use subtree duplication for folders and their children.");
+        if let Some(reason) = document.layer_tree_duplication_reason(selection) {
+            return Some(reason);
+        }
+        let expanded = document.layer_selection_subtrees(selection).unwrap();
+        let roots = document.layer_selection_roots(selection).unwrap();
+        let allowed = || -> Option<bool> {
+            let mut bytes = snapshot_size(document)?;
+            for (index, layer) in document
+                .layers
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| expanded & (1 << index) != 0)
+            {
+                bytes = bytes
+                    .checked_add(44 + 8 * u64::from(layer.parent.is_some()))?
+                    .checked_add(layer.name.len() as u64)?
+                    .checked_add(5 * u64::from(roots & (1 << index) != 0))?
+                    .checked_add(layer.pixels.len() as u64)?;
+                if let Some(mask) = &layer.mask {
+                    bytes = bytes.checked_add(mask_payload_size(mask)?)?;
+                }
+            }
+            Some(bytes <= SNAPSHOT_LIMIT)
+        };
+        return (allowed() != Some(true))
+            .then_some("Duplicating these subtrees would exceed the 512 MiB snapshot budget.");
     }
     if document.layers.is_empty()
         || document.layers.len() > 64
@@ -143,10 +168,145 @@ pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'
     )
 }
 
+pub fn layer_folder_growth_error(
+    document: &Document,
+    selection: Option<u64>,
+    name_bytes: usize,
+) -> Option<&'static str> {
+    if let Some(reason) = document.layer_folder_creation_reason(selection) {
+        return Some(reason);
+    }
+    let (parent, children) = if let Some(selection) = selection {
+        let roots = document.layer_selection_roots(selection).unwrap();
+        let parent = document.layers[roots.trailing_zeros() as usize].parent;
+        (
+            parent,
+            if parent.is_none() {
+                roots.count_ones() as u64 * 8
+            } else {
+                0
+            },
+        )
+    } else {
+        let active = &document.layers[document.active];
+        (
+            if active.kind == parfait_core::LayerKind::Folder {
+                Some(active.id)
+            } else {
+                active.parent
+            },
+            0,
+        )
+    };
+    let bytes = snapshot_size(document).and_then(|bytes| {
+        bytes
+            .checked_add(44 + 8 * u64::from(parent.is_some()))?
+            .checked_add(name_bytes as u64)?
+            .checked_add(children)
+    });
+    (!bytes.is_some_and(|bytes| bytes <= SNAPSHOT_LIMIT))
+        .then_some("The folder would exceed the 512 MiB snapshot budget.")
+}
+
+pub fn layer_reparent_error(
+    document: &Document,
+    selection: u64,
+    boundary: usize,
+    parent: Option<parfait_core::LayerId>,
+) -> Option<&'static str> {
+    if let Some(reason) = document.layer_reparent_reason(selection, boundary, parent) {
+        return Some(reason);
+    }
+    let roots = document.layer_selection_roots(selection).unwrap();
+    let mut bytes = snapshot_size(document).unwrap_or(u64::MAX);
+    for (index, layer) in document.layers.iter().enumerate() {
+        if roots & (1 << index) != 0 {
+            if layer.parent.is_none() && parent.is_some() {
+                bytes = bytes.saturating_add(8);
+            }
+            if layer.parent.is_some() && parent.is_none() {
+                bytes = bytes.saturating_sub(8);
+            }
+        }
+    }
+    (bytes > SNAPSHOT_LIMIT)
+        .then_some("Moving these layers would exceed the 512 MiB snapshot budget.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use bincode::Options;
+
+    #[test]
+    fn folder_tree_edits_count_parent_links_masks_and_no_folder_canvas() {
+        let mut document = Document::new(7, 5);
+        document.add_layer();
+        assert!(layer_folder_growth_error(&document, Some(6), 6).is_none());
+        let folder = document.group_layers_in_folder(6, "Folder".into()).unwrap();
+        document.create_layer_mask(3, 127);
+        let bytes = snapshot_size(&document).unwrap();
+        assert_eq!(
+            bytes,
+            bincode::DefaultOptions::new()
+                .with_fixint_encoding()
+                .serialized_size(&document)
+                .unwrap()
+                + super::super::SNAPSHOT_V7.len() as u64
+        );
+        assert!(layer_reparent_error(&document, 2, 4, None).is_none());
+        assert!(document.move_layer_subtrees(2, 4, None));
+        assert_eq!(snapshot_size(&document).unwrap(), bytes - 8);
+        assert!(document.move_layer_subtrees(8, 2, Some(folder)));
+        assert_eq!(snapshot_size(&document).unwrap(), bytes);
+        assert!(layer_duplication_error(&document, 8).is_none());
+        let before = snapshot_size(&document).unwrap();
+        let added = document.layers[1..=3]
+            .iter()
+            .map(|layer| {
+                bincode::DefaultOptions::new()
+                    .with_fixint_encoding()
+                    .serialized_size(layer)
+                    .unwrap()
+            })
+            .sum::<u64>()
+            + 5;
+        document.duplicate_layer_subtrees(8).unwrap();
+        assert_eq!(snapshot_size(&document).unwrap() - before, added);
+        assert_eq!(
+            snapshot_size(&document).unwrap(),
+            bincode::DefaultOptions::new()
+                .with_fixint_encoding()
+                .serialized_size(&document)
+                .unwrap()
+                + super::super::SNAPSHOT_V7.len() as u64
+        );
+    }
+
+    #[test]
+    fn empty_folder_still_fits_when_another_raster_snapshot_would_not() {
+        let mut document = Document::new(1, 1);
+        document.width = 4096;
+        document.height = 4096;
+        document.layers.resize(7, document.layers[1].clone());
+        document.next_layer_id = 8;
+        let pixels = std::sync::Arc::new(vec![0; 4096 * 4096 * 4]);
+        for (index, layer) in document.layers.iter_mut().enumerate() {
+            layer.id = parfait_core::LayerId(index as u64 + 1);
+            layer.pixels = pixels.clone();
+        }
+        assert!(document.validate());
+        assert!(layer_growth_error(&document, 7).is_some());
+        assert!(layer_folder_growth_error(&document, None, 6).is_none());
+        let folder = document.create_layer_folder("Folder".into()).unwrap();
+        assert!(
+            document.layers[document.layer_index(folder).unwrap()]
+                .pixels
+                .is_empty()
+        );
+        assert!(layer_duplication_error(&document, 4).is_none());
+        assert!(layer_duplication_error(&document, 2).is_some());
+    }
 
     #[test]
     fn oversized_valid_shared_buffer_document_is_rejected_before_replacing_saved_generation() {

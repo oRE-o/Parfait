@@ -73,7 +73,9 @@ impl Parfait {
         }
         let target = target.unwrap();
         let clipping_allowed = self.doc.layers[target].clipped
-            || self.doc.layers[..target].iter().any(|layer| !layer.clipped);
+            || self.doc.layers[..target]
+                .iter()
+                .any(|layer| !layer.clipped && layer.parent == self.doc.layers[target].parent);
         let dialog = self.layer_details.as_mut().unwrap();
         let first_frame = dialog.focus;
         let was_composing = dialog.composing;
@@ -134,7 +136,7 @@ impl Parfait {
                 ui.separator();
                 ui.checkbox(&mut dialog.draft.visible, "레이어 표시");
                 ui.checkbox(&mut dialog.draft.locked, "레이어 잠금");
-                ui.checkbox(&mut dialog.draft.alpha_locked, "투명 픽셀 잠금");
+                ui.add_enabled(dialog.draft.kind == parfait_core::LayerKind::Raster, egui::Checkbox::new(&mut dialog.draft.alpha_locked, "투명 픽셀 잠금"));
                 ui.add_enabled_ui(clipping_allowed || dialog.draft.clipped, |ui| {
                     ui.checkbox(&mut dialog.draft.clipped, "아래 레이어에서 클리핑");
                 });

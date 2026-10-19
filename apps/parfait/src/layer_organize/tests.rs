@@ -510,7 +510,7 @@ fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fif
     app.persist_preferences(true);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
-        19
+        20
     );
     drop(app);
     let app = Parfait::open(directory.path().to_owned()).unwrap();

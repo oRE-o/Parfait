@@ -1,5 +1,11 @@
 # Stroke performance
 
+## Folder UI Cost Check
+
+The arm64 macOS release executable is 13,060,064 bytes, up 50,512 bytes from the preceding 13,009,552-byte folder foundation. No dependency is added. Tree movement, grouping and duplication share pixel/mask buffers; view folding stores at most 64 stable IDs and never creates document History. Folder masks reuse scalar coverage painting, not an RGBA folder canvas. This is code/data accounting, not a process-memory or input-latency guarantee.
+
+A repeat of the 25-composition release workload gives folder p50/p95 3.8286/5.8960 ms at 256 square and 14.8810/15.5476 ms at 512 square, with exact expected pixels and 2048/4096 bytes of row scratch. The independently baked single raster gives 0.6744/0.7932 and 1.3008/1.3489 ms respectively. It does less work and is not an equivalent live-layer baseline. These samples do not establish a speedup over the prior noisy samples or physical pen latency.
+
 ## Isolated Folder Rows
 
 Flat documents retain the preceding path. Folders store no RGBA image; isolated composition uses one reusable tightly packed row per folder, at most 1 MiB of row pixels for 64 nodes at width 4096, apart from the normal output and vector metadata. This is scratch accounting, not total process RSS. Grouping/ungrouping move metadata and share existing pixel/mask buffers. Ancestor lookup and layout metadata remain bounded by 64 nodes.

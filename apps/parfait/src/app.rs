@@ -174,16 +174,20 @@ impl Parfait {
     }
     pub fn undo(&mut self) {
         if self.stroke.is_none() {
-            self.layer_list = Default::default();
+            self.reset_layer_selection_view();
             self.finish_layer_edit();
-            self.history.undo(&mut self.doc);
+            if self.history.undo(&mut self.doc) {
+                self.reveal_layer(self.doc.active);
+            }
         }
     }
     pub fn redo(&mut self) {
         if self.stroke.is_none() {
-            self.layer_list = Default::default();
+            self.reset_layer_selection_view();
             self.finish_layer_edit();
-            self.history.redo(&mut self.doc);
+            if self.history.redo(&mut self.doc) {
+                self.reveal_layer(self.doc.active);
+            }
         }
     }
     pub fn force_save(&mut self) {

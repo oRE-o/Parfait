@@ -449,12 +449,16 @@ impl Parfait {
                         |ui| {
                             self.layer_operations_menu(ui);
                             ui.separator();
+                            self.command_menu_item(ui, Command::GroupLayersInFolder);
+                            self.command_menu_item(ui, Command::UngroupLayerFolder);
+                            ui.separator();
                             ui.menu_button("레이어 마스크", |ui| self.layer_mask_menu(ui));
                         },
                     )
                     .response
                     .on_hover_text("레이어 조작");
                     self.layer_command_icon(ui, Icon::NewLayer, Command::NewLayer);
+                    self.layer_command_icon(ui, Icon::Folder, Command::NewLayerFolder);
                     self.layer_command_icon(ui, Icon::Copy, Command::DuplicateLayer);
                     self.layer_command_icon(ui, Icon::Up, Command::MoveLayerUp);
                     self.layer_command_icon(ui, Icon::Down, Command::MoveLayerDown);

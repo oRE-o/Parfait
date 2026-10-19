@@ -108,7 +108,8 @@ impl Parfait {
         let revision = self.doc.revision;
         self.doc.active = layer;
         self.mask_target = None;
-        self.layer_list = Default::default();
+        self.reset_layer_selection_view();
+        self.reveal_layer(layer);
         self.doc.touch();
         if self.rendered == revision {
             self.rendered = self.doc.revision;
@@ -124,6 +125,7 @@ impl Parfait {
             return;
         }
         self.edit_named("New layer", |document| document.add_layer());
+        self.reveal_layer(self.doc.active);
     }
     pub(crate) fn select_history(&mut self, id: u64) {
         if self.stroke.is_some() {

@@ -10,10 +10,7 @@ mod tests;
 
 impl Parfait {
     fn tree_command_disabled_reason(&self, command: Command) -> Option<&'static str> {
-        (self.doc.has_folders() && command.category() == Category::Layer
-            && !matches!(command, Command::LayerVisibility | Command::LayerLock
-                | Command::LayerReference | Command::LayerDraft | Command::RenameLayer | Command::NewLayer))
-            .then_some("Folder editing controls are not connected yet. This command cannot safely edit a layer tree.")
+        self.tree_flag_reason(command)
     }
 
     pub(crate) fn command_disabled_reason(&self, command: Command) -> Option<&'static str> {
@@ -35,7 +32,8 @@ impl Parfait {
         }
         if command.category() == Category::Layer {
             let mask = self.selected_layer_mask();
-            if command == Command::LayerClipping
+            if !self.doc.has_folders()
+                && command == Command::LayerClipping
                 && !self.doc.layers[self.doc.active].clipped
                 && self.doc.layers.iter().enumerate().any(|(index, _)| {
                     mask & (1 << index) != 0
@@ -103,9 +101,6 @@ impl Parfait {
         command: Command,
         layer: usize,
     ) -> Option<&'static str> {
-        if let Some(reason) = self.tree_command_disabled_reason(command) {
-            return Some(reason);
-        }
         if self.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
@@ -139,10 +134,39 @@ impl Parfait {
         let Some(target) = self.doc.layers.get(layer) else {
             return Some("The target layer no longer exists.");
         };
+        if self.doc.has_folders() {
+            if matches!(
+                command,
+                Command::DeleteLayer
+                    | Command::MoveLayerUp
+                    | Command::MoveLayerDown
+                    | Command::MoveActiveLayerUp
+                    | Command::MoveActiveLayerDown
+                    | Command::MoveActiveLayerToTop
+                    | Command::MoveActiveLayerToBottom
+            ) {
+                return self.tree_collection_reason(command, 1 << layer);
+            }
+            if command == Command::LayerAlphaLock && target.kind == parfait_core::LayerKind::Folder
+            {
+                return Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.");
+            }
+            if command == Command::LayerClipping
+                && !target.clipped
+                && !self.doc.layers[..layer]
+                    .iter()
+                    .any(|base| base.parent == target.parent && !base.clipped)
+            {
+                return Some("같은 폴더 안에 클리핑 기반 레이어를 남겨 주세요.");
+            }
+        }
         if command.is_layer_mask() {
             return self.mask_command_disabled_reason(command, layer);
         }
         match command {
+            Command::NewLayerFolder
+            | Command::GroupLayersInFolder
+            | Command::UngroupLayerFolder => self.folder_command_reason(command),
             Command::NewLayer => {
                 let parent = if target.kind == parfait_core::LayerKind::Folder {
                     Some(layer)
@@ -189,6 +213,15 @@ impl Parfait {
     }
 
     pub(crate) fn execute_layer_command(&mut self, command: Command, layer: usize) {
+        if self.doc.has_folders()
+            && matches!(
+                command,
+                Command::DeleteLayer | Command::MoveLayerUp | Command::MoveLayerDown
+            )
+        {
+            self.execute_tree_collection(command, 1 << layer);
+            return;
+        }
         if let Some(reason) = self.layer_command_disabled_reason(command, layer) {
             self.notice = Some(reason.into());
             return;

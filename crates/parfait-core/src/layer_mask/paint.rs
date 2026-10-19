@@ -81,7 +81,7 @@ impl MaskPaint {
         if document.width != self.width || document.height != self.height {
             return None;
         }
-        let dab = Dab::new(document, brush, point)?;
+        let dab = Dab::new_mask(document, brush, point)?;
         if !dab.has_strength(brush) {
             return None;
         }

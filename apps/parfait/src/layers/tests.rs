@@ -2,6 +2,171 @@ use super::*;
 use parfait_core::Document;
 use std::sync::Arc;
 
+#[test]
+fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    for depth in [1, 8, 61] {
+        for masked in [false, true] {
+            app.doc = Document::new(8, 8);
+            app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+            for _ in 1..depth {
+                app.doc.create_layer_folder("Nested".into()).unwrap();
+            }
+            app.doc.add_layer();
+            let active = app.doc.active;
+            assert_eq!(app.layer_depth_and_hidden(active), (depth, false));
+            if masked {
+                assert!(app.doc.create_layer_mask(active, 255));
+            }
+            let before = app.doc.clone();
+            for width in [180., 240., 400.] {
+                let context = egui::Context::default();
+                crate::theme::apply(&context);
+                for _ in 0..2 {
+                    let mut output = context.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(Rect::from_min_size(
+                                Pos2::ZERO,
+                                egui::vec2(800., 800.),
+                            )),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            egui::Panel::left("nested_layers")
+                                .exact_size(width)
+                                .show(ui, |ui| {
+                                    app.palette(ui, crate::workspace::Palette::Layers, 700.)
+                                });
+                        },
+                    );
+                    output.textures_delta.clear();
+                }
+                let thumbnail = context
+                    .data(|data| {
+                        data.get_temp::<Rect>(egui::Id::new(("layer_target", active, masked)))
+                    })
+                    .unwrap();
+                let label = row(&context, "layer_label", active);
+                assert!(label.left() >= thumbnail.right() + 4.);
+                assert!(label.right() < width);
+                assert!(label.width() > 0.);
+                assert!(!label.intersects(thumbnail));
+                assert!(app.doc.same_edit_state(&before));
+            }
+        }
+    }
+}
+
+#[test]
+fn folder_disclosure_click_selects_parent_without_editing_and_navigation_reveals_child() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    app.doc = Document::new(8, 8);
+    let folder = app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+    app.select_layer(1);
+    let before = app.doc.clone();
+    let context = egui::Context::default();
+    crate::theme::apply(&context);
+    let mut time = 0.;
+    for _ in 0..2 {
+        frame(&mut app, &context, vec![], &mut time);
+    }
+    let fold = context
+        .data(|data| data.get_temp::<Rect>(egui::Id::new(("folder_fold", folder))))
+        .unwrap()
+        .center();
+    for pressed in [true, false] {
+        frame(
+            &mut app,
+            &context,
+            vec![
+                egui::Event::PointerMoved(fold),
+                pointer(fold, pressed, Default::default()),
+            ],
+            &mut time,
+        );
+    }
+    assert_eq!(app.doc.active, 2);
+    assert_eq!(app.layer_depth_and_hidden(1), (1, true));
+    assert_eq!(app.history.rows().count(), 0);
+    app.select_layer(1);
+    assert_eq!(app.layer_depth_and_hidden(1), (1, false));
+    assert!(app.doc.same_edit_state(&before));
+    assert!(app.layer_list.collapsed.is_empty());
+}
+
+#[test]
+fn tree_drag_moves_into_folder_on_release_and_preserves_pixels_and_undo() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    app.doc = Document::new(8, 8);
+    app.doc.add_layer();
+    let folder = app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+    let before = app.doc.clone();
+    let moved = app.doc.layers[3].id;
+    let context = egui::Context::default();
+    crate::theme::apply(&context);
+    let mut time = 0.;
+    for _ in 0..2 {
+        frame(&mut app, &context, vec![], &mut time);
+    }
+    let start = row(&context, "layer_row", 3).center();
+    let target = row(&context, "layer_row", 2).center();
+    frame(
+        &mut app,
+        &context,
+        vec![
+            egui::Event::PointerMoved(start),
+            pointer(start, true, Default::default()),
+            egui::Event::PointerMoved(target),
+        ],
+        &mut time,
+    );
+    assert_eq!(app.doc.layers, before.layers);
+    frame(
+        &mut app,
+        &context,
+        vec![pointer(target, false, Default::default())],
+        &mut time,
+    );
+    assert_eq!(app.doc.layers[2].id, moved);
+    assert_eq!(app.doc.layers[2].parent, Some(folder));
+    assert_eq!(app.doc.active, 2);
+    assert!(Arc::ptr_eq(
+        &app.doc.layers[2].pixels,
+        &before.layers[3].pixels
+    ));
+    assert!(app.doc.validate());
+    assert_eq!(app.history.rows().count(), 2);
+    app.undo();
+    assert_eq!(app.doc.layers, before.layers);
+    app.redo();
+    assert_eq!(app.doc.layers[2].parent, Some(folder));
+}
+
+#[test]
+fn solo_child_keeps_ancestors_visible_and_restores_original_flags() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    app.doc = Document::new(8, 8);
+    app.doc.add_layer();
+    app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+    app.doc.layers[2].visible = false;
+    let before = app.doc.clone();
+    app.solo_layer(1);
+    assert_eq!(
+        app.doc
+            .layers
+            .iter()
+            .map(|layer| layer.visible)
+            .collect::<Vec<_>>(),
+        [false, true, true, false]
+    );
+    app.solo_layer(1);
+    assert!(app.doc.same_edit_state(&before));
+}
+
 fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, time: &mut f64) {
     *time += 0.03;
     let mut output = ctx.run_ui(

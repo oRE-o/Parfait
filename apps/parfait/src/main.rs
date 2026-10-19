@@ -11,6 +11,7 @@ mod curve_editor;
 mod diagnostics;
 mod display;
 mod editing;
+mod folder_ui;
 mod history_palette;
 mod layer_commands;
 mod layer_controls;

@@ -87,6 +87,9 @@ pub enum Command {
     LayerReference,
     LayerDraft,
     LayerDetails,
+    NewLayerFolder,
+    GroupLayersInFolder,
+    UngroupLayerFolder,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -209,6 +212,9 @@ impl Command {
         Self::LayerReference,
         Self::LayerDraft,
         Self::LayerDetails,
+        Self::NewLayerFolder,
+        Self::GroupLayersInFolder,
+        Self::UngroupLayerFolder,
     ];
 
     pub fn label(self) -> &'static str {
@@ -294,6 +300,9 @@ impl Command {
             Self::LayerReference => "Set as reference layer",
             Self::LayerDraft => "Set as draft layer",
             Self::LayerDetails => "Layer basic settings…",
+            Self::NewLayerFolder => "New layer folder",
+            Self::GroupLayersInFolder => "Create folder and insert layers",
+            Self::UngroupLayerFolder => "Ungroup layer folder",
         }
     }
 
@@ -340,7 +349,12 @@ impl Command {
             | Self::LayerMaskEnabled
             | Self::ClearLayerMask
             | Self::ShowMaskArea => Category::Layer,
-            Self::LayerReference | Self::LayerDraft | Self::LayerDetails => Category::Layer,
+            Self::LayerReference
+            | Self::LayerDraft
+            | Self::LayerDetails
+            | Self::NewLayerFolder
+            | Self::GroupLayersInFolder
+            | Self::UngroupLayerFolder => Category::Layer,
             Self::HidePalettes
             | Self::ResetPaletteLayout
             | Self::PaletteBrushes
@@ -484,6 +498,9 @@ impl Parfait {
             | Command::LayerDraft
             | Command::LayerClipping => self.execute_selected_layer_command(command),
             Command::LayerDetails => self.open_layer_details(),
+            Command::NewLayerFolder
+            | Command::GroupLayersInFolder
+            | Command::UngroupLayerFolder => self.execute_folder_command(command),
             Command::RenameLayer
             | Command::MoveActiveLayerUp
             | Command::MoveActiveLayerDown

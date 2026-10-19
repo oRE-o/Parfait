@@ -2,6 +2,7 @@ use crate::{BlendMode, Document, Layer, LayerId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod editing;
 mod render;
 #[cfg(test)]
 mod tests;

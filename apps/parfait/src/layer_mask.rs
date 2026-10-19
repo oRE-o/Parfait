@@ -126,8 +126,13 @@ impl Parfait {
         if target.mask.is_none() {
             return Some("This layer has no mask.");
         }
-        if !matches!(command, Command::LayerMaskEnabled | Command::ShowMaskArea) && target.locked {
+        if !matches!(command, Command::LayerMaskEnabled | Command::ShowMaskArea)
+            && !self.doc.layer_ancestors_unlocked(layer)
+        {
             return Some("Unlock the layer before changing its mask.");
+        }
+        if command == Command::ApplyLayerMask && target.kind == parfait_core::LayerKind::Folder {
+            return Some("폴더 마스크 적용은 래스터화 기능을 연결한 뒤 지원합니다.");
         }
         if command == Command::ApplyLayerMask && target.alpha_locked {
             return Some("Unlock transparent pixels before applying the mask.");
@@ -215,7 +220,8 @@ impl Parfait {
     pub(crate) fn begin_canvas_stroke(&mut self, point: Point) -> bool {
         if self.stroke.is_some()
             || self.dialog_open()
-            || self.doc.layers[self.doc.active].kind != parfait_core::LayerKind::Raster
+            || (self.doc.layers[self.doc.active].kind != parfait_core::LayerKind::Raster
+                && !self.editing_layer_mask())
             || !self.doc.layer_ancestors_allow_edit(self.doc.active)
         {
             return false;

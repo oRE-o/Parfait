@@ -189,7 +189,7 @@ fn version_seventeen_keys_upgrade_and_new_conversion_binding_reopens() {
     app.persist_preferences(true);
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
-    assert_eq!(legacy["version"], 19);
+    assert_eq!(legacy["version"], 20);
     legacy["version"] = 17.into();
     parfait_storage::save_preferences(
         &directory.path().join("preferences.sqlite"),
@@ -218,5 +218,5 @@ fn version_seventeen_keys_upgrade_and_new_conversion_binding_reopens() {
     drop(app);
     let app = Parfait::open(directory.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::BrightnessToOpacity), "F7");
-    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 19);
+    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 20);
 }

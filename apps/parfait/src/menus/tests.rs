@@ -1,6 +1,52 @@
 use super::*;
 use parfait_core::Document;
 
+#[test]
+fn folder_menu_actions_create_group_and_ungroup_with_one_edit() {
+    for command in [
+        Command::NewLayerFolder,
+        Command::GroupLayersInFolder,
+        Command::UngroupLayerFolder,
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+        app.doc = Document::new(8, 8);
+        app.doc.add_layer();
+        app.set_layer_selection(6, 2);
+        if command == Command::UngroupLayerFolder {
+            app.doc.group_layers_in_folder(6, "Folder".into()).unwrap();
+            app.set_layer_selection(8, 3);
+        }
+        let before = app.doc.clone();
+        let context = egui::Context::default();
+        crate::theme::apply(&context);
+        for _ in 0..2 {
+            frame(&mut app, &context, vec![], 960.);
+        }
+        open(&mut app, &context, TopMenu::Layer);
+        let target = reveal(&mut app, &context, root_path(TopMenu::Layer), |context| {
+            rect(context, ("menu_item", command.label()))
+        });
+        click(&mut app, &context, target);
+        assert!(!egui::Popup::is_any_open(&context));
+        assert!(app.doc.validate());
+        assert_ne!(app.doc.layers, before.layers);
+        assert_eq!(
+            app.doc.layers.len(),
+            if command == Command::UngroupLayerFolder {
+                3
+            } else {
+                4
+            }
+        );
+        assert_eq!(app.history.rows().count(), 2);
+        app.undo();
+        assert_eq!(app.doc.layers, before.layers);
+        app.redo();
+        assert_ne!(app.doc.layers, before.layers);
+    }
+}
+
 fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, width: f32) {
     ctx.data_mut(|data| {
         data.remove::<TopMenu>(egui::Id::new("open_top_menu"));
@@ -197,7 +243,7 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     }
     assert_eq!(app.doc, before);
     assert_eq!(app.history.rows().count(), 0);
-    assert_eq!(Command::ALL.len(), 81);
+    assert_eq!(Command::ALL.len(), 84);
 }
 
 #[test]
@@ -431,8 +477,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (72, 323, 41));
-    assert_eq!(Command::ALL.len(), 81);
+    assert_eq!(counts, (75, 320, 41));
+    assert_eq!(Command::ALL.len(), 84);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",
         counts.0, counts.1, counts.2

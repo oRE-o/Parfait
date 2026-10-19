@@ -64,6 +64,10 @@ impl Parfait {
             self.select_layer(destination);
             return;
         }
+        if self.doc.has_folders() {
+            self.execute_tree_collection(command, 1 << active);
+            return;
+        }
         let destination = match command {
             Command::MoveActiveLayerUp => active + 1,
             Command::MoveActiveLayerDown => active - 1,

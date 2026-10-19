@@ -1,6 +1,112 @@
 use super::*;
 use crate::{History, LayerMask, MaskCoverage, PixelRect};
 
+#[test]
+fn subtree_move_duplicate_delete_preserve_identity_buffers_and_history() {
+    let mut document = fixture();
+    let folder = document
+        .group_layers_in_folder(0b110, "Folder".into())
+        .unwrap();
+    let before = document.clone();
+    let mut history = History::default();
+    history.begin(&document, "Duplicate subtree");
+    let copied = document.duplicate_layer_subtrees(0b1100).unwrap();
+    assert_eq!(copied, 1 << 6);
+    assert_eq!(document.layers.len(), 8);
+    assert!(document.validate());
+    let duplicate = document.layers[6].id;
+    assert_ne!(duplicate, folder);
+    assert_eq!(document.layers[6].name, "Folder copy");
+    for (source, target) in [(1, 4), (2, 5)] {
+        assert_eq!(document.layers[target].parent, Some(duplicate));
+        assert_eq!(document.layers[target].name, before.layers[source].name);
+        assert!(Arc::ptr_eq(
+            &document.layers[target].pixels,
+            &before.layers[source].pixels
+        ));
+        assert_ne!(document.layers[target].id, before.layers[source].id);
+    }
+    assert!(history.commit(&document));
+    assert!(history.undo(&mut document));
+    assert!(document.same_edit_state(&before));
+    assert!(history.redo(&mut document));
+    assert!(document.delete_layer_subtrees(copied));
+    assert!(document.same_edit_state(&before));
+    let raster = document.layers[2].id;
+    assert!(document.move_layer_subtrees(1 << 2, 4, None));
+    assert_eq!(document.layers[3].id, raster);
+    assert_eq!(document.layers[3].parent, None);
+    assert!(document.move_layer_subtrees(1 << 3, 2, Some(folder)));
+    assert!(document.same_edit_state(&before));
+    assert!(!document.move_layer_subtrees(1 << 3, 3, Some(folder)));
+    assert!(!document.move_layer_subtrees(1 << 3, 4, None));
+    document.layers[3].locked = true;
+    assert!(!document.move_layer_subtrees(1 << 1, 4, None));
+    assert!(!document.delete_layer_subtrees(1 << 3));
+    assert!(document.duplicate_layer_subtrees(1 << 1).is_none());
+}
+
+#[test]
+fn sibling_orders_keep_nested_branches_contiguous_and_refuse_mixed_parents() {
+    let mut document = fixture();
+    document
+        .group_layers_in_folder(1 << 1, "Folder".into())
+        .unwrap();
+    assert_eq!(
+        document.layer_sibling_order(1 << 2, true, false),
+        Some(vec![0, 3, 1, 2, 4])
+    );
+    assert_eq!(
+        document.layer_sibling_order(1 << 2, false, true),
+        Some(vec![1, 2, 0, 3, 4])
+    );
+    assert!(
+        document
+            .layer_sibling_order((1 << 1) | (1 << 3), true, true)
+            .is_none()
+    );
+    assert!(document.layer_tree_delete_reason(u64::MAX).is_some());
+    assert!(document.layer_tree_delete_reason(0b11111).is_some());
+    assert!(document.layer_reparent_reason(1 << 3, 2, None).is_some());
+}
+
+#[test]
+fn folder_mask_stroke_changes_coverage_without_allocating_folder_pixels() {
+    let mut document = fixture();
+    document
+        .group_layers_in_folder(0b110, "Folder".into())
+        .unwrap();
+    assert!(document.create_layer_mask(3, 255));
+    let before = document.clone();
+    let brush = crate::Brush {
+        size: 4.,
+        erase: true,
+        color: [0, 0, 0],
+        ..Default::default()
+    };
+    let mut stroke = crate::Stroke::begin_mask(
+        &mut document,
+        brush,
+        crate::Point {
+            x: 2.,
+            y: 1.,
+            pressure: 1.,
+        },
+    )
+    .unwrap();
+    assert!(stroke.take_damage().is_some());
+    assert!(document.layers[3].pixels.is_empty());
+    assert_ne!(document.layers[3].mask, before.layers[3].mask);
+    for index in 0..3 {
+        assert!(Arc::ptr_eq(
+            &document.layers[index].pixels,
+            &before.layers[index].pixels
+        ));
+    }
+    assert_ne!(document.composite(), before.composite());
+    assert!(document.validate());
+}
+
 fn fixture() -> Document {
     let mut document = Document::new(5, 3);
     document.layers[0].locked = false;
