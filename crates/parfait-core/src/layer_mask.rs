@@ -39,7 +39,7 @@ pub(crate) fn masked_alpha(alpha: u8, coverage: u8) -> u8 {
 
 impl Layer {
     pub(crate) fn effective_alpha(&self, index: usize) -> u8 {
-        let alpha = self.pixels[index * 4 + 3];
+        let alpha = self.source_pixel(index)[3];
         self.mask_alpha(index, alpha)
     }
 
@@ -78,6 +78,9 @@ impl Document {
         let Some(target) = self.layers.get(layer) else {
             return Some("The target layer no longer exists.");
         };
+        if target.kind.is_paper() {
+            return Some("Paper layers do not have masks.");
+        }
         if !self.layer_ancestors_unlocked(layer) {
             return Some("Unlock the layer before creating a mask.");
         }

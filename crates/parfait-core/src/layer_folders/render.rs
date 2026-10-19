@@ -17,10 +17,10 @@ struct RowComposite<'a> {
 impl RowComposite<'_> {
     fn source(&self, index: usize) -> &[u8] {
         let layer = &self.document.layers[index];
-        if layer.kind == LayerKind::Folder {
-            &self.folders[index]
-        } else {
+        if layer.kind == LayerKind::Raster {
             &layer.pixels[self.start..self.start + self.stride]
+        } else {
+            &self.folders[index]
         }
     }
 
@@ -136,7 +136,9 @@ fn folder_rows(document: &Document, stride: usize) -> Vec<Vec<u8>> {
         .layers
         .iter()
         .map(|layer| {
-            if layer.kind == LayerKind::Folder {
+            if let Some([red, green, blue]) = layer.kind.solid_color() {
+                [red, green, blue, 255].repeat(stride / 4)
+            } else if layer.kind == LayerKind::Folder {
                 vec![0; stride]
             } else {
                 Vec::new()
@@ -224,7 +226,7 @@ impl Document {
             .enumerate()
             .rev()
             .find_map(|(index, layer)| {
-                if layer.kind != LayerKind::Raster {
+                if layer.kind == LayerKind::Folder {
                     return None;
                 }
                 let mut ancestor = index;

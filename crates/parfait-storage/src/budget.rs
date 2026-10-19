@@ -10,6 +10,51 @@ fn coverage_size(coverage: &MaskCoverage) -> Option<u64> {
     }
 }
 
+pub fn solid_layer_growth_error(
+    document: &Document,
+    paper: bool,
+    name: &str,
+) -> Option<&'static str> {
+    if let Some(reason) = document.solid_layer_creation_reason(paper, name) {
+        return Some(reason);
+    }
+    let active = &document.layers[document.active];
+    let parent =
+        !paper && (active.parent.is_some() || active.kind == parfait_core::LayerKind::Folder);
+    let mask_bytes = if paper {
+        Some(0)
+    } else {
+        document
+            .selection
+            .as_ref()
+            .map_or(Some(5), coverage_size)
+            .and_then(|bytes| bytes.checked_add(1))
+    };
+    let allowed = snapshot_size(document).and_then(|bytes| {
+        bytes
+            .checked_add(47 + 8 * u64::from(parent))?
+            .checked_add(name.len() as u64)?
+            .checked_add(mask_bytes?)
+    });
+    allowed
+        .is_none_or(|bytes| bytes > SNAPSHOT_LIMIT)
+        .then_some("Creating this layer would exceed the 512 MiB snapshot budget.")
+}
+
+pub fn solid_rasterization_error(document: &Document, index: usize) -> Option<&'static str> {
+    if let Some(reason) = document.solid_rasterization_reason(index) {
+        return Some(reason);
+    }
+    snapshot_size(document)
+        .and_then(|bytes| {
+            bytes
+                .checked_sub(3)?
+                .checked_add(u64::from(document.width) * u64::from(document.height) * 4)
+        })
+        .is_none_or(|bytes| bytes > SNAPSHOT_LIMIT)
+        .then_some("Rasterizing this layer would exceed the 512 MiB snapshot budget.")
+}
+
 pub fn selection_update_error(document: &Document, dense: bool) -> Option<&'static str> {
     if let Some(reason) = document.selection_creation_reason() {
         return Some(reason);
@@ -52,7 +97,7 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     let pixels = u64::from(document.width)
         .checked_mul(u64::from(document.height))?
         .checked_mul(4)?;
-    let mut bytes = (super::SNAPSHOT_V9.len() as u64)
+    let mut bytes = (super::SNAPSHOT_V10.len() as u64)
         .checked_add(49)?
         .checked_add(document.name.len() as u64)?;
     if let Some(coverage) = &document.selection {
@@ -65,6 +110,7 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
         bytes = bytes
             .checked_add(44 + 8 * u64::from(layer.parent.is_some()))?
             .checked_add(layer.name.len() as u64)?
+            .checked_add(3 * u64::from(layer.kind.solid_color().is_some()))?
             .checked_add(if layer.kind == parfait_core::LayerKind::Raster {
                 pixels
             } else {
@@ -143,7 +189,7 @@ pub fn layer_mask_creation_error(document: &Document, layer: usize) -> Option<&'
 }
 
 pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'static str> {
-    if document.has_folders() {
+    if document.has_non_raster_layers() {
         if let Some(reason) = document.layer_tree_duplication_reason(selection) {
             return Some(reason);
         }
@@ -160,6 +206,7 @@ pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'
                 bytes = bytes
                     .checked_add(44 + 8 * u64::from(layer.parent.is_some()))?
                     .checked_add(layer.name.len() as u64)?
+                    .checked_add(3 * u64::from(layer.kind.solid_color().is_some()))?
                     .checked_add(5 * u64::from(roots & (1 << index) != 0))?
                     .checked_add(layer.pixels.len() as u64)?;
                 if let Some(mask) = &layer.mask {
@@ -354,7 +401,7 @@ mod tests {
                 .with_fixint_encoding()
                 .serialized_size(&document)
                 .unwrap()
-                + super::super::SNAPSHOT_V7.len() as u64
+                + super::super::SNAPSHOT_V10.len() as u64
         );
         assert!(layer_reparent_error(&document, 2, 4, None).is_none());
         assert!(document.move_layer_subtrees(2, 4, None));
@@ -381,7 +428,7 @@ mod tests {
                 .with_fixint_encoding()
                 .serialized_size(&document)
                 .unwrap()
-                + super::super::SNAPSHOT_V7.len() as u64
+                + super::super::SNAPSHOT_V10.len() as u64
         );
     }
 
@@ -447,7 +494,7 @@ mod tests {
                         .with_fixint_encoding()
                         .serialized_size(&document)
                         .unwrap()
-                        + super::super::SNAPSHOT_V6.len() as u64
+                        + super::super::SNAPSHOT_V10.len() as u64
                 );
                 document.add_layer();
             }
@@ -476,7 +523,7 @@ mod tests {
                         .with_fixint_encoding()
                         .serialized_size(&document)
                         .unwrap()
-                        + super::super::SNAPSHOT_V6.len() as u64
+                        + super::super::SNAPSHOT_V10.len() as u64
                 );
                 assert!(layer_duplication_error(&document, 2).is_none());
             }

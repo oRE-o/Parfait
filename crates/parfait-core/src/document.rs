@@ -77,6 +77,10 @@ pub struct Document {
 
 impl Document {
     pub fn new(width: u32, height: u32) -> Self {
+        Self::new_background(width, height, false)
+    }
+
+    pub(crate) fn new_background(width: u32, height: u32, paper: bool) -> Self {
         assert!(width > 0 && height > 0 && width <= 4096 && height <= 4096);
         let len = width as usize * height as usize * 4;
         Self {
@@ -89,16 +93,20 @@ impl Document {
                     id: LayerId(1),
                     name: "Paper".into(),
                     visible: true,
-                    locked: true,
+                    locked: !paper,
                     alpha_locked: false,
                     clipped: false,
                     opacity: 1.,
                     blend_mode: BlendMode::Normal,
-                    pixels: Arc::new(vec![255; len]),
+                    pixels: Arc::new(if paper { Vec::new() } else { vec![255; len] }),
                     mask: None,
                     reference: false,
                     draft: false,
-                    kind: crate::LayerKind::Raster,
+                    kind: if paper {
+                        crate::LayerKind::Paper([255; 3])
+                    } else {
+                        crate::LayerKind::Raster
+                    },
                     parent: None,
                 },
                 Layer {
@@ -149,12 +157,28 @@ impl Document {
                         .all(|previous| previous.id != layer.id)
             })
             && self.logical_pixel_bytes() <= 512 * 1024 * 1024
-            && self.layers.iter().all(|l| {
-                (if l.kind == crate::LayerKind::Folder {
-                    l.pixels.is_empty() && !l.alpha_locked
-                } else {
-                    l.blend_mode != BlendMode::Through
-                        && l.pixels.len() == self.width as usize * self.height as usize * 4
+            && self.layers.iter().enumerate().all(|(index, l)| {
+                (match l.kind {
+                    crate::LayerKind::Raster => {
+                        l.blend_mode != BlendMode::Through
+                            && l.pixels.len() == self.width as usize * self.height as usize * 4
+                    }
+                    crate::LayerKind::Folder => l.pixels.is_empty() && !l.alpha_locked,
+                    crate::LayerKind::Fill(_) => {
+                        l.pixels.is_empty() && !l.alpha_locked && l.blend_mode != BlendMode::Through
+                    }
+                    crate::LayerKind::Paper(_) => {
+                        index == 0
+                            && l.parent.is_none()
+                            && l.pixels.is_empty()
+                            && !l.alpha_locked
+                            && !l.clipped
+                            && l.opacity == 1.
+                            && l.blend_mode == BlendMode::Normal
+                            && l.mask.is_none()
+                            && !l.reference
+                            && !l.draft
+                    }
                 }) && l.mask.as_ref().is_none_or(|mask| match &mask.coverage {
                     crate::MaskCoverage::Uniform(_) => true,
                     crate::MaskCoverage::Dense(values) => {
@@ -209,7 +233,7 @@ impl Document {
         if column >= self.width || row >= self.height {
             return None;
         }
-        if self.has_folders() {
+        if self.has_non_raster_layers() {
             return self.folder_layer_at(column, row);
         }
         let alpha = ((row * self.width + column) * 4 + 3) as usize;
@@ -325,7 +349,7 @@ impl Document {
         self.composite_region_layers(rect, u64::MAX)
     }
     pub(crate) fn composite_region_layers(&self, rect: PixelRect, mask: u64) -> Vec<u8> {
-        if self.has_folders() {
+        if self.has_non_raster_layers() {
             return self.composite_folder_region(rect, mask);
         }
         let r = rect.clipped(self.width, self.height);

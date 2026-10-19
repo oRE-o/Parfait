@@ -35,7 +35,7 @@ impl Parfait {
         }
         if command.category() == Category::Layer {
             let mask = self.selected_layer_mask();
-            if !self.doc.has_folders()
+            if !self.doc.has_non_raster_layers()
                 && command == Command::LayerClipping
                 && !self.doc.layers[self.doc.active].clipped
                 && self.doc.layers.iter().enumerate().any(|(index, _)| {
@@ -137,7 +137,22 @@ impl Parfait {
         let Some(target) = self.doc.layers.get(layer) else {
             return Some("The target layer no longer exists.");
         };
-        if self.doc.has_folders() {
+        if target.kind.is_paper()
+            && matches!(
+                command,
+                Command::LayerDetails
+                    | Command::LayerAlphaLock
+                    | Command::LayerClipping
+                    | Command::LayerReference
+                    | Command::LayerDraft
+            )
+        {
+            return Some("용지에는 색과 표시, 잠금만 설정할 수 있습니다.");
+        }
+        if target.kind != parfait_core::LayerKind::Raster && command == Command::LayerAlphaLock {
+            return Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.");
+        }
+        if self.doc.has_non_raster_layers() {
             if matches!(
                 command,
                 Command::DeleteLayer
@@ -214,7 +229,7 @@ impl Parfait {
     }
 
     pub(crate) fn execute_layer_command(&mut self, command: Command, layer: usize) {
-        if self.doc.has_folders()
+        if self.doc.has_non_raster_layers()
             && matches!(
                 command,
                 Command::DeleteLayer | Command::MoveLayerUp | Command::MoveLayerDown

@@ -24,6 +24,11 @@ impl Document {
         if self.has_folders() {
             return Some("Use tree-aware combining for folders and their children.");
         }
+        if action != LayerCombine::CopyVisible && self.has_non_raster_layers() {
+            return Some(
+                "Rasterize fill and paper layers before combining or clearing their pixels.",
+            );
+        }
         let all = u64::MAX >> (64 - self.layers.len());
         if selection == 0 || selection & !all != 0 {
             return Some("Select an existing layer first.");

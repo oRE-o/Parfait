@@ -55,7 +55,7 @@ fn exact_v8_tree_snapshot_upgrades_without_selection_or_other_metadata_changes()
             ),
         )
         .unwrap();
-    assert_eq!(snapshot_size(&document).unwrap(), raw.len() as u64 + 1);
+    assert_eq!(snapshot_size(&document).unwrap(), raw.len() as u64 + 2);
     inject(&store, document.revision, &raw);
     store
         .connection
@@ -70,7 +70,7 @@ fn exact_v8_tree_snapshot_upgrades_without_selection_or_other_metadata_changes()
             .connection
             .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        9
+        10
     );
     drop(store);
     assert_eq!(
@@ -116,7 +116,7 @@ fn selection_shapes_and_fractional_masks_roundtrip_with_exact_snapshot_accountin
         ZlibDecoder::new(raw_len.as_slice())
             .read_to_end(&mut raw)
             .unwrap();
-        assert!(raw.starts_with(SNAPSHOT_V9));
+        assert!(raw.starts_with(SNAPSHOT_V10));
         assert_eq!(snapshot_size(&document).unwrap(), raw.len() as u64);
     }
 }

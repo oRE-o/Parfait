@@ -21,6 +21,7 @@ pub use raster_conversion::RasterConversion;
 pub use selection::SelectionMode;
 
 mod pressure;
+mod procedural;
 pub use pressure::PressureCalibration;
 
 mod blend;

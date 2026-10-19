@@ -155,6 +155,10 @@ impl Parfait {
             });
     }
     pub(crate) fn duplicate_layer(&mut self) {
+        if self.doc.has_non_raster_layers() {
+            self.execute_tree_collection(Command::DuplicateLayer, 1 << self.doc.active);
+            return;
+        }
         if let Some(reason) =
             parfait_storage::layer_duplication_error(&self.doc, 1 << self.doc.active)
         {
@@ -207,8 +211,7 @@ impl Parfait {
                 for x in 0..40 {
                     let sx = x * self.doc.width / 40;
                     let sy = y * self.doc.height / 40;
-                    let at = ((sy * self.doc.width + sx) * 4) as usize;
-                    let pixel = layer.pixels.get(at..at + 4).unwrap_or(&[0; 4]);
+                    let pixel = layer.source_pixel((sy * self.doc.width + sx) as usize);
                     let a = pixel[3] as f32 / 255.;
                     let bg = if (x / 5 + y / 5) % 2 == 0 { 210. } else { 165. };
                     for component in &pixel[..3] {
@@ -355,6 +358,9 @@ impl Parfait {
                 let mut opacity = self.doc.layers[active].opacity;
                 ui.horizontal(|ui| {
                     let mut mode = self.doc.layers[active].blend_mode;
+                    if self.doc.layers[active].kind.is_paper() {
+                        ui.disable();
+                    }
                     let width = ui.available_width();
                     let blend = crate::layer_controls::blend_select(
                         ui,
@@ -481,6 +487,78 @@ impl Parfait {
 mod tests {
     use super::*;
     use crate::workspace::Palette;
+
+    #[test]
+    fn paper_controls_and_commands_cannot_write_incompatible_metadata() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+        app.doc = parfait_core::Document::new_with_paper(8, 5);
+        app.select_layer(0);
+        let before = app.doc.clone();
+        let context = egui::Context::default();
+        crate::theme::apply(&context);
+        let frame = |app: &mut Parfait, events| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(320., 600.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.palette(ui, Palette::Layers, 400.),
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut app, vec![]);
+        frame(&mut app, vec![]);
+        let slider = context
+            .data(|data| data.get_temp::<(egui::Rect, f32)>(egui::Id::new("layer_opacity")))
+            .unwrap()
+            .0;
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(slider.center()),
+                    egui::Event::PointerButton {
+                        pos: slider.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+        for command in [
+            Command::LayerAlphaLock,
+            Command::LayerClipping,
+            Command::LayerReference,
+            Command::LayerDraft,
+            Command::DuplicateLayer,
+            Command::MoveActiveLayerUp,
+            Command::MoveActiveLayerToTop,
+            Command::GroupLayersInFolder,
+            Command::LayerDetails,
+            Command::LayerMaskRevealAll,
+        ] {
+            assert!(
+                app.command_disabled_reason(command).is_some(),
+                "{command:?}"
+            );
+            app.execute_command(command, &context);
+            assert!(app.doc.same_edit_state(&before), "{command:?}");
+            assert_eq!(app.doc.revision, before.revision);
+            assert!(app.doc.validate());
+        }
+        app.set_layer_selection(3, 0);
+        assert!(app.command_disabled_reason(Command::LayerDraft).is_some());
+        assert!(
+            app.command_disabled_reason(Command::LayerAlphaLock)
+                .is_some()
+        );
+    }
 
     #[test]
     fn opacity_drag_from_existing_handle_is_one_undoable_edit() {

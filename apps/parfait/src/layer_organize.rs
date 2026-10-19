@@ -64,7 +64,7 @@ impl Parfait {
             self.select_layer(destination);
             return;
         }
-        if self.doc.has_folders() {
+        if self.doc.has_non_raster_layers() {
             self.execute_tree_collection(command, 1 << active);
             return;
         }

@@ -142,10 +142,22 @@ impl Parfait {
     }
 
     pub(crate) fn tree_flag_reason(&self, command: Command) -> Option<&'static str> {
-        if !self.doc.has_folders() {
+        if !self.doc.has_non_raster_layers() {
             return None;
         }
         let selection = self.selected_layer_mask();
+        if matches!(
+            command,
+            Command::LayerClipping | Command::LayerReference | Command::LayerDraft
+        ) && self
+            .doc
+            .layers
+            .iter()
+            .enumerate()
+            .any(|(index, layer)| selection & (1 << index) != 0 && layer.kind.is_paper())
+        {
+            return Some("용지는 클리핑이나 참조, 밑그림으로 설정할 수 없습니다.");
+        }
         match command {
             Command::DeleteLayer
             | Command::DuplicateLayer
@@ -159,7 +171,7 @@ impl Parfait {
             }
             Command::LayerAlphaLock
                 if self.doc.layers.iter().enumerate().any(|(index, layer)| {
-                    selection & (1 << index) != 0 && layer.kind == LayerKind::Folder
+                    selection & (1 << index) != 0 && layer.kind != LayerKind::Raster
                 }) =>
             {
                 Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.")

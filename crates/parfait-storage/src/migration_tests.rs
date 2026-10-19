@@ -56,7 +56,7 @@ fn exact_version_six_preserves_roles_masks_ids_and_migrates_to_root_rasters() {
             .connection
             .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        9
+        10
     );
     assert_eq!(store.load().unwrap().unwrap().document, expected);
 }
@@ -84,7 +84,7 @@ fn folder_tree_roundtrip_analytic_budget_and_malformed_head_recovery() {
             .iter()
             .any(|layer| layer.id == nested && layer.parent == Some(folder))
     );
-    let mut raw = SNAPSHOT_V7.to_vec();
+    let mut raw = SNAPSHOT_V10.to_vec();
     bincode::DefaultOptions::new()
         .with_fixint_encoding()
         .serialize_into(&mut raw, &expected)
@@ -114,7 +114,7 @@ fn folder_tree_roundtrip_analytic_budget_and_malformed_head_recovery() {
         }
         assert!(!broken.validate());
         broken.touch();
-        let mut raw = SNAPSHOT_V7.to_vec();
+        let mut raw = SNAPSHOT_V10.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .serialize_into(&mut raw, &broken)
@@ -207,7 +207,7 @@ fn exact_version_five_masks_migrate_without_inventing_layer_flags() {
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            9
+            10
         );
         drop(store);
         assert_eq!(
@@ -241,7 +241,7 @@ fn current_flags_roundtrip_and_corrupt_head_falls_back() {
         .unwrap();
     assert_eq!(
         snapshot_size(&document).unwrap(),
-        SNAPSHOT_V9.len() as u64 + encoded.len() as u64
+        SNAPSHOT_V10.len() as u64 + encoded.len() as u64
     );
     let mut broken = SNAPSHOT_V9.to_vec();
     broken.extend_from_slice(&encoded[..encoded.len() - 1]);
@@ -316,7 +316,7 @@ fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_ver
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            9
+            10
         );
         drop(store);
         let loaded = Store::open(&path).unwrap().load().unwrap().unwrap();
@@ -483,7 +483,7 @@ fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity
                 .connection
                 .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
                 .unwrap(),
-            9
+            10
         );
         drop(store);
         let loaded = Store::open(&path).unwrap().load().unwrap().unwrap();
@@ -532,7 +532,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
 
 #[test]
 fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
-    for version in [-1, 10] {
+    for version in [-1, 11] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("future.parfait");
         let connection = Connection::open(&path).unwrap();
@@ -561,7 +561,7 @@ fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
     }
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(&dir.path().join("unknown.parfait")).unwrap();
-    let raw = b"PARFAIT\0SNAP10\0unknown";
+    let raw = b"PARFAIT\0SNAP11\0unknown";
     insert_raw(&store, 1, raw);
     assert!(store.load().is_err());
     assert_eq!(
@@ -586,7 +586,7 @@ fn identity_exhaustion_and_alpha_flags_roundtrip_and_size_matches_exact_serializ
     assert!(layer_growth_error(&document, 5).is_some());
     assert_eq!(
         snapshot_size(&document).unwrap(),
-        SNAPSHOT_V9.len() as u64
+        SNAPSHOT_V10.len() as u64
             + bincode::DefaultOptions::new()
                 .with_fixint_encoding()
                 .serialized_size(&document)

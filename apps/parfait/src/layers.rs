@@ -117,7 +117,7 @@ impl Parfait {
 
     pub(crate) fn execute_selected_layer_command(&mut self, command: Command) {
         let mask = self.selected_layer_mask();
-        if self.doc.has_folders()
+        if self.doc.has_non_raster_layers()
             && matches!(
                 command,
                 Command::DeleteLayer | Command::MoveLayerUp | Command::MoveLayerDown
@@ -212,7 +212,7 @@ impl Parfait {
         }
     }
     pub(crate) fn duplicate_selected_layers(&mut self) {
-        if self.doc.has_folders() {
+        if self.doc.has_non_raster_layers() {
             self.execute_tree_collection(Command::DuplicateLayer, self.selected_layer_mask());
             return;
         }
@@ -914,7 +914,7 @@ impl Parfait {
             && drag.moved
             && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
         {
-            if let Some((boundary, y)) = if self.doc.has_folders() {
+            if let Some((boundary, y)) = if self.doc.has_non_raster_layers() {
                 self.tree_drop_target(&targets, viewport, pointer).map(
                     |(boundary, parent, y, inside)| {
                         let valid = parfait_storage::layer_reparent_error(
@@ -1088,7 +1088,7 @@ impl Parfait {
                     if let Some(mut drag) = self.layer_list.drag.take() {
                         drag.moved |= drag.origin.distance(pos) > 4.;
                         if drag.moved {
-                            if self.doc.has_folders() {
+                            if self.doc.has_non_raster_layers() {
                                 if let Some((boundary, parent, _, _)) =
                                     self.tree_drop_target(targets, viewport, pos)
                                 {
@@ -1115,7 +1115,7 @@ impl Parfait {
         }
     }
     pub(crate) fn reorder_layer_mask(&mut self, mask: u64, boundary: usize) {
-        if self.doc.has_folders() {
+        if self.doc.has_non_raster_layers() {
             self.move_tree_selection(mask, boundary, self.doc.layers[self.doc.active].parent);
             return;
         }

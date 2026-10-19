@@ -7,8 +7,11 @@ mod legacy_v4;
 mod legacy_v5;
 mod legacy_v6;
 mod legacy_v8;
+mod legacy_v9;
 #[cfg(test)]
 mod migration_tests;
+#[cfg(test)]
+mod procedural_tests;
 #[cfg(test)]
 mod selection_tests;
 #[cfg(test)]
@@ -22,6 +25,7 @@ const SNAPSHOT_V6: &[u8] = b"PARFAIT\0SNAP6\0";
 const SNAPSHOT_V7: &[u8] = b"PARFAIT\0SNAP7\0";
 const SNAPSHOT_V8: &[u8] = b"PARFAIT\0SNAP8\0";
 const SNAPSHOT_V9: &[u8] = b"PARFAIT\0SNAP9\0";
+const SNAPSHOT_V10: &[u8] = b"PARFAIT\0SNAP10\0";
 use anyhow::{Context, Result, bail, ensure};
 use bincode::Options;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
@@ -41,7 +45,7 @@ const MAX_BYTES: u64 = budget::SNAPSHOT_LIMIT;
 pub use budget::{
     layer_duplication_error, layer_folder_growth_error, layer_growth_count_error,
     layer_growth_error, layer_mask_creation_error, layer_reparent_error, mask_edit_error,
-    selection_update_error, snapshot_size,
+    selection_update_error, snapshot_size, solid_layer_growth_error, solid_rasterization_error,
 };
 
 /// Workspace and brush preferences are separate from artwork and committed atomically.
@@ -77,7 +81,7 @@ impl Store {
         connection.busy_timeout(Duration::from_secs(3))?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(
-            (0..=9).contains(&version),
+            (0..=10).contains(&version),
             "This project uses an unsupported format ({version})"
         );
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
@@ -111,10 +115,10 @@ impl Store {
             snapshot_size(doc).is_some_and(|bytes| bytes <= MAX_BYTES),
             "Snapshot exceeds 512 MiB before encoding"
         );
-        let mut raw = SNAPSHOT_V9.to_vec();
+        let mut raw = SNAPSHOT_V10.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .with_limit(MAX_BYTES - SNAPSHOT_V9.len() as u64)
+            .with_limit(MAX_BYTES - SNAPSHOT_V10.len() as u64)
             .serialize_into(&mut raw, doc)?;
         ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
         let checksum = Sha256::digest(&raw).to_vec();
@@ -127,7 +131,7 @@ impl Store {
             params![i64::try_from(doc.revision)?, checksum, payload],
         )?;
         tx.execute("DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 3)",[])?;
-        tx.pragma_update(None, "user_version", 9)?;
+        tx.pragma_update(None, "user_version", 10)?;
         tx.commit()?;
         Ok(())
     }
@@ -155,8 +159,11 @@ impl Store {
                     .with_fixint_encoding()
                     .with_limit(MAX_BYTES)
                     .reject_trailing_bytes();
-                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V9) {
+                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V10) {
                     options.deserialize(payload)?
+                } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V9) {
+                    let old: legacy_v9::LegacyDocument = options.deserialize(payload)?;
+                    old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V8) {
                     let old: legacy_v8::LegacyDocument = options.deserialize(payload)?;
                     old.into()
@@ -319,7 +326,7 @@ mod tests {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         store
             .connection
             .execute("UPDATE snapshots SET payload=x'00' WHERE revision=2", [])

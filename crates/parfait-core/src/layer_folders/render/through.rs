@@ -136,6 +136,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn solid_and_folder_row_capacity_stays_within_one_mebibyte_at_maximum_width() {
+        let mut document = Document::new_with_paper(4096, 1);
+        document.create_layer_folder("Pass".into()).unwrap();
+        document.layers[2].blend_mode = BlendMode::Through;
+        while document.layers.len() < 64 {
+            document
+                .create_solid_layer([30, 80, 150], false, "Fill".into())
+                .unwrap();
+        }
+        let mut rows = folder_rows(&document, 4096 * 4);
+        assert_eq!(rows.iter().map(Vec::len).sum::<usize>(), 63 * 4096 * 4);
+        assert!(rows.iter().map(Vec::capacity).sum::<usize>() <= 1024 * 1024);
+        let identities: Vec<_> = rows
+            .iter()
+            .map(|row| (row.as_ptr(), row.capacity()))
+            .collect();
+        let mut output = vec![0; 4096 * 4];
+        compose(
+            &document,
+            &document.folder_layout().unwrap(),
+            &mut rows,
+            PixelRect {
+                x0: 0,
+                y0: 0,
+                x1: 4096,
+                y1: 1,
+            },
+            u64::MAX,
+            &mut output,
+        );
+        assert_eq!(
+            identities,
+            rows.iter()
+                .map(|row| (row.as_ptr(), row.capacity()))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            output
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == [30, 80, 150, 255])
+        );
+    }
+
+    #[test]
     fn deepest_pass_groups_reuse_bounded_row_storage() {
         let mut document = Document::new(4096, 1);
         document.layers[1].pixels = std::sync::Arc::new([255, 0, 0, 255].repeat(4096));

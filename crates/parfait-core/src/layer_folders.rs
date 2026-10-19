@@ -14,6 +14,8 @@ pub enum LayerKind {
     #[default]
     Raster,
     Folder,
+    Fill([u8; 3]),
+    Paper([u8; 3]),
 }
 
 pub(crate) struct FolderLayout {
@@ -26,6 +28,12 @@ impl Document {
         self.layers
             .iter()
             .any(|layer| layer.kind == LayerKind::Folder)
+    }
+
+    pub fn has_non_raster_layers(&self) -> bool {
+        self.layers
+            .iter()
+            .any(|layer| layer.kind != LayerKind::Raster)
     }
 
     pub(crate) fn folder_layout(&self) -> Option<FolderLayout> {
@@ -50,7 +58,7 @@ impl Document {
         }
         for (index, layer) in self.layers.iter().enumerate() {
             if sizes[index] != index - layout.starts[index] + 1
-                || (layer.kind == LayerKind::Raster && sizes[index] != 1)
+                || (layer.kind != LayerKind::Folder && sizes[index] != 1)
             {
                 return None;
             }
@@ -160,7 +168,8 @@ impl Document {
     }
 
     pub fn group_layers_in_folder(&mut self, mut selection: u64, name: String) -> Option<LayerId> {
-        if self.layers.is_empty()
+        if self.layer_folder_creation_reason(Some(selection)).is_some()
+            || self.layers.is_empty()
             || self.layers.len() >= 64
             || selection == 0
             || (self.layers.len() < 64 && selection >> self.layers.len() != 0)

@@ -210,7 +210,7 @@ impl Document {
                         let alpha = if layer.kind == LayerKind::Folder {
                             children[child][column]
                         } else {
-                            layer.pixels[pixel * 4 + 3]
+                            layer.source_pixel(pixel)[3]
                         };
                         *target =
                             SelectionMode::Add.combine(*target, layer.mask_alpha(pixel, alpha));
@@ -227,7 +227,7 @@ impl Document {
                     let source = if layer.kind == LayerKind::Folder {
                         folders[index][column]
                     } else {
-                        layer.pixels[pixel * 4 + 3]
+                        layer.source_pixel(pixel)[3]
                     };
                     alpha = SelectionMode::Add.combine(alpha, layer.mask_alpha(pixel, source));
                 }
