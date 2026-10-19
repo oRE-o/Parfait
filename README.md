@@ -4,6 +4,8 @@ A lightweight, open-source drawing app in Rust. A quiet canvas, familiar pen-fir
 
 **Early desktop prototype (0.1).** The first version prioritizes a complete draw → save → restart workflow over a large tool catalog.
 
+See the [implementation status](docs/status.md) for working features, explicit gaps and the next reliability priorities.
+
 ![Parfait drawing workspace](docs/images/workspace.png)
 
 ## Product direction

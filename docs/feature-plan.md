@@ -2,6 +2,8 @@
 
 This is an independent product backlog. A listed item is not implemented unless its status says so. Each group needs its own design, fixtures, undo/save behavior and acceptance checks.
 
+See the [implementation checkpoint](status.md) for the current supported scope and reliability boundaries. A local brush operation does not implement a document filter, and a fixed internal policy does not implement a configurable preference.
+
 Raster mask editing supports explicit reveal-all/hide-all creation, content/mask thumbnail selection, Paint/Erase coverage, enable/delete/apply, History and artwork v5 save/recovery. Selection-shaped creation and linked transforms remain planned; mask-area display and target-aware clearing are implemented. Unsupported mask operations refuse input rather than editing original content. Seven mask commands share menu/context/assignable-key dispatch; only the active layer is affected, even with additional layers checked.
 
 | Group | Current behavior | Follow-up work and acceptance criteria |
@@ -25,6 +27,8 @@ Raster mask editing supports explicit reveal-all/hide-all creation, content/mask
 Prioritize reliable drawing, recovery and cross-platform input before extending the tool catalog. UI controls must represent implemented behavior; avoid empty buttons for future features.
 
 ## Immediate usability milestone
+
+First separate the user project-file dirty state from recovery acknowledgments, and measure synchronous manual-save/export stalls, startup, idle CPU and RSS. Recovery's bounded worker is not an asynchronous project-file save implementation. Keep these reliability gates ahead of expanding the tool catalog.
 
 1. Put lightweight/stability gates before more features: unchanged-preference serialization and excessive idle maintenance are removed. Next profile whole-layer copy-on-write, aggregate document/undo working-set limits and changed-library saving, preserving recovery and compatibility.
 2. Keep canvas navigation and coordinate feedback consistent: document-anchored rulers are implemented; retain pan/zoom/input regressions and native checks.
