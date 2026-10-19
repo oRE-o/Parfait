@@ -1,42 +1,160 @@
-# Roadmap
+# 개발 로드맵
 
-## 0.1
+2026년 10월 20일 정리
 
-Basic drawing, layers, PNG tips, local projects and verified process-crash recovery. Prioritize a usable end-to-end workflow.
+Parfait는 그림을 바로 그리고 안전하게 저장하는 가벼운 편집기를 목표로 한다.
+기능 수보다 펜 반응과 데이터 보존을 먼저 챙긴다.
+개발 날짜를 약속하기보다 각 단계의 통과 조건으로 다음 작업을 정한다.
 
-## Next
+현재 작동하는 범위는 [구현 현황](status.md)에 적는다.
+분야별 세부 과제는 [기능 목록](feature-plan.md)에서 관리한다.
 
-First consolidate the [workspace UI system](ui-system.md): consistent palette shells, docking behavior, dismissal and layout persistence before expanding the tool catalog.
+## 사용자가 작업하는 순서
 
-- Establish Windows, macOS and Linux build/test coverage and native packaging; validate each on real hardware before claiming support.
-- Configurable canvas dimensions and keyboard bindings.
-- Typed edit commands and grouped property edits.
-- Brush library tags and import compatibility reports.
-- Hardware-tested pen sampling, tilt and velocity-aware stabilization.
-- Tiled copy-on-write buffers and measured GPU layer compositing; partial stroke texture updates are implemented.
-- Release performance baselines on modest reference hardware, including autosave and p95/p99 frame times.
-- Tests for disk exhaustion, permission failures and storage migration.
-- Selection, clipping and masks, then geometric transforms and liquify.
-- Additional brush formats based on versioned fixtures and documented mappings.
+1. 그림을 새로 만들거나 파일을 연다.
+2. 레이어와 도구를 고르고 그림을 그린다.
+3. 필요한 부분을 선택하고 채우거나 바꾼다.
+4. 레이어를 정리하고 색과 효과를 다듬는다.
+5. 작업 파일을 저장하고 완성 그림을 내보낸다.
+6. 앱을 다시 열어 작업을 이어간다.
 
-Each feature needs observable acceptance criteria. A parsed brush file is not evidence of matching brush behavior; a successful save call is not a substitute for a recovery test.
+새 기능은 이 흐름에서 어떤 불편을 줄이는지부터 정한다.
+메뉴 하나를 채우는 일보다 한 작업을 끝까지 할 수 있게 만드는 일이 먼저다.
 
-Implemented after the initial prototype: draggable palettes with side-by-side docking, footprint previews, independent native windows and persisted layout, pressure curves, persistent brush presets, additional procedural tips and custom window chrome. Remaining UI and editor groups are tracked in the [feature plan](feature-plan.md).
+## 기능을 나누는 기준
 
-## Mobile apps (later)
+| 분야 | 맡는 일 |
+| --- | --- |
+| 문서와 파일 | 그림 크기와 용지, 파일 열기, 저장, 내보내기 |
+| 그리기 | 펜, 지우개, 필압, 간격, 붓 모양, 혼색 |
+| 선택과 편집 | 작업 범위 선택, 채우기, 도형, 이동, 크기 변경 |
+| 레이어 | 순서, 폴더, 합성, 마스크, 레이어 종류 |
+| 색과 효과 | 색 선택, 색 보정, 필터, 효과 미리보기 |
+| 작업 화면 | 팔레트, 단축키, 눈금자, 안내선, 환경설정 |
+| 안전과 속도 | 실행 취소, 저장 복구, 메모리, 입력과 화면 갱신 |
+| 확장 | 벡터, 글자, 여러 문서, 모바일, 선택형 소재 공유 |
 
-- Target Android and iOS/iPadOS after the desktop foundation; device priorities and release dates remain undecided.
-- Reuse the Rust drawing core and versioned project format, with an adaptive touch/stylus workspace.
-- Separate platform file access, lifecycle, input and rendering before choosing the mobile shell.
-- Validate recovery after background suspension and OS termination, memory pressure, sandboxed import/export and tablet pen behavior.
+## 프로그램 안의 공통 흐름
 
-See the [platform plan](platforms.md) for the support matrix and release criteria.
+새 도구에 적용할 설계 기준이다. 선택과 효과 미리보기는 아직 구현할 부분이다.
 
-## Community (later)
+1. 화면에서 클릭과 펜 입력을 받는다.
+2. 입력을 맡은 창과 실행할 명령을 고른다.
+3. 대상 레이어와 마스크, 선택 범위, 잠금을 확인한다.
+4. 그림 처리 코어에서 결과를 계산한다.
+5. 실제 변경만 실행 취소 기록에 넣고 바뀐 부분을 화면에 그린다.
+6. 복구 저장을 요청하고 저장 완료 응답을 따로 확인한다.
 
-- Portable material packs with versioned metadata, license, attribution and compatibility.
-- Optional brush/material publication, search, tags, previews and downloads.
-- Upload limits, validation, reporting and moderation before a public service launches.
-- Keep local drawing and existing downloaded materials usable offline without an account.
+문서 전체를 바꾸는 작업은 한 번에 확정한다.
+미리보기가 필요한 작업은 확정 전까지 원본과 구분하고 취소하면 원래 상태로 돌아간다.
+늦게 끝난 작업이 이미 바뀐 문서나 다른 레이어를 덮어쓰지 않도록 한다.
+화면 이동이나 도구 선택만으로 그림을 다시 계산하거나 저장하지 않도록 한다.
 
-The [project vision](vision.md) governs scope: responsiveness and recovery come before catalog size or online features.
+### 여러 기능이 함께 쓰는 기반
+
+- 선택 범위는 한곳에서 관리한다. 펜과 채우기와 변환이 같은 범위를 쓴다.
+- 메뉴와 버튼과 단축키는 같은 명령을 부른다. 잠금과 실행 취소 규칙도 공유한다.
+- 도구 설정의 값과 화면 표시를 나눈다. 속성 행을 숨겨도 값은 바뀌지 않는다.
+- 벡터는 선 자료로 다룬다. 픽셀 그림에 이름만 붙여 벡터라고 하지 않는다.
+- 파일 저장과 복구 저장은 따로 다룬다. 복구 완료를 파일 저장 완료로 표시하지 않는다.
+- 이미지와 미리보기와 저장 대기 자료는 메모리 상한을 정한다.
+- 화면 코드는 앱에 둔다. 그림 계산은 Rust 코어에, 파일 기록은 저장 모듈에 둔다.
+
+자세한 코드 경계는 [구조 문서](architecture.md)에 적는다.
+
+## 개발 순서
+
+기본 그리기와 레이어와 마스크는 이미 작동한다.
+아래 단계는 그 위에 더할 작업이며 아직 전체가 끝난 단계는 없다.
+공통 기반이 준비된 독립 기능은 순서를 앞당길 수 있다. 안전 검사는 생략하지 않는다.
+
+### 1단계 저장과 속도
+
+- 파일을 저장한 상태와 복구만 끝난 상태를 나눠 표시한다.
+- 수동 저장과 내보내기가 화면을 멈추는 시간을 잰다. 필요하면 별도 작업으로 옮긴다.
+- 비교할 기기와 그림, 목표 시간과 메모리 한도를 먼저 정한다.
+- 앱이 켜지는 시간과 대기 중 CPU, 실제 메모리, 큰 붓과 많은 레이어의 응답 시간을 잰다.
+- 측정 결과에 따라 바뀐 영역 처리와 작은 타일 단위 복사를 개선한다.
+
+통과 조건은 저장 실패와 저장 중 새 수정이 있어도 원본과 저장 표시가 맞는 것이다.
+속도 개선은 같은 그림 결과를 내고 메모리가 끝없이 늘지 않아야 한다.
+
+### 2단계 문서와 파일
+
+- 새 그림에서 크기와 배경을 고르게 한다.
+- 일반 이미지를 새 그림이나 레이어로 가져온다.
+- 너무 큰 파일과 잘못된 파일은 기존 그림을 바꾸기 전에 거절한다.
+
+통과 조건은 새 그림을 만들고 이미지를 가져와 저장한 뒤 다시 여는 과정이 안전하게 이어지는 것이다.
+해상도 정보와 실제 픽셀 크기는 따로 다룬다.
+
+### 3단계 선택과 기본 편집
+
+- 먼저 사각 선택과 전체 선택, 해제, 다시 선택, 반전을 만든다.
+- 기존 그리기와 지우기와 색 변환을 선택 범위 안으로 제한한다.
+- 이어서 자유 선택과 타원 선택, 범위 더하기와 빼기, 경계 조절을 더한다.
+- 같은 기반으로 채우기와 도형, 그라데이션, 선택 범위로 마스크 만들기를 연결한다.
+
+통과 조건은 선택 밖의 픽셀이 바뀌지 않는 것이다.
+선택 자체의 실행 취소와 저장 범위도 정하고 빈 선택을 실수로 전체 선택처럼 처리하지 않는다.
+
+### 4단계 브러시와 소재
+
+- 크기와 불투명도의 필압 곡선을 따로 둔다.
+- 질감과 산포, 선 시작과 끝의 변화를 하나씩 더한다.
+- 이중 붓과 여러 붓 모양의 반복은 기본 붓 자료를 바탕으로 더한다.
+- 물감을 더하는 혼색과 기울기와 속도 입력은 별도 규칙으로 만든다.
+- 도구 종류와 그리는 방법을 나눠 관리해 설정이 다른 도구에 섞이지 않게 한다.
+- 소재 분류와 크기 목록 이동을 보강하고 지원하지 않는 설정은 분명히 알린다.
+
+통과 조건은 설정과 미리보기와 실제 선이 같은 규칙을 쓰는 것이다.
+불러오기와 저장, 실행 취소, 큰 붓의 처리 시간까지 한 기능씩 확인한다.
+
+### 5단계 레이어와 변형
+
+- 그림 이동과 크기 변경, 회전을 만든다. 화면만 움직이는 기능과 구분한다.
+- 레이어 폴더와 여러 레이어 작업을 만든다.
+- 실제 이동이 준비된 뒤 마스크 연결과 독립 이동을 더한다.
+
+통과 조건은 레이어 순서와 합성 결과가 맞고 한 번의 실행 취소로 원래 상태가 돌아오는 것이다.
+폴더 자료나 파일 형식이 바뀌면 이전 파일 읽기와 손상 복구도 함께 확인한다.
+
+### 6단계 색 보정과 필터
+
+- 밝기와 대비, 색상 보정부터 시작한다.
+- 문서 흐리기와 선명하게 만들기를 더한다.
+- 선택 범위와 미리보기, 확정과 취소를 공통 방식으로 연결한다.
+- 색 관리와 출력 설정을 보강한다.
+
+통과 조건은 취소 후 원본이 그대로 남고 미리보기와 저장된 결과가 같은 것이다.
+국소 흐리기 붓을 문서 필터의 완료로 세지 않는다.
+
+### 7단계 벡터와 글자
+
+- 선의 점과 굵기와 색을 저장하는 벡터 자료를 만든다.
+- 선 선택과 점 이동, 선 나누기, 벡터 지우기를 차례로 더한다.
+- 글자는 글꼴과 줄 배치, 저장과 출력부터 정한다.
+
+통과 조건은 다시 연 파일에서도 선과 글자를 편집할 수 있는 것이다.
+그림 크기를 바꿀 때의 결과와 메모리 사용도 확인한다.
+
+### 8단계 작업 확장
+
+- 여러 문서와 작업 화면 저장을 만든다.
+- 모바일은 공통 코어를 쓰되 터치와 파일 접근, 앱 중단 복구를 따로 검증한다.
+- 소재 공유는 나중에 선택 기능으로 더한다. 계정이 없어도 그림을 그릴 수 있어야 한다.
+
+Windows와 macOS와 Linux 검증은 마지막 단계로 미루지 않고 각 단계에서 이어간다.
+기기별 지원 여부는 [플랫폼 현황](platforms.md)에 따로 적는다.
+
+## 한 기능을 끝내는 기준
+
+- 사용법과 바뀌는 결과를 먼저 적는다.
+- 화면과 실제 처리, 실행 취소와 저장을 한 묶음으로 만든다.
+- 잠금과 잘못된 입력, 취소와 재실행을 확인한다.
+- 관련 자동 검사와 실제 화면 검사를 한다.
+- 입력과 그리기를 바꾸면 처리 시간과 메모리도 잰다.
+- 검증한 범위만 구현 현황에 표시하고 작은 단위로 반영한다.
+
+메뉴에 이름만 있거나 비슷한 기반 코드만 있으면 완료가 아니다.
+세부 검사 방법은 [검증 문서](testing.md)와 [성능 기록](performance.md)을 따른다.

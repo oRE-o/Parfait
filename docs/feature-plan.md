@@ -1,36 +1,50 @@
-# Editor feature plan
+# 기능 목록
 
-This is an independent product backlog. A listed item is not implemented unless its status says so. Each group needs its own design, fixtures, undo/save behavior and acceptance checks.
+2026년 10월 20일 정리
 
-See the [implementation checkpoint](status.md) for the current supported scope and reliability boundaries. A local brush operation does not implement a document filter, and a fixed internal policy does not implement a configurable preference.
+큰 개발 순서는 [로드맵](roadmap.md)에, 작동하는 범위는 [구현 현황](status.md)에 둔다.
+이 문서는 분야별로 무엇을 더 만들어야 하는지 찾는 목록이다.
+각 행은 여러 작업을 묶은 것이므로 행 수를 완성률로 계산하지 않는다.
 
-Raster mask editing supports explicit reveal-all/hide-all creation, content/mask thumbnail selection, Paint/Erase coverage, enable/delete/apply, History and artwork v5 save/recovery. Selection-shaped creation and linked transforms remain planned; mask-area display and target-aware clearing are implemented. Unsupported mask operations refuse input rather than editing original content. Seven mask commands share menu/context/assignable-key dispatch; only the active layer is affected, even with additional layers checked.
-
-| Group | Current behavior | Follow-up work and acceptance criteria |
+| 분야 | 현재 범위 | 다음 작업 |
 | --- | --- | --- |
-| Menus | Eight localized roots, 41 navigable submenus, 69 routes to working actions and 325 explicitly disabled planned/menu-unconnected leaves | Implement engines behind planned entries in dependency order, reusing typed commands and their input/Undo/save guards; menu presence is not implementation |
-| Workspace | Stack rows or dock side by side, adjustable adjacent row/column splits, filled drop previews, in-app/native window hosts, edge resizing, hide and persist layout | Named workspaces, dock tabs, nested splits and cross-window drag docking; restore across changed monitor/DPI setups without losing palettes |
-| Window chrome | Custom title bar and native viewport controls | Verify OS move/resize/maximize behavior on Windows, macOS, X11 and Wayland |
-| Brush controls | Fourteen presets including capped marker, dotted pen, timed airbrush, erasers, color blend, local blur and spatial smudge; family rail, session-local settings, operation and opacity accumulation selectors, size/opacity/density, pressure-driven Gap, spraying/rate, hardness/aspect/angle, smoothing and pressure handles | Independent tool-family metadata, texture/scatter, velocity-driven spacing, ribbon, multi-tip repeat, tilt, taper, dual tips and pigment-adding wet mixing; real-device hold/latency validation |
-| Raster conversions | Whole-active-content drawing-color replacement and brightness-to-opacity extraction; alpha/mask preservation, lock/target guards, custom bindings, History and reopen | Selection-limited effects, non-raster/expressive-color types, non-destructive layer color and color-managed conversion |
-| Local color editing | Same-layer average blending and spatial patch smudging with stretch; alpha-safe local box blur with automatic/fixed radius, shared tips and partial damage | Pigment-adding mixing, clone/reference layers, additional blur kernels and texture-preserving behavior during size changes; bounded scratch and saved-result parity |
-| Materials | Persistent image tips and `.pbrush` settings, family/search/favorite filters, cached engine previews | User folders/tags, sorting and more formats; report unsupported parameters instead of silently discarding them |
-| Layer editing | Raster layers with stable IDs, alpha lock, display-only clipping chains, editable scalar masks and exact v1–v4 migration to v5; thumbnails, visibility/opacity, group drag, range/toggle multiselection, solo eyes and inline rename; shared collection commands; transfer/merge below, adjacent Normal complete-chain merges, visible merge/copy, flatten and clear with Undo/reopen tests | Groups, selection-shaped masks, vector layers and ruler policies; configurable alpha-locked eraser policy and Clear/Transfer behavior; arbitrary-blend/noncontiguous or partial-chain selected merges; versioned type/mask storage |
-| Selection and fill | Planned | Rectangle/lasso, grow/shrink/feather, contiguous fill and gap handling; transparent-edge and multi-layer reference fixtures |
-| Transform | View zoom/rotation only | Destructive/non-destructive move, scale, rotate and perspective; explicit resampling and reversible edits |
-| Rulers and guides | Document-anchored pixel rulers with 100-pixel major marks, pan/zoom-aware density and clipped horizontal/vertical labels | Straight/perspective/symmetry guides, snapping and guide management |
-| Vector/text | Planned | Editable paths, stroke widths and text layers; font fallback, serialization and raster export consistency |
-| Filters/liquify | Local blur brush only; document filter commands planned | Adjustments, document blur/sharpen and local deformation; bounded preview cost, undo and saved-result parity |
-| History/commands | Named History palette with one Undo/Redo cursor, clickable retained future rows and no-op-safe transactions; 78 typed commands, active-only layer ordering, cyclic selection, standalone rename, editable bindings with conflict replacement, shared tool-key cycling and synchronized hints | Customizable command bar, separate Mac Control/Command mapping, hardware and other-OS key validation |
-| Extended workflows | Still images | Multi-document workspace, color management, richer interchange; animation and 3D are separate later scopes |
+| 문서 | 고정 크기 그림과 단일 문서 | 크기와 배경 선택, 해상도 정보, 여러 문서 |
+| 파일 | 작업 파일과 PNG 출력 | 일반 이미지 가져오기, 출력 설정, 추가 파일 형식 |
+| 선택 | 미구현 | 사각과 자유 선택, 전체 선택과 해제, 반전, 범위 더하기와 빼기 |
+| 범위 편집 | 활성 원본 전체의 색 변환 | 선택 안에서 그리기와 지우기와 변환, 선택 경계 조절 |
+| 채색과 도형 | 기본 브러시 연산 | 채우기, 틈 처리, 참조 레이어, 도형, 그라데이션 |
+| 브러시 | 필압과 간격과 누적, 기본 혼색 | 독립 필압 곡선, 질감, 산포, 선 끝 효과, 이중 붓, 새 물감을 더하는 혼색 |
+| 소재 | 검색과 즐겨찾기, 지원 붓 자료 교환 | 폴더와 태그, 크기 목록 이동, 지원 범위 안내 |
+| 레이어 | 평면 픽셀 레이어와 기본 결합 | 폴더, 참조와 초안 구분, 전용 용지, 더 넓은 결합 범위 |
+| 마스크 | 기본 편집과 적용과 범위 표시 | 선택으로 생성, 연결 이동, 경계 표현 설정 |
+| 변형 | 화면 확대와 회전 | 그림 이동과 크기 변경과 회전, 원근 변형, 변형 미리보기 |
+| 색과 효과 | 색 선택과 기본 레이어 합성 | 색 보정, 문서 필터, 색 관리, 비파괴 효과 |
+| 벡터와 글자 | 미구현 | 편집 가능한 선 자료, 선과 점 도구, 글자 배치와 출력 |
+| 작업 화면 | 팔레트 도킹과 배치 저장 | 작업 화면 묶음, 깊은 분할, 창 사이 이동, 한글화 |
+| 안내와 설정 | 눈금자와 일부 설정 | 안내선, 스냅, 통합 환경설정, 마우스 설정, 정보 팔레트 |
+| 명령과 기록 | 단축키 편집과 실행 취소 | 물리 보조키 구분, 사용자 작업 기록 설정, 명령 모음 편집 |
+| 안전과 속도 | 복구 저장과 일부 영역 갱신 | 저장 상태 구분, 저장 중 멈춤 줄이기, 작은 영역 복사, 실제 자원 측정 |
+| 기기와 공유 | 데스크톱 기반과 로컬 소재 | 운영체제별 배포 검증, 모바일 입력과 복구, 선택형 소재 공유 |
 
-Prioritize reliable drawing, recovery and cross-platform input before extending the tool catalog. UI controls must represent implemented behavior; avoid empty buttons for future features.
+## 먼저 쪼갤 작업
 
-## Immediate usability milestone
+1. 저장 상태 표시는 파일 저장과 복구 저장을 따로 구분하는 작업부터 한다.
+2. 선택은 사각 범위를 만든 뒤 기존 그리기와 두 색 변환에 연결하는 작업부터 한다.
+3. 브러시는 크기와 불투명도의 곡선을 나누는 작업부터 한다.
+4. 변형은 실제 그림 이동과 실행 취소부터 한다. 마스크 연결은 그다음이다.
+5. 필터는 한 효과의 미리보기와 확정과 취소를 끝낸 뒤 종류를 늘린다.
+6. 벡터는 선 자료의 저장과 다시 열기부터 확인한다. 픽셀 레이어의 이름만 바꾸지 않는다.
 
-First separate the user project-file dirty state from recovery acknowledgments, and measure synchronous manual-save/export stalls, startup, idle CPU and RSS. Recovery's bounded worker is not an asynchronous project-file save implementation. Keep these reliability gates ahead of expanding the tool catalog.
+## 완료로 세지 않는 것
 
-1. Put lightweight/stability gates before more features: unchanged-preference serialization and excessive idle maintenance are removed. Next profile whole-layer copy-on-write, aggregate document/undo working-set limits and changed-library saving, preserving recovery and compatibility.
-2. Keep canvas navigation and coordinate feedback consistent: document-anchored rulers are implemented; retain pan/zoom/input regressions and native checks.
-3. Keep common footer alignment, property/palette control density, menu shortcut columns and narrow-width geometry consistent across existing screens. Continue native focus/DPI checks and validate response-graph gestures against observed behavior before further graph redesign.
-4. Extend local color editing beyond the reservoir blend/box blur and add one independently specified texture or scatter feature at a time, including core pixels, persistence compatibility, actual output previews and measured cost. Keep unsupported settings explicit.
+- 메뉴에 이름만 있고 누를 수 없는 항목
+- 국소 흐리기 붓만 있는 상태의 문서 흐리기 필터
+- 고정값만 있는 상태의 사용자 환경설정
+- 화면 회전만 있는 상태의 그림 회전
+- 크기를 일정 비율로 바꾸기만 하는 크기 프리셋 이동
+- 성능 검사 코드만 있는 상태의 실시간 메모리 표시
+- 오류를 알리기만 하는 상태의 설정 복구 화면
+
+현재 메뉴에는 실행 경로 69개와 비활성 계획 항목 325개가 있다.
+같은 명령으로 가는 경로도 있으므로 이를 구현한 도구 수로 세지 않는다.
+새 항목은 [로드맵의 완료 기준](roadmap.md#한-기능을-끝내는-기준)을 통과한 범위만 구현 현황에 옮긴다.

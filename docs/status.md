@@ -1,57 +1,101 @@
-# Implementation status
+# 구현 현황
 
-Capability snapshot for 2026-10-19, based on the application at `81e3883`. This documentation checkpoint adds no drawing features. A menu entry or a related underlying algorithm is not evidence that its named command or user setting works.
+2026년 10월 20일 정리
 
-## Working scope
+현재는 기본 그림 작업이 되는 초기 데스크톱 앱이다.
+아래 체크는 적힌 범위가 작동한다는 뜻이다. 해당 분야 전체가 끝났다는 뜻은 아니다.
+다음 순서는 [개발 로드맵](roadmap.md)에서 본다.
 
-| Area | Implemented behavior | Important limits |
-| --- | --- | --- |
-| Workspace | Seven palettes, left/right docks, adjacent row/column resizing, internal floating and native windows, saved placement | No nested dock tree, workspace presets or cross-window drag docking |
-| Brush controls | Size, opacity, density, pressure response with editable anchors/handles, minimum size, fixed angle/aspect, hardness, smoothing, pressure spacing, stationary spray and capped accumulation | Size and opacity share a response curve; smoothing is an event filter; tilt, velocity, texture, scatter, taper and dual brushes are absent |
-| Pixel operations | Paint, Erase, average-reservoir Blend, local box Blur and spatial-patch Smudge | Blend/Smudge do not add drawing pigment; a local Blur brush is not a document filter |
-| Brush library | Procedural and image-mask tips, presets, search, favorites, rename/duplicate/delete, supported `.pbrush` exchange | Family drafts are session-local; unsupported brush formats and settings are not interchangeable |
-| Layers | Stable IDs, multiselection, row dragging, rename, visibility, full/alpha locks, 14 blend modes and clipping chains | Flat raster layers only; Paper is a locked white raster; some combine actions require visible Normal layers and complete adjacent chains |
-| Masks | Content/mask targets, scalar Paint/Erase coverage, enable/delete/apply, violet area display and target-aware clearing | No selection-shaped creation, linked movement or mask-expression controls; display state is session-only |
-| Raster conversions | Whole-active-content drawing-color replacement and brightness-to-opacity extraction, with lock/target guards and Undo | No selection-area restriction, editable vector paths or non-destructive layer-color effect |
-| Viewing and input | Pan/zoom/rotation/flips, document-anchored rulers, pixel grid, HSV color selection and one-pixel composite picking | No editing transforms, guide engine, configurable pointer map or independent physical Control/Command bindings |
-| History and files | Named Undo/Redo with retained future, local project save/open, PNG export, asynchronous recovery and validated snapshot fallback | New drawings have fixed dimensions; no multiple-document workspace, general image-layer import or color-managed export |
+## 그리기
 
-Text uses Pretendard as the preferred application font, with fallback fonts and a separate icon family. Native system dialogs are outside that font configuration. Menu/body localization, keyboard accessibility, DPI and monitor transitions still need broader coverage.
+- [x] 펜과 지우개로 픽셀 그리기
+- [x] 기본 혼색, 국소 흐리기, 번지기
+- [x] 크기, 불투명도, 밀도 조절
+- [x] 필압 곡선의 점과 핸들 편집
+- [x] 필압에 따른 간격과 한 선의 색 누적 조절
+- [x] 붓 모양 가져오기와 프리셋 저장
+- [x] 브러시 검색, 즐겨찾기, 이름 변경
 
-## Do not count these as implemented
+크기와 불투명도는 아직 같은 필압 곡선을 쓴다.
+혼색은 기존 색을 섞거나 옮기는 방식이다. 새 물감을 더하는 혼색은 아니다.
+질감과 산포, 기울기와 속도 입력, 선 시작과 끝의 효과는 남아 있다.
+브러시 소재를 읽는 기능은 일반 이미지를 레이어로 여는 기능과 다르다.
 
-- Selection tools and commands, including selection-limited drawing, clearing, conversions and mask creation.
-- Vector and text layer models, path/control-point editing, vector erasing and selection-boundary path splitting.
-- Fill, gradient and figure tools with their reference-layer and gap-handling options.
-- Document blur/sharpen/adjustment/effect filters, pixel movement/resampling, perspective transforms and liquify.
-- Layer folders, reference/draft types, mask-transform links and unrestricted subset merging.
-- A unified preferences interface or user controls for History capacity, time grouping, clone-name format, display-quality mode and recovery enablement/interval.
-- A live pointer-coordinate/memory Information palette. Rulers and development benchmarks do not provide that interface.
-- Previous/next size-preset navigation. Current smaller/larger commands multiply or divide size by 1.2.
-- Settings repair/backup selection UI. Preserving unsupported settings files and reporting an error is not a repair workflow.
+## 레이어와 마스크
 
-The catalog has eight top-level menus, 41 submenus and 394 leaf routes: 69 working routes to 65 distinct commands, plus 325 disabled planned/menu-unconnected leaves. The assignable registry contains 78 commands, including commands without a top-menu route. These are interface counts, not a completion percentage.
+- [x] 레이어 추가, 복제, 삭제
+- [x] 드래그로 순서 변경과 여러 레이어 선택
+- [x] 눈 버튼, 잠금, 이름 편집
+- [x] 알파 잠금과 14개 합성 모드와 클리핑
+- [x] 지원 범위 안에서 레이어 전사와 결합
+- [x] 마스크 생성, 그리기, 지우기
+- [x] 마스크 켜기와 끄기, 적용과 삭제, 범위 표시
+- [x] 원본과 마스크를 골라 비우기
+- [x] 활성 원본 전체의 색 변경과 휘도 투명화
 
-## Reliability and performance boundaries
+현재 레이어는 모두 픽셀 자료다. 용지도 잠긴 흰 레이어로 다룬다.
+일부 결합은 연속된 표준 합성 레이어만 지원한다.
+폴더와 선택 범위로 만든 마스크, 마스크 연결 이동은 없다.
+색 변경과 휘도 투명화도 아직 선택 범위로 제한할 수 없다.
 
-Recovery uses immutable snapshots, a bounded pending slot, revision acknowledgments, SHA validation, three retained generations, SQLite WAL and `synchronous=FULL`. Unsupported or damaged preferences are reported and protected from overwrite. These safeguards do not prove hardware power-loss durability or universal platform support.
+## 작업 화면과 입력
 
-The displayed local-save status tracks recovery, not a separate saved-project dirty marker. Manual project save and PNG export run synchronously on the UI path. Separating those states and measuring large-document stalls are high-priority follow-ups.
+- [x] 팔레트 이동과 도킹과 크기 조절
+- [x] 팔레트 숨김과 배치 저장
+- [x] 화면 이동, 확대, 회전, 반전
+- [x] 문서 좌표를 따르는 눈금자와 픽셀 격자
+- [x] 색 선택과 합성된 그림의 한 점 색 읽기
+- [x] 단축키 검색, 변경, 충돌 확인
+- [x] 이름 있는 작업 기록과 실행 취소와 다시 실행
 
-Whole-layer copy-on-write and full CPU compositions remain. The 512 MiB logical/snapshot budgets and History's 128 MiB logical policy are not total-process RAM limits; History retains at least one edit even for a large document. Some measured full compositions exceed a 16.7 ms frame budget. CPU microbenchmarks and executable size are not pen-to-display latency or RSS measurements. See [performance evidence](performance.md).
+앱 기본 글꼴은 Pretendard를 우선 쓴다. 대체 글꼴과 운영체제 창은 별도다.
+독립 창 사이의 드래그 도킹과 통합 환경설정은 없다.
+화면 회전은 그림 픽셀의 회전이 아니다.
+메뉴 이름과 화면 문구의 한글화도 더 필요하다.
 
-## Verification checkpoint
+## 파일과 복구
 
-The application source at `81e3883` passes 273 workspace tests, with one opt-in benchmark ignored, formatting and all-target Clippy with warnings denied. Tests cover core pixels, no-op/Undo behavior, input ownership, format migration, persistence and process-termination recovery. Isolated native macOS checks additionally cover selected menu, drawing and normal-restart scenarios. This is not an exhaustive native test of every feature, physical tablet or operating system. See [testing](testing.md) and [platform status](platforms.md).
+- [x] Parfait 작업 파일 저장과 다시 열기
+- [x] PNG 그림 내보내기
+- [x] 백그라운드 복구 저장과 정상 종료 시 저장 마무리
+- [x] 손상된 최근 기록 대신 이전 기록으로 복구
+- [x] 지원하지 않는 설정 파일의 덮어쓰기 방지
 
-Artwork writes version 5 and reads versions 1–4; preferences write version 18 and read versions 1–17; portable brush exports remain version 8. Older application versions may reject newer saved state. Keep independent backups when migrating.
+새 그림은 아직 고정 크기다. 크기 선택 창과 일반 이미지 레이어 가져오기는 없다.
+로컬 저장 표시는 복구 기록 기준이다. 작업 파일을 저장한 상태와 나눠야 한다.
+수동 저장과 그림 내보내기는 화면을 잠시 멈출 수 있는 동기 작업이다.
+잘못된 설정을 고치는 복구 화면도 아직 없다.
 
-## Recommended sequence
+## 아직 없는 큰 기능
 
-1. Separate project dirty/recovery indicators and measure synchronous save/export stalls, idle CPU, startup, RSS and input/frame tails.
-2. Build selection state and apply it consistently to existing editing operations.
-3. Add independent parameter curves and one measured brush feature at a time, retaining pixel/Undo/save regressions.
-4. Add layer folders and actual movement/transforms before mask linking.
-5. Introduce vector/text data, versioned storage, rendering and editing as explicit features rather than raster aliases.
+- [ ] 선택 영역과 선택 안에서만 편집하기
+- [ ] 채우기와 도형과 그라데이션
+- [ ] 그림 이동과 크기 변경과 원근 변형
+- [ ] 레이어 폴더와 고급 레이어 종류
+- [ ] 문서 색 보정과 필터와 효과 미리보기
+- [ ] 벡터 선과 글자 편집
+- [ ] 여러 문서와 색 관리
+- [ ] 세부 환경설정과 안내선과 실시간 메모리 정보
 
-The broader backlog remains in [the feature plan](feature-plan.md). This checkpoint does not mark that backlog complete.
+정확한 분야 구분과 작은 후속 작업은 [기능 목록](feature-plan.md)에 적는다.
+
+## 검증한 범위
+
+기능 코드 기준은 `81e3883`이다. 이후 문서 정리에서는 제품 기능을 바꾸지 않았다.
+최근 자동 검사에서 테스트 273개가 통과했고 요청할 때 실행하는 성능 검사 1개는 기본 실행에서 제외했다.
+코드 형식 검사와 경고를 오류로 다루는 정적 검사도 통과했다.
+
+실제 창의 일부 조작과 저장 후 재실행은 macOS에서 확인했다.
+모든 기능과 운영체제, 실제 태블릿과 다중 모니터를 검증한 것은 아니다.
+검사 세부 내용은 [검증 기록](testing.md)과 [플랫폼 현황](platforms.md)에 있다.
+
+## 가벼움과 안정성의 남은 조건
+
+바뀐 영역만 다시 그리는 경로와 저장 대기량 제한은 있다.
+하지만 레이어 전체 복사와 전체 그림 합성도 남아 있다.
+저장 크기 제한과 작업 기록 예산은 앱 전체 메모리의 상한이 아니다.
+일부 전체 화면 계산은 목표 시간보다 오래 걸린다.
+
+따라서 가벼움과 입력 지연이 충분히 검증됐다고 말하지 않는다.
+실제 메모리와 대기 중 CPU, 펜 입력부터 화면 표시까지의 시간을 더 재야 한다.
+현재 측정 결과와 한계는 [성능 기록](performance.md)에 적는다.
