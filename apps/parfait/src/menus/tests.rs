@@ -197,7 +197,7 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     }
     assert_eq!(app.doc, before);
     assert_eq!(app.history.rows().count(), 0);
-    assert_eq!(Command::ALL.len(), 76);
+    assert_eq!(Command::ALL.len(), 78);
 }
 
 #[test]
@@ -294,6 +294,39 @@ fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
     assert!(!egui::Popup::is_any_open(&ctx));
     escape(&mut app, &ctx);
     assert!(!app.show_help);
+}
+
+#[test]
+fn edit_menu_conversions_change_only_content_and_share_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    app.doc = Document::new(8, 8);
+    app.doc.layers[1].pixels = std::sync::Arc::new([128, 128, 128, 128].repeat(64));
+    app.doc.create_layer_mask(1, 127);
+    app.brush.color = [17, 140, 230];
+    let before = app.doc.clone();
+    let context = egui::Context::default();
+    crate::theme::apply(&context);
+    frame(&mut app, &context, vec![], 960.);
+    frame(&mut app, &context, vec![], 960.);
+    for command in [Command::BrightnessToOpacity, Command::ConvertToDrawingColor] {
+        open(&mut app, &context, TopMenu::Edit);
+        let target = reveal(&mut app, &context, root_path(TopMenu::Edit), |context| {
+            rect(context, ("menu_item", command.label()))
+        });
+        click(&mut app, &context, target);
+        assert!(!egui::Popup::is_any_open(&context));
+    }
+    assert_eq!(
+        app.doc.layers[1].pixels.as_slice(),
+        [17, 140, 230, 64].repeat(64)
+    );
+    assert_eq!(app.doc.layers[1].mask, before.layers[1].mask);
+    assert_eq!(app.doc.layers[0], before.layers[0]);
+    assert_eq!(app.history.rows().count(), 3);
+    app.undo();
+    app.undo();
+    assert!(app.doc.same_edit_state(&before));
 }
 
 #[test]
@@ -396,8 +429,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (67, 327, 41));
-    assert_eq!(Command::ALL.len(), 76);
+    assert_eq!(counts, (69, 325, 41));
+    assert_eq!(Command::ALL.len(), 78);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",
         counts.0, counts.1, counts.2

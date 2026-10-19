@@ -13,6 +13,9 @@ impl Parfait {
         if self.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
+        if let Some(conversion) = command.raster_conversion(self.brush.color) {
+            return self.raster_conversion_disabled_reason(conversion);
+        }
         if command == Command::ClearEditingTarget {
             return self.command_disabled_reason(if self.editing_layer_mask() {
                 Command::ClearLayerMask

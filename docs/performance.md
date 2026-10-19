@@ -1,5 +1,18 @@
 # Stroke performance
 
+## Raster Conversions
+
+Run `cargo run --release -p parfait-core --example raster_conversion_bench`. Three Apple M1/macOS 15.7.5/arm64/Rust 1.99.1 release runs convert a deterministic 1024×768 active RGBA layer, with twenty iterations per operation/buffer-ownership case. Timers include core validation, conversion and shared-buffer COW, but exclude fixture/reset, independent per-pixel checksums, History, composition, UI/GPU, input and storage. Unique-buffer setup copies outside the timed interval. Every output byte is compared with independent arithmetic; a second conversion verifies no-op Arc/revision preservation. All four case checksums agree across runs.
+
+| Conversion | Shared buffer mean ms range | Unique buffer mean ms range |
+| --- | ---: | ---: |
+| Brightness to opacity | 0.772460–1.113471 | 0.501106–0.509833 |
+| Drawing color | 1.070579–1.371877 | 0.847794–0.944225 |
+
+These explicit whole-layer commands run outside the pen path. Menu guards inspect metadata only. Pixel conversion compares before the first writable access, then uses one mutable suffix; no-op output allocates no pixel buffer. Changed shared pixels still copy the existing full layer, 3,145,728 bytes in this fixture (up to 64 MiB at 4096²). No new full-canvas scratch/cache, dependency or worker is added. This is not a total RSS measurement or an application/pen-latency result. Other desktop apps were running; there is no before/after speedup claim. The unsigned executable is 12,925,952 bytes, 16,624 above the preceding mask-area build; binary size is not RAM.
+
+Isolated native macOS checks execute both Edit commands, select a drawing color, verify exact persisted pixel hashes against independently generated output, Undo twice and Redo twice, reject a mask-target menu click, then normally close/reopen with identical snapshots except the clean-session flag. The original raw fixture remains outside user data. These checks do not establish other-OS, physical-pen or exact external-engine equivalence. Selection-area and non-raster conversion remain unimplemented.
+
 ## Mask Area Display
 
 Mask-area display tints the existing checkerboard-composited output in place. It adds two optional layer IDs, no canvas-sized cache/texture, dependency or worker. Uniform-255 coverage bypasses tinting; dense coverage costs one pass over the damaged region. Ordinary pan/zoom/rotation still reuse uploaded pixels. Turning the display on/off or changing its active target refreshes the whole drawing once, including composition: this is the deliberate cost of avoiding an additional untinted image cache. Mask clearing compacts changed coverage to Uniform 255; all-white dense detection occurs only on the explicit command, never on each menu frame.

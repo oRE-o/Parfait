@@ -271,6 +271,12 @@ impl Keymap {
                 if command == Command::ClearLayerMask {
                     tooltip.push_str("\n활성 마스크만 모두 표시 상태로 비웁니다. 원본 픽셀은 유지합니다.");
                 }
+                if command == Command::ConvertToDrawingColor {
+                    tooltip.push_str("\n활성 레이어 원본 전체의 색을 현재 그리기색으로 바꿉니다.\n알파·마스크·다른 레이어는 유지하며 선택 영역 제한은 아직 지원하지 않습니다.");
+                }
+                if command == Command::BrightnessToOpacity {
+                    tooltip.push_str("\n활성 원본 전체에서 흰색은 투명하게, 어두운 부분은 검정 선으로 변환합니다.\n기존 알파에 역휘도를 곱하며 마스크는 유지합니다. 선택 영역 제한은 아직 지원하지 않습니다.");
+                }
                 Hint {
                     keys,
                     summary,

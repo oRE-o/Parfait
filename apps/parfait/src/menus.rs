@@ -223,6 +223,8 @@ fn menu_label(command: Command) -> &'static str {
         Command::ExportPng => "PNG로 내보내기…",
         Command::Undo => "실행 취소",
         Command::Redo => "다시 실행",
+        Command::ConvertToDrawingColor => "선 색을 그리기색으로 변경",
+        Command::BrightnessToOpacity => "휘도를 투명도로 변환",
         Command::NewLayer => "새 래스터 레이어",
         Command::DuplicateLayer => "레이어 복제",
         Command::DeleteLayer => "레이어 삭제",

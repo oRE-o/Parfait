@@ -26,7 +26,7 @@ impl Preferences {
     fn current(app: &Parfait) -> Self {
         Self {
             calibration: app.calibration.clone(),
-            version: 17,
+            version: 18,
             keymap: app.keymap.preferences(),
             display: app.display,
             workspace: app.workspace.clone(),
@@ -40,7 +40,7 @@ impl Preferences {
     }
 
     pub(crate) fn matches(&self, app: &Parfait) -> bool {
-        self.version == 17
+        self.version == 18
             && self.keymap == app.keymap
             && self.display == app.display
             && self.calibration == app.calibration
@@ -55,7 +55,7 @@ impl Preferences {
     }
 
     pub fn validate(&self) -> bool {
-        (1..=17).contains(&self.version)
+        (1..=18).contains(&self.version)
             && self.keymap.validate()
             && self.display.validate()
             && self.calibration.validate()
@@ -184,7 +184,7 @@ mod history_migration_tests {
                 expected.as_array().unwrap().as_slice()
             );
             restored.persist_preferences(true);
-            assert_eq!(restored.preferences_saved.as_ref().unwrap().version, 17);
+            assert_eq!(restored.preferences_saved.as_ref().unwrap().version, 18);
         }
         legacy["version"] = 10.into();
         parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
@@ -304,7 +304,7 @@ mod tests {
         parfait_storage::save_preferences(&path, &json.to_string()).unwrap();
         app.restore_preferences();
         app.persist_preferences(true);
-        assert_eq!(app.preferences_saved.as_ref().unwrap().version, 17);
+        assert_eq!(app.preferences_saved.as_ref().unwrap().version, 18);
         json["version"] = serde_json::json!(999);
         let future = json.to_string();
         parfait_storage::save_preferences(&path, &future).unwrap();

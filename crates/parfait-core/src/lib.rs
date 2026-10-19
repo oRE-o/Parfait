@@ -5,6 +5,7 @@ mod history;
 mod layer_mask;
 mod layer_ops;
 mod raster_brush;
+mod raster_conversion;
 mod smudge;
 mod wash;
 pub use brush::{Brush, BrushOperation, BrushTip, GapMode, OpacityMode, Point, Stroke};
@@ -12,6 +13,7 @@ pub use document::{Document, Layer, LayerId, PixelRect, composite_over};
 pub use history::{History, HistoryRow};
 pub use layer_mask::{LayerMask, MaskCoverage};
 pub use layer_ops::LayerCombine;
+pub use raster_conversion::RasterConversion;
 
 mod pressure;
 pub use pressure::PressureCalibration;

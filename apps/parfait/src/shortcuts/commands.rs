@@ -82,6 +82,8 @@ pub enum Command {
     ClearEditingTarget,
     ClearLayerMask,
     ShowMaskArea,
+    ConvertToDrawingColor,
+    BrightnessToOpacity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,6 +201,8 @@ impl Command {
         Self::ClearEditingTarget,
         Self::ClearLayerMask,
         Self::ShowMaskArea,
+        Self::ConvertToDrawingColor,
+        Self::BrightnessToOpacity,
     ];
 
     pub fn label(self) -> &'static str {
@@ -279,6 +283,8 @@ impl Command {
             Self::ClearEditingTarget => "Clear editing target",
             Self::ClearLayerMask => "Clear layer mask",
             Self::ShowMaskArea => "Show mask area",
+            Self::ConvertToDrawingColor => "Convert to drawing color",
+            Self::BrightnessToOpacity => "Convert brightness to opacity",
         }
     }
 
@@ -289,9 +295,12 @@ impl Command {
             | Self::SaveProject
             | Self::SaveAs
             | Self::ExportPng => Category::File,
-            Self::Undo | Self::Redo | Self::ShortcutSettings | Self::ClearEditingTarget => {
-                Category::Edit
-            }
+            Self::Undo
+            | Self::Redo
+            | Self::ShortcutSettings
+            | Self::ClearEditingTarget
+            | Self::ConvertToDrawingColor
+            | Self::BrightnessToOpacity => Category::Edit,
             Self::NewLayer
             | Self::DuplicateLayer
             | Self::DeleteLayer
@@ -347,6 +356,16 @@ impl Command {
 
     pub fn is_tool(self) -> bool {
         self.category() == Category::Tools
+    }
+    pub(crate) fn raster_conversion(
+        self,
+        color: [u8; 3],
+    ) -> Option<parfait_core::RasterConversion> {
+        Some(match self {
+            Self::ConvertToDrawingColor => parfait_core::RasterConversion::DrawingColor(color),
+            Self::BrightnessToOpacity => parfait_core::RasterConversion::BrightnessToOpacity,
+            _ => return None,
+        })
     }
     pub(crate) fn is_layer_mask(self) -> bool {
         matches!(
@@ -423,6 +442,9 @@ impl Parfait {
             Command::ExportPng => self.export(),
             Command::Undo => self.undo(),
             Command::Redo => self.redo(),
+            Command::ConvertToDrawingColor | Command::BrightnessToOpacity => {
+                self.execute_raster_conversion(command);
+            }
             Command::NewLayer => self.new_layer(),
             Command::ClearEditingTarget => {
                 self.execute_command(

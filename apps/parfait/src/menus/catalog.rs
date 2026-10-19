@@ -125,9 +125,9 @@ const EDIT: &[MenuItem] = &[
         ],
     ),
     Planned("자동 음영…"),
-    Planned("선 색을 그리기색으로 변경"),
+    Action(Command::ConvertToDrawingColor),
     Planned("선택 범위에 테두리 넣기…"),
-    Planned("휘도를 투명도로 변환"),
+    Action(Command::BrightnessToOpacity),
     Group("소재 등록", &[Planned("이미지…"), Planned("템플릿…")]),
     Separator,
     Group(
