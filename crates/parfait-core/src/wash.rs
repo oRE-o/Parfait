@@ -53,6 +53,14 @@ impl Wash {
         let mut destination = Destination::Shared(&mut doc.layers[self.layer].pixels);
         for row in dab.bounds.y0 as usize..dab.bounds.y1 as usize {
             for column in dab.bounds.x0 as usize..dab.bounds.x1 as usize {
+                let limit = crate::selection::strength(
+                    doc.selection.as_ref(),
+                    row * self.width as usize + column,
+                    limit,
+                );
+                if limit <= 0. {
+                    continue;
+                }
                 let deposit = dab.coverage(brush, column as u32, row as u32) * brush.flow;
                 if deposit <= 0. {
                     continue;

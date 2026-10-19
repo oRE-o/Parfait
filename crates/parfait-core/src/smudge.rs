@@ -145,7 +145,11 @@ pub(crate) fn stamp(
                 crate::raster_brush::apply_locked(
                     pixel,
                     color,
-                    dab.alpha(brush, column, row),
+                    crate::selection::strength(
+                        document.selection.as_ref(),
+                        index / 4,
+                        dab.alpha(brush, column, row),
+                    ),
                     alpha_locked,
                 )
             });

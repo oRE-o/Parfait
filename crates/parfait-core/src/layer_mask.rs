@@ -60,12 +60,15 @@ impl Layer {
 impl Document {
     pub fn logical_pixel_bytes(&self) -> u64 {
         let pixels = u64::from(self.width) * u64::from(self.height);
-        self.layers.iter().fold(0, |bytes, layer| {
-            bytes.saturating_add(pixels.saturating_mul(
-                4 * u64::from(layer.kind == crate::LayerKind::Raster)
-                    + u64::from(layer.mask.is_some()),
-            ))
-        })
+        self.layers.iter().fold(
+            pixels * u64::from(self.selection.is_some()),
+            |bytes, layer| {
+                bytes.saturating_add(pixels.saturating_mul(
+                    4 * u64::from(layer.kind == crate::LayerKind::Raster)
+                        + u64::from(layer.mask.is_some()),
+                ))
+            },
+        )
     }
 
     pub fn layer_mask_creation_reason(&self, layer: usize) -> Option<&'static str> {
@@ -115,6 +118,9 @@ impl Document {
     pub fn clear_layer_mask(&mut self, layer: usize) -> bool {
         if !self.validate() || !self.layer_ancestors_unlocked(layer) {
             return false;
+        }
+        if let Some(changed) = self.restore_mask_selection(layer) {
+            return changed;
         }
         let Some(target) = self.layers.get_mut(layer).filter(|layer| !layer.locked) else {
             return false;

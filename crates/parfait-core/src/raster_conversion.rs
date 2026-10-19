@@ -56,19 +56,39 @@ impl Document {
             return false;
         }
         let source = &self.layers[layer].pixels;
+        let convert = |index: usize, pixel: [u8; 4]| {
+            let converted = conversion.pixel(pixel);
+            match &self.selection {
+                None => converted,
+                Some(coverage) => {
+                    crate::selection::interpolate_pixel(pixel, converted, coverage.value(index))
+                }
+            }
+        };
         let Some(first) = source
             .as_chunks::<4>()
             .0
             .iter()
-            .position(|&pixel| conversion.pixel(pixel) != pixel)
+            .enumerate()
+            .position(|(index, &pixel)| convert(index, pixel) != pixel)
         else {
             return false;
         };
-        for pixel in &mut Arc::make_mut(&mut self.layers[layer].pixels)
+        let selection = self.selection.as_ref();
+        for (offset, pixel) in Arc::make_mut(&mut self.layers[layer].pixels)
             .as_chunks_mut::<4>()
             .0[first..]
+            .iter_mut()
+            .enumerate()
         {
-            *pixel = conversion.pixel(*pixel);
+            *pixel = match selection {
+                None => conversion.pixel(*pixel),
+                Some(coverage) => crate::selection::interpolate_pixel(
+                    *pixel,
+                    conversion.pixel(*pixel),
+                    coverage.value(first + offset),
+                ),
+            };
         }
         self.touch();
         true

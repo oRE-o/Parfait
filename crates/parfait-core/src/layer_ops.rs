@@ -155,9 +155,9 @@ impl Document {
         if action == LayerCombine::Clear {
             let mut changed = false;
             for (index, layer) in self.layers.iter_mut().enumerate() {
-                if mask & (1 << index) != 0 && layer.pixels.iter().any(|byte| *byte != 0) {
-                    Arc::make_mut(&mut layer.pixels).fill(0);
-                    changed = true;
+                if mask & (1 << index) != 0 {
+                    changed |=
+                        crate::selection::clear_pixels(&mut layer.pixels, self.selection.as_ref());
                 }
             }
             if changed {

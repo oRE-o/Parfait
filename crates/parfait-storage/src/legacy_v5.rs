@@ -33,6 +33,7 @@ impl From<LegacyDocument> for Document {
             width: old.width,
             height: old.height,
             name: old.name,
+            selection: None,
             active: old.active,
             revision: old.revision,
             next_layer_id: old.next_layer_id,

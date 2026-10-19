@@ -2,6 +2,19 @@ use crate::{
     Brush, BrushOperation, Document, PixelRect, Point,
     brush::{Dab, Destination, recolor_locked},
 };
+
+#[inline]
+fn selection_strength<const SELECTED: bool>(
+    selection: Option<&crate::MaskCoverage>,
+    index: usize,
+    amount: f32,
+) -> f32 {
+    if SELECTED {
+        crate::selection::strength(selection, index, amount)
+    } else {
+        amount
+    }
+}
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -109,6 +122,19 @@ pub(crate) fn blend(
     point: Point,
     carry: &mut Option<[f32; 4]>,
 ) -> Option<PixelRect> {
+    if doc.selection.is_none() {
+        blend_selected::<false>(doc, brush, point, carry)
+    } else {
+        blend_selected::<true>(doc, brush, point, carry)
+    }
+}
+
+fn blend_selected<const SELECTED: bool>(
+    doc: &mut Document,
+    brush: &Brush,
+    point: Point,
+    carry: &mut Option<[f32; 4]>,
+) -> Option<PixelRect> {
     let dab = Dab::new(doc, brush, point)?;
     if brush.opacity == 0. {
         return None;
@@ -144,7 +170,16 @@ pub(crate) fn blend(
         for column in dab.bounds.x0..dab.bounds.x1 {
             let index = ((row * doc.width + column) * 4) as usize;
             let (next, pixel_changed) = destination.edit(index, |pixel| {
-                apply_locked(pixel, sample, dab.alpha(brush, column, row), alpha_locked)
+                apply_locked(
+                    pixel,
+                    sample,
+                    selection_strength::<SELECTED>(
+                        doc.selection.as_ref(),
+                        index / 4,
+                        dab.alpha(brush, column, row),
+                    ),
+                    alpha_locked,
+                )
             });
             destination = next;
             changed |= pixel_changed;
@@ -169,6 +204,19 @@ pub(crate) fn integer_premultiplied(pixel: [u8; 4]) -> [u32; 4] {
 }
 
 pub(crate) fn blur(
+    doc: &mut Document,
+    brush: &Brush,
+    point: Point,
+    scratch: &mut Scratch,
+) -> Option<PixelRect> {
+    if doc.selection.is_none() {
+        blur_selected::<false>(doc, brush, point, scratch)
+    } else {
+        blur_selected::<true>(doc, brush, point, scratch)
+    }
+}
+
+fn blur_selected<const SELECTED: bool>(
     doc: &mut Document,
     brush: &Brush,
     point: Point,
@@ -279,7 +327,16 @@ pub(crate) fn blur(
             ];
             let index = ((row * doc.width + column) * 4) as usize;
             let (next, pixel_changed) = destination.edit(index, |pixel| {
-                apply_locked(pixel, sample, dab.alpha(brush, column, row), alpha_locked)
+                apply_locked(
+                    pixel,
+                    sample,
+                    selection_strength::<SELECTED>(
+                        doc.selection.as_ref(),
+                        index / 4,
+                        dab.alpha(brush, column, row),
+                    ),
+                    alpha_locked,
+                )
             });
             destination = next;
             changed |= pixel_changed;
@@ -371,7 +428,11 @@ mod tests {
                 changed |= apply(
                     &mut pixels[index..index + 4],
                     sample,
-                    dab.alpha(brush, column, row),
+                    crate::selection::strength(
+                        document.selection.as_ref(),
+                        index / 4,
+                        dab.alpha(brush, column, row),
+                    ),
                 );
             }
         }

@@ -8,6 +8,7 @@ mod layer_ops;
 mod layer_settings;
 mod raster_brush;
 mod raster_conversion;
+mod selection;
 mod smudge;
 mod wash;
 pub use brush::{Brush, BrushOperation, BrushTip, GapMode, OpacityMode, Point, Stroke};
@@ -17,6 +18,7 @@ pub use layer_folders::LayerKind;
 pub use layer_mask::{LayerMask, MaskCoverage};
 pub use layer_ops::LayerCombine;
 pub use raster_conversion::RasterConversion;
+pub use selection::SelectionMode;
 
 mod pressure;
 pub use pressure::PressureCalibration;

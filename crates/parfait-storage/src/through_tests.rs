@@ -84,7 +84,7 @@ fn exact_v7_tree_layout_upgrades_without_changing_masks_roles_ids_or_content() {
             .connection
             .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        8
+        9
     );
     drop(store);
     let store = Store::open(&path).unwrap();
@@ -114,7 +114,7 @@ fn current_through_roundtrips_and_bad_current_or_mislabelled_legacy_heads_fall_b
             version_seven(&document)
         } else {
             document.layers[1].blend_mode = BlendMode::Through;
-            let mut raw = SNAPSHOT_V8.to_vec();
+            let mut raw = SNAPSHOT_V9.to_vec();
             bincode::DefaultOptions::new()
                 .with_fixint_encoding()
                 .serialize_into(&mut raw, &document)

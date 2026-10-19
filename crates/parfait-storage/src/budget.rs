@@ -7,9 +7,15 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     let pixels = u64::from(document.width)
         .checked_mul(u64::from(document.height))?
         .checked_mul(4)?;
-    let mut bytes = (super::SNAPSHOT_V8.len() as u64)
-        .checked_add(48)?
+    let mut bytes = (super::SNAPSHOT_V9.len() as u64)
+        .checked_add(49)?
         .checked_add(document.name.len() as u64)?;
+    if let Some(coverage) = &document.selection {
+        bytes = bytes.checked_add(match coverage {
+            MaskCoverage::Uniform(_) => 5,
+            MaskCoverage::Dense(values) => 12u64.checked_add(values.len() as u64)?,
+        })?;
+    }
     for layer in &document.layers {
         bytes = bytes
             .checked_add(44 + 8 * u64::from(layer.parent.is_some()))?

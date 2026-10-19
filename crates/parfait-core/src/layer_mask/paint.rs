@@ -95,6 +95,14 @@ impl MaskPaint {
         let mut changed = false;
         for row in dab.bounds.y0 as usize..dab.bounds.y1 as usize {
             for column in dab.bounds.x0 as usize..dab.bounds.x1 as usize {
+                let limit = crate::selection::strength(
+                    document.selection.as_ref(),
+                    row * self.width as usize + column,
+                    limit,
+                );
+                if limit <= 0. {
+                    continue;
+                }
                 let index = row * self.width as usize + column;
                 let current = destination.value(index);
                 if (erase && current == 0) || (!erase && current == 255) {

@@ -72,6 +72,7 @@ pub struct Document {
     pub active: usize,
     pub revision: u64,
     pub next_layer_id: u64,
+    pub selection: Option<crate::MaskCoverage>,
 }
 
 impl Document {
@@ -82,6 +83,7 @@ impl Document {
             width,
             height,
             name: "Untitled".into(),
+            selection: None,
             layers: vec![
                 Layer {
                     id: LayerId(1),
@@ -130,6 +132,15 @@ impl Document {
             && self.layers.len() <= 64
             && self.active < self.layers.len()
             && self.folder_layout().is_some()
+            && self
+                .selection
+                .as_ref()
+                .is_none_or(|coverage| match coverage {
+                    crate::MaskCoverage::Uniform(_) => true,
+                    crate::MaskCoverage::Dense(values) => {
+                        values.len() == self.width as usize * self.height as usize
+                    }
+                })
             && self.layers.iter().enumerate().all(|(index, layer)| {
                 layer.id.0 > 0
                     && layer.id.0 < self.next_layer_id
@@ -160,6 +171,11 @@ impl Document {
         self.width == other.width
             && self.height == other.height
             && self.name == other.name
+            && match (&self.selection, &other.selection) {
+                (None, None) => true,
+                (Some(current), Some(previous)) => current.same_edit_state(previous),
+                _ => false,
+            }
             && self.layers.len() == other.layers.len()
             && self
                 .layers

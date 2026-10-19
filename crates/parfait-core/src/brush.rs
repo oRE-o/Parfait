@@ -434,6 +434,9 @@ impl Dab {
         Self::new_target(doc, brush, point, true)
     }
     fn new_target(doc: &Document, brush: &Brush, point: Point, mask: bool) -> Option<Self> {
+        if matches!(doc.selection, Some(crate::MaskCoverage::Uniform(0))) {
+            return None;
+        }
         if !point.x.is_finite() || !point.y.is_finite() {
             return None;
         }
@@ -539,7 +542,11 @@ fn stamp(doc: &mut Document, brush: &Brush, point: Point) -> Option<PixelRect> {
     let mut changed = false;
     for row in dab.bounds.y0..dab.bounds.y1 {
         for column in dab.bounds.x0..dab.bounds.x1 {
-            let alpha = dab.alpha(brush, column, row);
+            let alpha = crate::selection::strength(
+                doc.selection.as_ref(),
+                (row * doc.width + column) as usize,
+                dab.alpha(brush, column, row),
+            );
             if alpha <= 0. {
                 continue;
             }

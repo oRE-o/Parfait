@@ -1,5 +1,26 @@
 # Stroke performance
 
+## Pixel Selection Foundation
+
+No runtime dependency, worker or canvas-sized selection buffer is added to selection-free drawings. Active Dense selection uses one shared byte per pixel, at most 16 MiB at 4096²; Uniform selection has no canvas payload. Explicit layer-geometry extraction uses one scalar row per folder, at most 256 KiB, plus its ordinary scalar output. Mask creation can share selection coverage, while inversion/combination explicitly allocate a new scalar result. These are payload/scratch bounds, not total RSS; existing pixel COW, capped-stroke scratch and retained History still apply. Selection is borrowed directly by writers, not cloned into each Dab.
+
+Run `cargo run --release -p parfait-core --example selection_bench`, optionally with `-- --selected`. On Apple M1/macOS 15.7.5 arm64/Rust 1.99.1, three interleaved before/after runs each measure 25 complete 64-update strokes on a 512² patterned raster, diameter 48, opacity 0.65 and flow 0.6. Timing includes the first pixel COW but excludes fixture construction, cloning, coverage setup, checksum/unchanged-hole verification, composition, UI, GPU and storage. The baseline links the preceding core with the same workload module. All ten selection-free checksums agree before/after across all runs. Dense coverage is 0 in one third of pixels and 128 elsewhere; it performs different work and is not a speedup baseline.
+
+| Operation | Mode | Before p50 ms range | After p50 ms range | Dense p50 ms range |
+| --- | --- | --- | --- | --- |
+| Paint | Per dab | 1.5352–1.5559 | 1.5520–1.5776 | 1.4095–1.4535 |
+| Paint | Capped | 2.0432–2.0647 | 2.1002–2.1131 | 1.5971–1.6412 |
+| Erase | Per dab | 1.7401–1.7626 | 1.8053–1.8251 | 1.6206–1.6287 |
+| Erase | Capped | 2.2977–2.3218 | 2.4553–2.4665 | 1.8394–1.8480 |
+| Blend | Per dab | 1.8657–1.8783 | 1.8626–1.8742 | 2.2645–2.2716 |
+| Blend | Capped setting | 1.8672–1.8826 | 1.8640–1.8776 | 2.2670–2.2982 |
+| Blur | Per dab | 2.3524–2.3833 | 2.3337–2.3577 | 3.7246–3.7818 |
+| Blur | Capped setting | 2.3559–2.3963 | 2.3495–2.3935 | 3.7320–3.8095 |
+| Smudge | Per dab | 3.6271–3.7449 | 3.6380–3.6858 | 3.7399–3.8143 |
+| Smudge | Capped setting | 3.7336–3.8345 | 3.7175–3.9440 | 3.7926–3.8606 |
+
+Early prototypes increased selection-free Blend/Blur cost; final writers dispatch outside those loops to compile-time-specialized paths. Some unselected overhead remains, notably capped Erase, and active Dense Blur is more expensive. These CPU samples do not establish zero regression, frame rate, pen latency or product parity. Source-selection generation is not timed by this workload. The release executable is 13,093,424 bytes, up 16,736 from the preceding build; all 14 file-backed sections match the signed native QA executable. Size is not RAM.
+
 ## Through Folder Rows
 
 Through composition reuses one RGBA row per folder, using that row as a before-image only when group opacity or an enabled mask needs interpolation. It adds no folder-sized image, dependency or background task. At 64 nodes and width 4096, row pixels remain bounded by 1 MiB, excluding the normal output and vector metadata. A maximum-depth regression checks retained buffer pointers/capacities after traversal. Artwork v8 changes the allowed enum range, not metadata size or the logical 512 MiB limits.
