@@ -291,8 +291,10 @@ impl Parfait {
         {
             ctx.request_repaint_after(std::time::Duration::from_secs_f32(interval));
         }
-        if self.rendered != self.doc.revision || self.texture.is_none() {
-            let region = if let Some(r) = damage.filter(|_| !full_refresh) {
+        let overlay = self.active_mask_overlay();
+        let overlay_changed = self.rendered_overlay != overlay;
+        if self.rendered != self.doc.revision || self.texture.is_none() || overlay_changed {
+            let region = if let Some(r) = damage.filter(|_| !full_refresh && !overlay_changed) {
                 r
             } else {
                 PixelRect {
@@ -324,9 +326,18 @@ impl Parfait {
                     p[3] = 255;
                 }
             }
+            if overlay.is_some() {
+                let mask = self.doc.layers[self.doc.active].mask.as_ref().unwrap();
+                crate::mask_area::tint_mask_area(
+                    &mut pixels,
+                    [self.doc.width, self.doc.height],
+                    &mask.coverage,
+                    region,
+                );
+            }
             let image = egui::ColorImage::from_rgba_unmultiplied([width, height], &pixels);
             if let Some(tex) = &mut self.texture {
-                if full_refresh || damage.is_none() {
+                if full_refresh || overlay_changed || damage.is_none() {
                     tex.set(image, egui::TextureOptions::LINEAR);
                 } else {
                     tex.set_partial(
@@ -340,6 +351,7 @@ impl Parfait {
                     Some(ctx.load_texture("drawing", image, egui::TextureOptions::LINEAR));
             }
             self.rendered = self.doc.revision;
+            self.rendered_overlay = overlay;
         }
         if let Some(texture) = &self.texture {
             let corners = [

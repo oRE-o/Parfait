@@ -25,6 +25,8 @@ pub struct Parfait {
     pub layer_previews: Vec<egui::TextureHandle>,
     pub(crate) mask_previews: Vec<Option<egui::TextureHandle>>,
     pub(crate) mask_target: Option<parfait_core::LayerId>,
+    pub(crate) mask_overlay: Option<parfait_core::LayerId>,
+    pub(crate) rendered_overlay: Option<parfait_core::LayerId>,
     pub preview_revision: u64,
     pub doc: Document,
     pub brush: Brush,
@@ -101,6 +103,8 @@ impl Parfait {
             layer_previews: Vec::new(),
             mask_previews: Vec::new(),
             mask_target: None,
+            mask_overlay: None,
+            rendered_overlay: None,
             preview_revision: u64::MAX,
             doc,
             brush: Brush::default(),
@@ -256,6 +260,7 @@ impl Parfait {
                     doc.revision = self.doc.revision + 1;
                     self.doc = doc;
                     self.mask_target = None;
+                    self.mask_overlay = None;
                     self.history = History::default();
                     self.layer_list = Default::default();
                     self.project = Some(path);
@@ -273,6 +278,7 @@ impl Parfait {
                 let rev = self.doc.revision + 1;
                 self.doc = Document::new(1024, 768);
                 self.mask_target = None;
+                self.mask_overlay = None;
                 self.doc.revision = rev;
                 self.history = History::default();
                 self.layer_list = Default::default();

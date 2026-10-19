@@ -3,6 +3,14 @@ use eframe::egui;
 use parfait_core::{BrushOperation, Point, Stroke};
 
 impl Parfait {
+    pub(crate) fn active_mask_overlay(&self) -> Option<parfait_core::LayerId> {
+        self.doc
+            .layers
+            .get(self.doc.active)
+            .filter(|layer| self.mask_overlay == Some(layer.id) && layer.mask.is_some())
+            .map(|layer| layer.id)
+    }
+
     pub(crate) fn layer_target_thumbnail(
         &mut self,
         ui: &mut egui::Ui,
@@ -118,11 +126,18 @@ impl Parfait {
         if target.mask.is_none() {
             return Some("This layer has no mask.");
         }
-        if command != Command::LayerMaskEnabled && target.locked {
+        if !matches!(command, Command::LayerMaskEnabled | Command::ShowMaskArea) && target.locked {
             return Some("Unlock the layer before changing its mask.");
         }
         if command == Command::ApplyLayerMask && target.alpha_locked {
             return Some("Unlock transparent pixels before applying the mask.");
+        }
+        if command == Command::ClearLayerMask
+            && target.mask.as_ref().is_some_and(|mask| {
+                matches!(mask.coverage, parfait_core::MaskCoverage::Uniform(255))
+            })
+        {
+            return Some("This mask already reveals the entire layer.");
         }
         None
     }
@@ -136,6 +151,14 @@ impl Parfait {
             return;
         }
         let layer = self.doc.active;
+        if command == Command::ShowMaskArea {
+            self.mask_overlay = if self.active_mask_overlay().is_some() {
+                None
+            } else {
+                Some(self.doc.layers[layer].id)
+            };
+            return;
+        }
         self.edit_named(command.label(), |document| match command {
             Command::LayerMaskRevealAll | Command::LayerMaskHideAll => {
                 document.create_layer_mask(
@@ -157,6 +180,9 @@ impl Parfait {
                 let enabled = !document.layers[layer].mask.as_ref().unwrap().enabled;
                 document.set_layer_mask_enabled(layer, enabled);
             }
+            Command::ClearLayerMask => {
+                document.clear_layer_mask(layer);
+            }
             _ => unreachable!(),
         });
         if matches!(
@@ -166,6 +192,7 @@ impl Parfait {
             self.mask_target = Some(self.doc.layers[layer].id);
         } else if matches!(command, Command::DeleteLayerMask | Command::ApplyLayerMask) {
             self.mask_target = None;
+            self.mask_overlay = None;
         }
     }
 
@@ -223,7 +250,11 @@ impl Parfait {
             self.command_menu_item(ui, command);
         }
         ui.separator();
-        for command in [Command::DeleteLayerMask, Command::ApplyLayerMask] {
+        for command in [
+            Command::DeleteLayerMask,
+            Command::ApplyLayerMask,
+            Command::ClearLayerMask,
+        ] {
             self.command_menu_item(ui, command);
         }
         let enabled = self.doc.layers[self.doc.active]
@@ -231,6 +262,11 @@ impl Parfait {
             .as_ref()
             .is_some_and(|mask| mask.enabled);
         self.command_toggle(ui, Command::LayerMaskEnabled, enabled);
+        self.command_toggle(
+            ui,
+            Command::ShowMaskArea,
+            self.active_mask_overlay().is_some(),
+        );
     }
 }
 

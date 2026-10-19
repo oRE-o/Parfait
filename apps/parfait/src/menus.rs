@@ -191,6 +191,7 @@ impl Parfait {
                 .mask
                 .as_ref()
                 .is_some_and(|mask| mask.enabled),
+            Command::ShowMaskArea => self.active_mask_overlay().is_some(),
             Command::RulerBar => self.display.rulers,
             Command::PixelGrid => self.display.pixel_grid,
             Command::FlipHorizontal => self.view.flip_horizontal,
@@ -250,6 +251,9 @@ fn menu_label(command: Command) -> &'static str {
         Command::DeleteLayerMask => "마스크 삭제",
         Command::ApplyLayerMask => "마스크를 레이어에 적용",
         Command::LayerMaskEnabled => "마스크 활성화",
+        Command::ClearLayerMask => "마스크 비우기",
+        Command::ClearEditingTarget => "편집 대상 비우기",
+        Command::ShowMaskArea => "마스크 범위 표시",
         Command::ShortcutSettings => "단축키 설정…",
         Command::ZoomIn => "확대",
         Command::ZoomOut => "축소",

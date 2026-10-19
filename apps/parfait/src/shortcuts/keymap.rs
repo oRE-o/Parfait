@@ -150,6 +150,8 @@ impl Default for Keymap {
             (Undo, Key::Z, primary, false, false),
             (Redo, Key::Y, primary, false, false),
             (Redo, Key::Z, primary, true, false),
+            (ClearEditingTarget, Key::Delete, false, false, false),
+            (ClearEditingTarget, Key::Backspace, false, false, false),
             (NewLayer, Key::N, primary, true, false),
             (SelectLayerAbove, Key::CloseBracket, false, false, true),
             (SelectLayerBelow, Key::OpenBracket, false, false, true),
@@ -259,6 +261,15 @@ impl Keymap {
                 }
                 if command == Command::LayerClipping {
                     tooltip.push_str("\n아래 기준 레이어의 불투명한 영역에만 표시합니다.\n영역 밖의 원본 픽셀은 지우지 않습니다.");
+                }
+                if command == Command::ShowMaskArea {
+                    tooltip.push_str("\n활성 레이어의 숨긴 마스크 범위를 보라색으로 표시합니다.\n비활성 마스크도 진단하며, 저장·내보내기에는 포함하지 않습니다.\n다른 레이어와 재시작 시 표시 범위가 달라질 수 있는 세션 표시입니다.");
+                }
+                if command == Command::ClearEditingTarget {
+                    tooltip.push_str("\n마스크 선택 중에는 활성 마스크를 모두 표시하도록 비웁니다.\n원본 선택 중에는 선택 레이어의 원본 픽셀을 비웁니다.");
+                }
+                if command == Command::ClearLayerMask {
+                    tooltip.push_str("\n활성 마스크만 모두 표시 상태로 비웁니다. 원본 픽셀은 유지합니다.");
                 }
                 Hint {
                     keys,

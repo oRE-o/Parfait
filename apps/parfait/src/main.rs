@@ -16,6 +16,7 @@ mod layer_commands;
 mod layer_mask;
 mod layer_organize;
 mod layers;
+mod mask_area;
 mod menus;
 mod panels;
 mod preferences;

@@ -13,6 +13,13 @@ impl Parfait {
         if self.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
+        if command == Command::ClearEditingTarget {
+            return self.command_disabled_reason(if self.editing_layer_mask() {
+                Command::ClearLayerMask
+            } else {
+                Command::ClearLayer
+            });
+        }
         if command.category() == Category::Layer {
             let mask = self.selected_layer_mask();
             if command == Command::LayerClipping

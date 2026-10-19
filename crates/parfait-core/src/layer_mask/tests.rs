@@ -1,6 +1,78 @@
 use super::*;
 use crate::{BlendMode, History, LayerCombine, PixelRect};
 
+#[test]
+fn mask_clear_restores_coverage_without_touching_content_or_enable_state() {
+    for dense in [false, true] {
+        for enabled in [false, true] {
+            let mut document = Document::new(8, 8);
+            document.create_layer_mask(1, 127);
+            document.layers[1].alpha_locked = true;
+            let mask = document.layers[1].mask.as_mut().unwrap();
+            mask.enabled = enabled;
+            if dense {
+                mask.coverage =
+                    MaskCoverage::Dense(Arc::new((0..64).map(|index| index * 4).collect()));
+            }
+            let before = document.clone();
+            let mut history = History::default();
+            history.begin(&document, "Clear mask");
+            assert!(document.clear_layer_mask(1));
+            assert!(history.commit(&document));
+            assert_eq!(
+                document.layers[1].mask.as_ref().unwrap().coverage,
+                MaskCoverage::Uniform(255)
+            );
+            assert_eq!(document.layers[1].mask.as_ref().unwrap().enabled, enabled);
+            for (current, previous) in document.layers.iter().zip(&before.layers) {
+                assert!(Arc::ptr_eq(&current.pixels, &previous.pixels));
+            }
+            let after = document.clone();
+            history.undo(&mut document);
+            assert!(document.same_edit_state(&before));
+            history.redo(&mut document);
+            assert!(document.same_edit_state(&after));
+        }
+    }
+}
+
+#[test]
+fn mask_clear_noops_and_invalid_targets_preserve_buffers_revision_and_redo() {
+    for case in 0..6 {
+        let mut document = Document::new(8, 8);
+        document.create_layer_mask(1, 255);
+        match case {
+            0 => {}
+            1 => {
+                document.layers[1].mask.as_mut().unwrap().coverage =
+                    MaskCoverage::Dense(Arc::new(vec![255; 64]))
+            }
+            2 => {
+                document.layers[1].locked = true;
+                document.layers[1].mask.as_mut().unwrap().coverage = MaskCoverage::Uniform(0);
+            }
+            3 => document.layers[1].mask = None,
+            4 => {
+                document.layers[1].mask.as_mut().unwrap().coverage =
+                    MaskCoverage::Dense(Arc::new(vec![0; 3]))
+            }
+            _ => {}
+        }
+        let mut history = History::default();
+        history.begin(&document, "Opacity");
+        document.layers[1].opacity = 0.5;
+        history.commit(&document);
+        history.undo(&mut document);
+        let before = document.clone();
+        history.begin(&document, "Clear mask");
+        assert!(!document.clear_layer_mask(if case == 5 { 99 } else { 1 }));
+        assert!(!history.commit(&document));
+        assert_eq!(document.revision, before.revision);
+        assert!(document.same_edit_state(&before));
+        assert!(history.can_redo());
+    }
+}
+
 fn sample(width: u32, height: u32, count: usize) -> Document {
     let mut document = Document::new(width, height);
     while document.layers.len() < count {

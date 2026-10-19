@@ -3,6 +3,8 @@ use crate::shortcuts::Chord;
 use parfait_core::{Brush, Document, MaskCoverage};
 use std::sync::Arc;
 
+mod area;
+
 fn frame(app: &mut Parfait, context: &egui::Context, events: Vec<egui::Event>) {
     let mut output = context.run_ui(
         egui::RawInput {
@@ -272,7 +274,7 @@ fn mask_menu_keys_and_preferences_version_keep_existing_bindings() {
     app.persist_preferences(true);
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
-    assert_eq!(legacy["version"], 16);
+    assert_eq!(legacy["version"], 17);
     legacy["version"] = 15.into();
     legacy["keymap"]["bindings"]
         .as_array_mut()

@@ -79,6 +79,9 @@ pub enum Command {
     DeleteLayerMask,
     ApplyLayerMask,
     LayerMaskEnabled,
+    ClearEditingTarget,
+    ClearLayerMask,
+    ShowMaskArea,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -193,6 +196,9 @@ impl Command {
         Self::DeleteLayerMask,
         Self::ApplyLayerMask,
         Self::LayerMaskEnabled,
+        Self::ClearEditingTarget,
+        Self::ClearLayerMask,
+        Self::ShowMaskArea,
     ];
 
     pub fn label(self) -> &'static str {
@@ -270,6 +276,9 @@ impl Command {
             Self::DeleteLayerMask => "Delete layer mask",
             Self::ApplyLayerMask => "Apply mask to layer",
             Self::LayerMaskEnabled => "Layer mask enabled",
+            Self::ClearEditingTarget => "Clear editing target",
+            Self::ClearLayerMask => "Clear layer mask",
+            Self::ShowMaskArea => "Show mask area",
         }
     }
 
@@ -280,7 +289,9 @@ impl Command {
             | Self::SaveProject
             | Self::SaveAs
             | Self::ExportPng => Category::File,
-            Self::Undo | Self::Redo | Self::ShortcutSettings => Category::Edit,
+            Self::Undo | Self::Redo | Self::ShortcutSettings | Self::ClearEditingTarget => {
+                Category::Edit
+            }
             Self::NewLayer
             | Self::DuplicateLayer
             | Self::DeleteLayer
@@ -308,7 +319,9 @@ impl Command {
             | Self::LayerMaskHideAll
             | Self::DeleteLayerMask
             | Self::ApplyLayerMask
-            | Self::LayerMaskEnabled => Category::Layer,
+            | Self::LayerMaskEnabled
+            | Self::ClearLayerMask
+            | Self::ShowMaskArea => Category::Layer,
             Self::HidePalettes
             | Self::ResetPaletteLayout
             | Self::PaletteBrushes
@@ -343,6 +356,8 @@ impl Command {
                 | Self::DeleteLayerMask
                 | Self::ApplyLayerMask
                 | Self::LayerMaskEnabled
+                | Self::ClearLayerMask
+                | Self::ShowMaskArea
         )
     }
     pub fn layer_combine(self) -> Option<parfait_core::LayerCombine> {
@@ -409,11 +424,23 @@ impl Parfait {
             Command::Undo => self.undo(),
             Command::Redo => self.redo(),
             Command::NewLayer => self.new_layer(),
+            Command::ClearEditingTarget => {
+                self.execute_command(
+                    if self.editing_layer_mask() {
+                        Command::ClearLayerMask
+                    } else {
+                        Command::ClearLayer
+                    },
+                    ctx,
+                );
+            }
             Command::LayerMaskRevealAll
             | Command::LayerMaskHideAll
             | Command::DeleteLayerMask
             | Command::ApplyLayerMask
-            | Command::LayerMaskEnabled => self.execute_mask_command(command),
+            | Command::LayerMaskEnabled
+            | Command::ClearLayerMask
+            | Command::ShowMaskArea => self.execute_mask_command(command),
             Command::DuplicateLayer => self.duplicate_selected_layers(),
             Command::DeleteLayer
             | Command::MoveLayerUp
@@ -530,6 +557,8 @@ impl Parfait {
         }
         if let Some(reason) = reason {
             response.on_disabled_hover_text(reason);
+        } else {
+            response.on_hover_text(self.keymap.tooltip(command));
         }
     }
 
@@ -559,6 +588,8 @@ impl Parfait {
         }
         if let Some(reason) = reason {
             response.on_disabled_hover_text(reason);
+        } else {
+            response.on_hover_text(self.keymap.tooltip(command));
         }
     }
 

@@ -1,5 +1,19 @@
 # Stroke performance
 
+## Mask Area Display
+
+Mask-area display tints the existing checkerboard-composited output in place. It adds two optional layer IDs, no canvas-sized cache/texture, dependency or worker. Uniform-255 coverage bypasses tinting; dense coverage costs one pass over the damaged region. Ordinary pan/zoom/rotation still reuse uploaded pixels. Turning the display on/off or changing its active target refreshes the whole drawing once, including composition: this is the deliberate cost of avoiding an additional untinted image cache. Mask clearing compacts changed coverage to Uniform 255; all-white dense detection occurs only on the explicit command, never on each menu frame.
+
+Run `cargo run --release -p parfait --example mask_area_bench`. Three Apple M1/macOS 15.7.5/arm64/Rust 1.99.1 release runs use a two-layer 1024×768 document and 20 iterations per case. Composition timings include allocation/checksum; tint-only timings exclude source reset copies and checksums. Uniform/Dense independent arithmetic, partial/full output and unchanged raw-content identity are checked before timing. The fixture has an opaque background; existing canvas tests separately cover checkerboard output.
+
+| Coverage | Full tint-only mean ms range | 128×128 tint-only mean ms range |
+| --- | --- | --- |
+| Uniform 255 | Immediate bypass, near timer resolution | Immediate bypass, near timer resolution |
+| Uniform 128 | 0.555208–0.558787 | 0.011206–0.011219 |
+| Dense | 1.823060–1.879935 | 0.037983–0.039400 |
+
+The dense fixture's composition alone takes 7.760685–8.047996 ms full / 0.157848–0.173629 ms region. These two-layer values do not replace the existing eight-layer/full-frame measurements or include UI/GPU/input/storage latency. All six tint-case checksums agree across runs, and four existing mask-free clipping checksums remain unchanged in three runs. No physical-pen, RSS, general no-regression or competitive-parity claim follows. The unsigned executable is 12,909,328 bytes, 32 bytes above the preceding editor build; linker size is not a RAM measurement.
+
 ## Raster Mask Editing
 
 Mask painting reuses existing dab coverage, spacing, pressure and spray scheduling, but writes a single coverage channel rather than allocating an RGBA proxy document. Uniform coverage becomes Dense only on a changed byte. Per-dab mode has no contribution scratch; capped strokes share the initial mask and lazily allocate 64×64 f32 contribution tiles, bounded by 64 MiB plus 32 KiB of tile pointers at 4096² on a 64-bit target. Existing full-channel COW, History snapshots and compositing allocations remain; these bounds are not total RSS. At most 64 additional 40×40 RGBA mask thumbnails are cached and refresh only after drawing, alongside the existing content previews. No dependency or worker is added.

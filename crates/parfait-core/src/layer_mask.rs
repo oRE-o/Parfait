@@ -106,6 +106,28 @@ impl Document {
         true
     }
 
+    pub fn clear_layer_mask(&mut self, layer: usize) -> bool {
+        if !self.validate() {
+            return false;
+        }
+        let Some(target) = self.layers.get_mut(layer).filter(|layer| !layer.locked) else {
+            return false;
+        };
+        let Some(mask) = &mut target.mask else {
+            return false;
+        };
+        let clear = match &mask.coverage {
+            MaskCoverage::Uniform(value) => *value == 255,
+            MaskCoverage::Dense(values) => values.iter().all(|value| *value == 255),
+        };
+        if clear {
+            return false;
+        }
+        mask.coverage = MaskCoverage::Uniform(255);
+        self.touch();
+        true
+    }
+
     pub fn set_layer_mask_enabled(&mut self, layer: usize, enabled: bool) -> bool {
         let Some(mask) = self
             .layers

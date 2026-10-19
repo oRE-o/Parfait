@@ -948,7 +948,7 @@ mod tests {
         app.persist_preferences(true);
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
-            16
+            17
         );
         drop(app);
         let app = Parfait::open(dir.path().to_owned()).unwrap();
@@ -1399,7 +1399,7 @@ mod tests {
         app.persist_preferences(true);
         assert!(app.error.is_none());
         let saved: serde_json::Value = serde_json::from_str(&app.saved_preferences_json()).unwrap();
-        assert_eq!(saved["version"], 16);
+        assert_eq!(saved["version"], 17);
         drop(app);
         let restored = Parfait::open(dir.path().to_owned()).unwrap();
         assert_eq!(restored.brush.pressure_curve, curve);
@@ -1579,7 +1579,7 @@ mod pressure_spacing_tests {
         let json = app.saved_preferences_json();
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
-            16
+            17
         );
         drop(app);
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
