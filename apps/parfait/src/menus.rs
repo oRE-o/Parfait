@@ -63,19 +63,27 @@ impl Parfait {
                     let _ = response;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let (color, label) = if self.saving_failed {
-                        (Color32::LIGHT_RED, "저장 실패")
+                    let color = if self.saving_failed {
+                        Color32::LIGHT_RED
                     } else if self.saved >= self.doc.revision {
-                        (Color32::from_gray(184), "로컬 저장됨")
+                        Color32::from_gray(184)
                     } else {
-                        (ACCENT, "저장 중…")
+                        ACCENT
                     };
-                    let response = ui.label(RichText::new(label).color(color).size(11.));
+                    let response = ui.label(RichText::new(self.recovery_status()).color(color).size(11.));
+                    response.clone().on_hover_text("앱을 다시 열 때 쓰는 복구 기록입니다. 작업 파일 저장과는 별도입니다.");
                     #[cfg(test)]
                     ui.data_mut(|data| {
                         data.insert_temp(egui::Id::new("menu_save_status"), response.rect)
                     });
                     let _ = response;
+                    ui.separator();
+                    let response = ui.label(RichText::new(self.project_status()).color(
+                        if self.project_is_modified() { ACCENT } else { Color32::from_gray(184) }
+                    ).size(11.));
+                    response.clone().on_hover_text("작업 파일에 마지막으로 저장한 상태와 비교합니다. 복구 저장이 끝나도 파일의 수정 표시는 남습니다.");
+                    #[cfg(test)]
+                    ui.data_mut(|data| data.insert_temp(egui::Id::new("project_save_status"), response.rect));
                 });
             });
         });

@@ -58,6 +58,10 @@ An OS file lock protects the recovery directory. `session.clean` becomes false o
 
 Normal app exit joins the worker after submitting the final snapshot. Manual Save writes an independent SQLite project and checkpoints its WAL. New/Open first write a rotating backup of the existing document. External database writing is unsupported.
 
+`project_state.rs` keeps one session-local successfully saved/opened `Document` baseline, sharing its pixel/mask buffers. Dirty checks compare edit metadata and buffer identity, not revisions or pixel bytes. Recovery acknowledgments never advance this baseline. Undo to the original shared buffers clears the marker; separately recreating identical bytes may conservatively remain dirty. Selection, view and tool changes are not edits. Recovery restart has no trusted project-path association and starts without a baseline.
+
+Save prepares a named candidate and commits live name/path/baseline only after snapshot save, clean marking and checkpoint succeed. A late disk error may leave committed disk data even though the live association stays unchanged. Open validates and backs up before replacing the live document; successful New clears the association. Known recovery, backup, preferences and lock paths and their SQLite sidecars are refused as explicit project targets, including existing symbolic aliases; broken symlinks are refused. This is not a hardlink or concurrent external path-change security boundary. Manual project writes, backup and PNG export remain synchronous. No format, worker or dependency is added.
+
 ## Module responsibilities
 
 - `app.rs`: document lifecycle, save/load/export, background save status.

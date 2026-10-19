@@ -35,9 +35,13 @@ impl Parfait {
                 ui.horizontal(|ui| {
                     ui.add_sized(
                         [180_f32.min(ui.available_width() * 0.25), 20.],
-                        egui::Button::new(&self.doc.name)
-                            .truncate()
-                            .fill(Color32::from_rgb(81, 88, 101)),
+                        egui::Button::new(format!(
+                            "{}{}",
+                            self.doc.name,
+                            if self.project_is_modified() { " *" } else { "" }
+                        ))
+                        .truncate()
+                        .fill(Color32::from_rgb(81, 88, 101)),
                     )
                     .on_hover_text(&self.doc.name);
                     ui.label(

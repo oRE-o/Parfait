@@ -1,5 +1,11 @@
 # Stroke performance
 
+## Project Save State
+
+The saved-project marker compares metadata and shared-buffer identity across at most 64 layers. It does not scan pixel/mask bytes, serialize or clone a document for each comparison. One successful-save/open baseline shares its buffers with the document initially, but can keep up to one previous logical document alive after edits and History eviction. The existing 512 MiB logical limit is not a total RSS bound; retained baseline data is not free memory. No worker, periodic task, canvas cache or runtime dependency is added. Manual project writes, pre-replacement backups and PNG export remain synchronous; measuring and reducing their UI stalls is still roadmap work. No new pen-latency or memory-speedup claim follows from this increment.
+
+The 2026-10-20 arm64 unsigned release executable is 12,926,208 bytes, 256 bytes above the preceding raster-conversion build. This is artifact size, not memory use or speed. The signed isolated QA executable matches all 14 file-backed Mach-O sections of that release build; signature/load-command differences are excluded from the comparison.
+
 ## Raster Conversions
 
 Run `cargo run --release -p parfait-core --example raster_conversion_bench`. Three Apple M1/macOS 15.7.5/arm64/Rust 1.99.1 release runs convert a deterministic 1024×768 active RGBA layer, with twenty iterations per operation/buffer-ownership case. Timers include core validation, conversion and shared-buffer COW, but exclude fixture/reset, independent per-pixel checksums, History, composition, UI/GPU, input and storage. Unique-buffer setup copies outside the timed interval. Every output byte is compared with independent arithmetic; a second conversion verifies no-op Arc/revision preservation. All four case checksums agree across runs.

@@ -38,8 +38,11 @@ impl Parfait {
                         rect.center(),
                         egui::Align2::CENTER_CENTER,
                         format!(
-                            "{}  —  {} × {} px",
-                            self.doc.name, self.doc.width, self.doc.height
+                            "{}{}  —  {} × {} px",
+                            self.doc.name,
+                            if self.project_is_modified() { " *" } else { "" },
+                            self.doc.width,
+                            self.doc.height
                         ),
                         egui::FontId::proportional(11.),
                         Color32::from_gray(170),

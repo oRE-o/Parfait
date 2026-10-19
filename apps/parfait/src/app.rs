@@ -50,6 +50,7 @@ pub struct Parfait {
     pub error: Option<String>,
     pub notice: Option<String>,
     pub project: Option<PathBuf>,
+    pub(crate) project_saved_state: Option<Document>,
     pub recovery_path: PathBuf,
     pub show_help: bool,
     pub show_licenses: bool,
@@ -128,6 +129,7 @@ impl Parfait {
             error: None,
             notice,
             project: None,
+            project_saved_state: None,
             recovery_path: path,
             show_help: false,
             show_licenses: false,
@@ -216,30 +218,14 @@ impl Parfait {
                 .save_file()
         });
         if let Some(path) = path {
-            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                self.doc.name = name.to_owned();
-                self.doc.touch();
-            }
-            match self.write_project(&path) {
-                Ok(()) => {
-                    self.project = Some(path);
-                    self.force_save();
-                    self.notice = Some("Project saved.".into());
-                }
+            match self.save_project_to(path) {
+                Ok(()) => self.notice = Some("Project saved.".into()),
                 Err(e) => self.error = Some(format!("Save failed: {e:#}")),
             }
         }
     }
     fn write_project(&self, path: &Path) -> anyhow::Result<()> {
-        let mut store = Store::open(path)?;
-        let mut doc = self.doc.clone();
-        if let Some(old) = store.load()? {
-            doc.revision = doc.revision.max(old.document.revision) + 1;
-        }
-        store.save(&doc)?;
-        store.mark_clean()?;
-        store.checkpoint()?;
-        Ok(())
+        Self::write_project_document(&self.doc, path)
     }
     pub fn open_project(&mut self) {
         self.finish_layer_edit();
@@ -247,26 +233,8 @@ impl Parfait {
             .add_filter("Parfait project", &["parfait"])
             .pick_file()
         {
-            let load = || -> anyhow::Result<Document> {
-                // Backup the current drawing before replacing the working document.
-                self.write_project(&self.recovery_path.with_file_name("before-open.parfait"))?;
-                Store::open(&path)?
-                    .load()?
-                    .map(|l| l.document)
-                    .ok_or_else(|| anyhow::anyhow!("Project contains no snapshots"))
-            };
-            match load() {
-                Ok(mut doc) => {
-                    doc.revision = self.doc.revision + 1;
-                    self.doc = doc;
-                    self.mask_target = None;
-                    self.mask_overlay = None;
-                    self.history = History::default();
-                    self.layer_list = Default::default();
-                    self.project = Some(path);
-                    self.view = View::default();
-                    self.force_save();
-                }
+            match self.open_project_from(path) {
+                Ok(()) => {}
                 Err(e) => self.error = Some(format!("Open failed: {e:#}")),
             }
         }
@@ -283,6 +251,7 @@ impl Parfait {
                 self.history = History::default();
                 self.layer_list = Default::default();
                 self.project = None;
+                self.project_saved_state = None;
                 self.view = View::default();
                 self.force_save();
             }

@@ -20,6 +20,7 @@ mod mask_area;
 mod menus;
 mod panels;
 mod preferences;
+mod project_state;
 mod raster_conversion;
 mod rulers;
 mod shortcuts;
