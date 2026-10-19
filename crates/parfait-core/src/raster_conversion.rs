@@ -39,7 +39,10 @@ impl Document {
         let Some(target) = self.layers.get(layer) else {
             return Some("The target layer no longer exists.");
         };
-        if target.locked {
+        if target.kind != crate::LayerKind::Raster {
+            return Some("Select a raster layer before converting its pixels.");
+        }
+        if !self.layer_ancestors_unlocked(layer) {
             return Some("Unlock the layer before converting its pixels.");
         }
         if conversion == RasterConversion::BrightnessToOpacity && target.alpha_locked {

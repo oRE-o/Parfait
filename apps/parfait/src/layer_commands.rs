@@ -9,9 +9,19 @@ use eframe::egui;
 mod tests;
 
 impl Parfait {
+    fn tree_command_disabled_reason(&self, command: Command) -> Option<&'static str> {
+        (self.doc.has_folders() && command.category() == Category::Layer
+            && !matches!(command, Command::LayerVisibility | Command::LayerLock
+                | Command::LayerReference | Command::LayerDraft | Command::RenameLayer | Command::NewLayer))
+            .then_some("Folder editing controls are not connected yet. This command cannot safely edit a layer tree.")
+    }
+
     pub(crate) fn command_disabled_reason(&self, command: Command) -> Option<&'static str> {
         if self.stroke.is_some() {
             return Some("Finish the current stroke first.");
+        }
+        if let Some(reason) = self.tree_command_disabled_reason(command) {
+            return Some(reason);
         }
         if let Some(conversion) = command.raster_conversion(self.brush.color) {
             return self.raster_conversion_disabled_reason(conversion);
@@ -93,6 +103,9 @@ impl Parfait {
         command: Command,
         layer: usize,
     ) -> Option<&'static str> {
+        if let Some(reason) = self.tree_command_disabled_reason(command) {
+            return Some(reason);
+        }
         if self.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
@@ -130,10 +143,20 @@ impl Parfait {
             return self.mask_command_disabled_reason(command, layer);
         }
         match command {
-            Command::NewLayer => parfait_storage::layer_growth_error(
-                &self.doc,
-                "Layer ".len() + self.doc.layers.len().ilog10() as usize + 1,
-            ),
+            Command::NewLayer => {
+                let parent = if target.kind == parfait_core::LayerKind::Folder {
+                    Some(layer)
+                } else {
+                    target.parent.and_then(|id| self.doc.layer_index(id))
+                };
+                if parent.is_some_and(|index| !self.doc.layer_ancestors_unlocked(index)) {
+                    return Some("Unlock the parent folder before inserting a layer.");
+                }
+                parfait_storage::layer_growth_error(
+                    &self.doc,
+                    "Layer ".len() + self.doc.layers.len().ilog10() as usize + 1,
+                )
+            }
             Command::DuplicateLayer => {
                 parfait_storage::layer_duplication_error(&self.doc, 1 << layer)
             }

@@ -215,8 +215,8 @@ impl Parfait {
     pub(crate) fn begin_canvas_stroke(&mut self, point: Point) -> bool {
         if self.stroke.is_some()
             || self.dialog_open()
-            || self.doc.layers[self.doc.active].locked
-            || !self.doc.layers[self.doc.active].visible
+            || self.doc.layers[self.doc.active].kind != parfait_core::LayerKind::Raster
+            || !self.doc.layer_ancestors_allow_edit(self.doc.active)
         {
             return false;
         }

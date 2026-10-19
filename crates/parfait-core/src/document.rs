@@ -52,6 +52,10 @@ pub struct Layer {
     pub reference: bool,
     #[serde(default)]
     pub draft: bool,
+    #[serde(default)]
+    pub kind: crate::LayerKind,
+    #[serde(default)]
+    pub parent: Option<LayerId>,
 }
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
@@ -92,6 +96,8 @@ impl Document {
                     mask: None,
                     reference: false,
                     draft: false,
+                    kind: crate::LayerKind::Raster,
+                    parent: None,
                 },
                 Layer {
                     id: LayerId(2),
@@ -106,6 +112,8 @@ impl Document {
                     mask: None,
                     reference: false,
                     draft: false,
+                    kind: crate::LayerKind::Raster,
+                    parent: None,
                 },
             ],
             active: 1,
@@ -121,6 +129,7 @@ impl Document {
             && !self.layers.is_empty()
             && self.layers.len() <= 64
             && self.active < self.layers.len()
+            && self.folder_layout().is_some()
             && self.layers.iter().enumerate().all(|(index, layer)| {
                 layer.id.0 > 0
                     && layer.id.0 < self.next_layer_id
@@ -130,14 +139,16 @@ impl Document {
             })
             && self.logical_pixel_bytes() <= 512 * 1024 * 1024
             && self.layers.iter().all(|l| {
-                l.pixels.len() == self.width as usize * self.height as usize * 4
-                    && l.mask.as_ref().is_none_or(|mask| match &mask.coverage {
-                        crate::MaskCoverage::Uniform(_) => true,
-                        crate::MaskCoverage::Dense(values) => {
-                            values.len() == self.width as usize * self.height as usize
-                        }
-                    })
-                    && l.opacity.is_finite()
+                (if l.kind == crate::LayerKind::Folder {
+                    l.pixels.is_empty() && !l.alpha_locked
+                } else {
+                    l.pixels.len() == self.width as usize * self.height as usize * 4
+                }) && l.mask.as_ref().is_none_or(|mask| match &mask.coverage {
+                    crate::MaskCoverage::Uniform(_) => true,
+                    crate::MaskCoverage::Dense(values) => {
+                        values.len() == self.width as usize * self.height as usize
+                    }
+                }) && l.opacity.is_finite()
                     && (0.0..=1.0).contains(&l.opacity)
             })
     }
@@ -155,6 +166,8 @@ impl Document {
                 .zip(&other.layers)
                 .all(|(current, previous)| {
                     current.id == previous.id
+                        && current.kind == previous.kind
+                        && current.parent == previous.parent
                         && current.reference == previous.reference
                         && current.draft == previous.draft
                         && current.alpha_locked == previous.alpha_locked
@@ -179,6 +192,9 @@ impl Document {
         if column >= self.width || row >= self.height {
             return None;
         }
+        if self.has_folders() {
+            return self.folder_layer_at(column, row);
+        }
         let alpha = ((row * self.width + column) * 4 + 3) as usize;
         self.layers
             .iter()
@@ -197,12 +213,23 @@ impl Document {
             })
     }
     pub fn clipping_base(&self, index: usize) -> Option<usize> {
-        self.layers.get(index)?;
+        let parent = self.layers.get(index)?.parent;
         self.layers[..=index]
             .iter()
-            .rposition(|layer| !layer.clipped)
+            .rposition(|layer| layer.parent == parent && !layer.clipped)
     }
     pub fn add_layer(&mut self) {
+        let Some(active) = self.layers.get(self.active) else {
+            return;
+        };
+        let parent = if active.kind == crate::LayerKind::Folder {
+            Some(active.id)
+        } else {
+            active.parent
+        };
+        if self.folder_edit_reason(parent).is_some() {
+            return;
+        }
         if self.layers.len() >= 64
             || self.logical_pixel_bytes().saturating_add(
                 u64::from(self.width)
@@ -221,18 +248,23 @@ impl Document {
             visible: true,
             locked: false,
             alpha_locked: false,
-            clipped: self
-                .layers
-                .get(self.active + 1)
-                .is_some_and(|layer| layer.clipped),
+            clipped: self.layers.get(self.active + 1).is_some_and(|layer| {
+                self.layers[self.active].kind == crate::LayerKind::Raster
+                    && layer.parent == self.layers[self.active].parent
+                    && layer.clipped
+            }),
             opacity: 1.,
             blend_mode: BlendMode::Normal,
             pixels: Arc::new(vec![0; self.width as usize * self.height as usize * 4]),
             mask: None,
             reference: false,
             draft: false,
+            kind: crate::LayerKind::Raster,
+            parent,
         };
-        self.active += 1;
+        if self.layers[self.active].kind != crate::LayerKind::Folder {
+            self.active += 1;
+        }
         self.layers.insert(self.active, layer);
         self.touch();
     }
@@ -264,6 +296,9 @@ impl Document {
         self.composite_region_layers(rect, u64::MAX)
     }
     pub(crate) fn composite_region_layers(&self, rect: PixelRect, mask: u64) -> Vec<u8> {
+        if self.has_folders() {
+            return self.composite_folder_region(rect, mask);
+        }
         let r = rect.clipped(self.width, self.height);
         let stride = (r.x1 - r.x0) as usize * 4;
         let mut out = vec![0; stride * (r.y1 - r.y0) as usize];
@@ -454,7 +489,7 @@ fn composite_clipped_rows<const MASKED: bool>(
     }
 }
 
-fn composite_flat_row(
+pub(crate) fn composite_flat_row(
     row: &mut [u8],
     source_row: &[[u8; 4]],
     opacity: f32,

@@ -7,14 +7,18 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     let pixels = u64::from(document.width)
         .checked_mul(u64::from(document.height))?
         .checked_mul(4)?;
-    let mut bytes = (super::SNAPSHOT_V6.len() as u64)
+    let mut bytes = (super::SNAPSHOT_V7.len() as u64)
         .checked_add(48)?
         .checked_add(document.name.len() as u64)?;
     for layer in &document.layers {
         bytes = bytes
-            .checked_add(39)?
+            .checked_add(44 + 8 * u64::from(layer.parent.is_some()))?
             .checked_add(layer.name.len() as u64)?
-            .checked_add(pixels)?;
+            .checked_add(if layer.kind == parfait_core::LayerKind::Raster {
+                pixels
+            } else {
+                0
+            })?;
         if let Some(mask) = &layer.mask {
             bytes = bytes.checked_add(mask_payload_size(mask)?)?;
         }
@@ -45,7 +49,13 @@ pub fn layer_growth_count_error(
             .logical_pixel_bytes()
             .checked_add(pixels.checked_mul(additional as u64)?)?;
         let snapshot = snapshot_size(document)?
-            .checked_add(39u64.checked_mul(additional as u64)?)?
+            .checked_add(
+                (44u64
+                    + 8 * u64::from(document.layers.get(document.active).is_some_and(|layer| {
+                        layer.parent.is_some() || layer.kind == parfait_core::LayerKind::Folder
+                    })))
+                .checked_mul(additional as u64)?,
+            )?
             .checked_add(name_bytes as u64)?
             .checked_add(pixels.checked_mul(additional as u64)?)?;
         Some(logical <= PIXEL_LIMIT && snapshot <= SNAPSHOT_LIMIT)
@@ -82,6 +92,9 @@ pub fn layer_mask_creation_error(document: &Document, layer: usize) -> Option<&'
 }
 
 pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'static str> {
+    if document.has_folders() {
+        return Some("Use subtree duplication for folders and their children.");
+    }
     if document.layers.is_empty()
         || document.layers.len() > 64
         || selection == 0
@@ -115,7 +128,7 @@ pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'
             logical =
                 logical.checked_add(pixels.checked_mul(4 + u64::from(layer.mask.is_some()))?)?;
             snapshot = snapshot
-                .checked_add(39)?
+                .checked_add(44)?
                 .checked_add(layer.name.len() as u64)?
                 .checked_add(5)?
                 .checked_add(pixels.checked_mul(4)?)?;

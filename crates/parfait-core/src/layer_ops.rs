@@ -21,6 +21,9 @@ impl Document {
         if !self.validate() {
             return Some("The drawing has an invalid layer layout.");
         }
+        if self.has_folders() {
+            return Some("Use tree-aware combining for folders and their children.");
+        }
         let all = u64::MAX >> (64 - self.layers.len());
         if selection == 0 || selection & !all != 0 {
             return Some("Select an existing layer first.");
@@ -219,6 +222,8 @@ impl Document {
                     mask: None,
                     reference: false,
                     draft: false,
+                    kind: crate::LayerKind::Raster,
+                    parent: None,
                 };
                 if action != LayerCombine::CopyVisible {
                     let mut index = 0;

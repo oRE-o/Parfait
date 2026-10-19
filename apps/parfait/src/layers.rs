@@ -755,6 +755,13 @@ impl Parfait {
                         if collapse.is_none() {
                             self.layer_click(*layer, modifiers, false);
                         }
+                        if self.doc.has_folders() {
+                            if collapse.is_some() {
+                                self.layer_click(*layer, modifiers, false);
+                            }
+                            self.layer_list.owned = true;
+                            continue;
+                        }
                         self.layer_list.drag = Some(LayerDrag {
                             mask: self.selected_layer_mask(),
                             revision: self.doc.revision,

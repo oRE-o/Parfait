@@ -280,7 +280,7 @@ impl Stroke {
             return None;
         }
         let layer = &doc.layers[doc.active];
-        if layer.locked || !layer.visible {
+        if layer.kind != crate::LayerKind::Raster || !doc.layer_ancestors_allow_edit(doc.active) {
             return None;
         }
         let scratch = crate::raster_brush::Scratch::Mask(crate::layer_mask::paint::MaskPaint::new(
@@ -433,7 +433,7 @@ impl Dab {
             return None;
         }
         let layer = &doc.layers[doc.active];
-        if layer.locked || !layer.visible {
+        if layer.kind != crate::LayerKind::Raster || !doc.layer_ancestors_allow_edit(doc.active) {
             return None;
         }
         let mapped = brush.mapped_pressure(point.pressure);

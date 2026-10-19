@@ -1,5 +1,15 @@
 # Stroke performance
 
+## Isolated Folder Rows
+
+Flat documents retain the preceding path. Folders store no RGBA image; isolated composition uses one reusable tightly packed row per folder, at most 1 MiB of row pixels for 64 nodes at width 4096, apart from the normal output and vector metadata. This is scratch accounting, not total process RSS. Grouping/ungrouping move metadata and share existing pixel/mask buffers. Ancestor lookup and layout metadata remain bounded by 64 nodes.
+
+Run `cargo test --release -p parfait-core folder_composition_timing_workload -- --ignored --nocapture`. On arm64 macOS 15.7.5, a preserved before/after run of 25 full compositions uses eight raster nodes inside two isolated folders. Reusing the existing no-clipping row routine changes folder p50/p95 from 4.9910/8.2141 to 4.0842/5.7672 ms at 256 square, and 20.7692/22.7041 to 15.2735/16.1327 ms at 512 square. Every measured result equals the independently pre-baked expected pixels. This small two-run comparison includes timing noise and does not establish physical pen latency or a frame-rate guarantee.
+
+The same workload's single pre-baked raster takes p50/p95 0.6028/0.7027 ms at 256 and 1.2885/1.3995 ms at 512 after the change. It represents less work, not an equivalent live-layer baseline or a claimed folder speedup. The two row buffers occupy 2048/4096 bytes respectively. Large canvases, many active folders and Through blending still need further work.
+
+The arm64 release executable is 13,009,552 bytes, 16,912 above the preceding control-layout build. Artifact size is not working-set memory or pen latency. The foundation does not add runtime dependencies or a background service.
+
 ## Layer Control Layout
 
 The UI-only layout increment adds no dependency, persisted field, background work or canvas-sized buffer. The percent track builds a small mesh proportional to its displayed width. Pixel rendering and storage algorithms are unchanged. The arm64 release executable is 12,992,640 bytes, 16,528 above the preceding layer-role build; all 14 file-backed sections match the signed final QA app. This artifact-size measurement is not a runtime, memory or pen-latency result. No new runtime speedup is claimed.

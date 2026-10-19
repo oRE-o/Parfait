@@ -61,7 +61,10 @@ impl Document {
     pub fn logical_pixel_bytes(&self) -> u64 {
         let pixels = u64::from(self.width) * u64::from(self.height);
         self.layers.iter().fold(0, |bytes, layer| {
-            bytes.saturating_add(pixels.saturating_mul(4 + u64::from(layer.mask.is_some())))
+            bytes.saturating_add(pixels.saturating_mul(
+                4 * u64::from(layer.kind == crate::LayerKind::Raster)
+                    + u64::from(layer.mask.is_some()),
+            ))
         })
     }
 
@@ -72,7 +75,7 @@ impl Document {
         let Some(target) = self.layers.get(layer) else {
             return Some("The target layer no longer exists.");
         };
-        if target.locked {
+        if !self.layer_ancestors_unlocked(layer) {
             return Some("Unlock the layer before creating a mask.");
         }
         if target.mask.is_some() {
@@ -96,6 +99,9 @@ impl Document {
     }
 
     pub fn remove_layer_mask(&mut self, layer: usize) -> bool {
+        if !self.layer_ancestors_unlocked(layer) {
+            return false;
+        }
         let Some(target) = self.layers.get_mut(layer).filter(|layer| !layer.locked) else {
             return false;
         };
@@ -107,7 +113,7 @@ impl Document {
     }
 
     pub fn clear_layer_mask(&mut self, layer: usize) -> bool {
-        if !self.validate() {
+        if !self.validate() || !self.layer_ancestors_unlocked(layer) {
             return false;
         }
         let Some(target) = self.layers.get_mut(layer).filter(|layer| !layer.locked) else {
@@ -145,7 +151,13 @@ impl Document {
     }
 
     pub fn apply_layer_mask(&mut self, layer: usize) -> bool {
-        if !self.validate() {
+        if !self.validate()
+            || !self.layer_ancestors_unlocked(layer)
+            || self
+                .layers
+                .get(layer)
+                .is_none_or(|layer| layer.kind != crate::LayerKind::Raster)
+        {
             return false;
         }
         let Some(target) = self

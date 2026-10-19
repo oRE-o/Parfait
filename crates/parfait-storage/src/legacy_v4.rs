@@ -51,6 +51,8 @@ impl From<LegacyDocument> for Document {
                     mask: None,
                     reference: false,
                     draft: false,
+                    kind: parfait_core::LayerKind::Raster,
+                    parent: None,
                 })
                 .collect(),
         }

@@ -1074,10 +1074,22 @@ mod tests {
     }
     #[test]
     fn texture_updates_are_partial_for_strokes_and_full_for_external_edits() {
+        for folders in [false, true] {
+            verify_texture_updates(folders);
+        }
+    }
+
+    fn verify_texture_updates(folders: bool) {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
         app.doc = parfait_core::Document::new(128, 128);
         app.doc.layers[0].visible = false; // exercise checkerboard origin in partial updates
+        if folders {
+            app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+            app.doc.layers[2].opacity = 0.63;
+            assert!(app.doc.create_layer_mask(2, 193));
+            app.doc.active = 1;
+        }
         let ctx = egui::Context::default();
         let mut cache = vec![Color32::TRANSPARENT; 128 * 128];
         let mut frame = |app: &mut Parfait, events: Vec<Event>, partial: bool| {

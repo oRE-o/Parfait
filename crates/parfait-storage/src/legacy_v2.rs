@@ -45,6 +45,8 @@ impl From<LegacyDocument> for Document {
                     mask: None,
                     reference: false,
                     draft: false,
+                    kind: parfait_core::LayerKind::Raster,
+                    parent: None,
                     opacity: layer.opacity,
                     blend_mode: layer.blend_mode,
                     pixels: layer.pixels,

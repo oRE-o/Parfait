@@ -208,10 +208,11 @@ impl Parfait {
                     let sx = x * self.doc.width / 40;
                     let sy = y * self.doc.height / 40;
                     let at = ((sy * self.doc.width + sx) * 4) as usize;
-                    let a = layer.pixels[at + 3] as f32 / 255.;
+                    let pixel = layer.pixels.get(at..at + 4).unwrap_or(&[0; 4]);
+                    let a = pixel[3] as f32 / 255.;
                     let bg = if (x / 5 + y / 5) % 2 == 0 { 210. } else { 165. };
-                    for c in 0..3 {
-                        pixels.push((layer.pixels[at + c] as f32 * a + bg * (1. - a)) as u8);
+                    for component in &pixel[..3] {
+                        pixels.push((f32::from(*component) * a + bg * (1. - a)) as u8);
                     }
                     pixels.push(255);
                 }

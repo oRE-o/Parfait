@@ -1,4 +1,70 @@
 use super::*;
+
+#[test]
+fn folder_documents_render_safely_and_refuse_unconnected_flat_editors() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    app.doc = parfait_core::Document::new(16, 16);
+    app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+    let context = egui::Context::default();
+    crate::theme::apply(&context);
+    app.update_previews(&context);
+    let before = app.doc.clone();
+    for command in [
+        Command::DeleteLayer,
+        Command::DuplicateLayer,
+        Command::MoveLayerUp,
+        Command::MoveLayerDown,
+        Command::LayerAlphaLock,
+        Command::LayerClipping,
+        Command::LayerDetails,
+        Command::ApplyLayerMask,
+    ] {
+        assert!(
+            app.command_disabled_reason(command).is_some(),
+            "{command:?}"
+        );
+        app.execute_command(command, &context);
+        assert!(app.doc.same_edit_state(&before));
+    }
+    assert!(!app.begin_canvas_stroke(parfait_core::Point {
+        x: 8.,
+        y: 8.,
+        pressure: 1.
+    }));
+    let mut output = context.run_ui(Default::default(), |ui| {
+        app.palette(ui, crate::workspace::Palette::Layers, 400.)
+    });
+    output.textures_delta.clear();
+    assert!(app.doc.validate());
+    assert_eq!(app.history.rows().count(), 0);
+    assert!(app.command_disabled_reason(Command::NewLayer).is_none());
+    app.execute_command(Command::NewLayer, &context);
+    assert_eq!(
+        app.doc.layers[app.doc.active].parent,
+        Some(before.layers[2].id)
+    );
+    assert!(app.doc.validate());
+    app.undo();
+    assert!(app.doc.same_edit_state(&before));
+    app.doc.layers[2].locked = true;
+    app.doc.active = 1;
+    assert!(app.command_disabled_reason(Command::NewLayer).is_some());
+    assert!(!app.begin_canvas_stroke(parfait_core::Point {
+        x: 8.,
+        y: 8.,
+        pressure: 1.
+    }));
+    app.save_project_to(directory.path().join("folders.parfait"))
+        .unwrap();
+    let loaded = parfait_storage::Store::open(&directory.path().join("folders.parfait"))
+        .unwrap()
+        .load()
+        .unwrap()
+        .unwrap()
+        .document;
+    assert_eq!(loaded.layers, app.doc.layers);
+}
 use crate::shortcuts::Chord;
 use parfait_core::{Brush, Document, Point, Stroke};
 use std::sync::Arc;

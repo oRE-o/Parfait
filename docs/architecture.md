@@ -6,6 +6,16 @@
 
 The application owns UI state. The core owns image state. Storage receives immutable document snapshots and never reaches into the GUI.
 
+## Folder Engine Foundation
+
+Layers can now represent raster content or a pixel-free folder. The bottom-to-top list is a postorder tree: a child's stable parent ID refers to a later folder, and every subtree is a contiguous interval. A bounded 64-node layout pass rejects missing/non-folder parents, cycles and interleaving subtrees. Folder creation, sibling grouping and ungrouping retain child IDs and shared pixel/mask buffers. Names and tree fields participate in edit-state History. New raster content selected on a folder is inserted as its top child; locked ancestors protect insertion and pixel writers.
+
+Flat documents retain their existing compositor. Hierarchical documents build isolated folder results bottom-up using one reusable RGBA row per folder, then apply each folder's mask, opacity and blend in its parent. Sibling clipping does not escape a folder. The no-clipping path shares the existing flat-row routine. Folder picking considers ancestors and their clipping bases but returns raster content, not empty folder pixels. Through blending and tree-aware collection edits remain follow-up work.
+
+Artwork v7 persists kind and optional parent fields, with an exact v6 reader retaining roles and masks; v1–v5 readers produce root raster nodes. Snapshot accounting includes the kind/tag and optional parent ID, while folders own no RGBA array. The 512 MiB limits and conservative raster-dimension preflight remain unchanged. Invalid tree heads recover through the existing previous-generation path.
+
+This is not completed folder UI. The three folder menu entries remain planned. Until tree rows, expansion and subtree drag/delete/duplicate are connected, existing flat-only commands refuse hierarchical documents rather than break their invariants. Such documents can render, persist, rename, change safe flags and accept raster insertion/painting where ancestors allow it. Folder previews tolerate empty content buffers. No new preference field, default shortcut or dependency is introduced.
+
 ## Dependency direction
 
 `layer_details.rs` owns one session-only active-layer draft, guarded by stable ID, opening revision and pixel identity. Confirm changes only validated metadata as one History transaction; name bytes are bounded by the remaining snapshot budget. Cancel, stale targets and IME confirmation ownership preserve the live document and redo. Reference/draft commands share selected-set flag dispatch and never alter stored RGBA or masks. PNG's `composite_for_export` hides drafts in a shallow metadata copy rather than deleting clipping bases; normal canvas composition remains unchanged. Explicit merges bake the visible result and clear roles on the merged result; ordinary duplication retains them.
