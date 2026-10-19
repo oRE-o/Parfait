@@ -1,6 +1,6 @@
 use crate::{app::Parfait, shortcuts::Command, widgets};
 use eframe::egui;
-use parfait_core::{BlendMode, Layer};
+use parfait_core::Layer;
 use std::sync::Arc;
 
 pub(crate) struct LayerDetails {
@@ -98,7 +98,7 @@ impl Parfait {
         let modal = egui::Modal::new(egui::Id::new("layer_details_modal")).show(ctx, |ui| {
             ui.set_width(380.);
             ui.horizontal(|ui| {
-                ui.strong("레이어 상세 설정");
+                ui.strong("레이어 기본 설정");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     cancel |= widgets::action_button(ui, "×", 24.).clicked();
                 });
@@ -122,15 +122,12 @@ impl Parfait {
                     }
                     if field.changed() { dialog.needs_edit = false; }
                     ui.end_row();
-                    ui.label("불투명도");
-                    let mut percent = dialog.draft.opacity * 100.;
-                    if ui.add(egui::Slider::new(&mut percent, 0.0..=100.).suffix("%")).changed() {
-                        dialog.draft.opacity = percent / 100.;
-                    }
-                    ui.end_row();
                     ui.label("합성 모드");
-                    egui::ComboBox::from_id_salt("layer_details_blend").selected_text(dialog.draft.blend_mode.label()).show_ui(ui, |ui| {
-                        for mode in BlendMode::ALL { ui.selectable_value(&mut dialog.draft.blend_mode, mode, mode.label()); }
+                    crate::layer_controls::blend_select(ui, &mut dialog.draft.blend_mode, 260.);
+                    ui.end_row();
+                    ui.label("불투명도");
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(ui.cursor().min, egui::vec2(260., 20.))), |ui| {
+                        crate::layer_controls::opacity(ui, &mut dialog.draft.opacity);
                     });
                     ui.end_row();
                 });

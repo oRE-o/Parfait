@@ -41,6 +41,8 @@ pub enum Icon {
     AlphaLock,
     Clipping,
     Reference,
+    NewLayer,
+    LayerMask,
 }
 impl Icon {
     pub fn glyph(self) -> &'static str {
@@ -78,7 +80,13 @@ impl Icon {
             Icon::Material => "\u{f03e}",
             Icon::Settings => "\u{f0ad}",
             Icon::Blend => "\u{f043}",
-            Icon::Transfer | Icon::Merge | Icon::AlphaLock | Icon::Clipping | Icon::Reference => "",
+            Icon::Transfer
+            | Icon::Merge
+            | Icon::AlphaLock
+            | Icon::Clipping
+            | Icon::Reference
+            | Icon::NewLayer
+            | Icon::LayerMask => "",
         }
     }
 }
@@ -162,6 +170,32 @@ pub(crate) fn paint_flat_icon(ui: &egui::Ui, rect: Rect, kind: Icon, selected: b
     } else {
         Color32::from_gray(196)
     };
+    if matches!(kind, Icon::NewLayer | Icon::LayerMask) {
+        let center = rect.center();
+        let stroke = Stroke::new(1.2, color);
+        let outline = Rect::from_center_size(center, egui::vec2(16., 15.));
+        if matches!(kind, Icon::LayerMask) {
+            ui.painter().rect_filled(outline, 1., color);
+            ui.painter()
+                .circle_filled(center, 5., ui.visuals().panel_fill);
+        } else {
+            ui.painter()
+                .rect_stroke(outline, 1., stroke, egui::StrokeKind::Inside);
+            let badge = center + egui::vec2(6., 5.);
+            ui.painter()
+                .circle_filled(badge, 4.5, ui.visuals().panel_fill);
+            ui.painter().circle_stroke(badge, 4., stroke);
+            ui.painter().line_segment(
+                [badge - egui::vec2(2.5, 0.), badge + egui::vec2(2.5, 0.)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [badge - egui::vec2(0., 2.5), badge + egui::vec2(0., 2.5)],
+                stroke,
+            );
+        }
+        return;
+    }
     if matches!(kind, Icon::Reference) {
         let center = rect.center();
         let stroke = Stroke::new(1.3, color);

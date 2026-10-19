@@ -293,7 +293,7 @@ impl Command {
             Self::BrightnessToOpacity => "Convert brightness to opacity",
             Self::LayerReference => "Set as reference layer",
             Self::LayerDraft => "Set as draft layer",
-            Self::LayerDetails => "Layer details…",
+            Self::LayerDetails => "Layer basic settings…",
         }
     }
 

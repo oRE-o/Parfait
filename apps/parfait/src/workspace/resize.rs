@@ -475,14 +475,10 @@ mod tests {
             let mut fixture = Fixture::new();
             let artwork = fixture.app.doc.clone();
             let collapsed = fixture.placement(Palette::Sizes).height;
-            fixture.drag("Resize row below Sub tools", egui::vec2(0., 70.), batched);
+            fixture.drag("Resize row below 보조 도구", egui::vec2(0., 70.), batched);
             assert_eq!(fixture.placement(Palette::Brushes).height, 320.);
             assert_eq!(fixture.placement(Palette::Properties).height, 195.);
-            fixture.drag(
-                "Resize row below Tool property",
-                egui::vec2(0., -40.),
-                batched,
-            );
+            fixture.drag("Resize row below 도구 속성", egui::vec2(0., -40.), batched);
             assert_eq!(fixture.placement(Palette::Properties).height, 155.);
             assert_eq!(fixture.placement(Palette::Color).height, 230.);
             assert_eq!(fixture.placement(Palette::Sizes).height, collapsed);
@@ -514,7 +510,7 @@ mod tests {
             .1;
         let artwork = fixture.app.doc.clone();
         fixture.drag(
-            "Resize between Sub tools and Tool property",
+            "Resize between 보조 도구 and 도구 속성",
             egui::vec2(40., 0.),
             true,
         );
@@ -537,7 +533,7 @@ mod tests {
         assert_eq!(first.height(), second.height());
         assert_eq!(fixture.app.doc, artwork);
         fixture.drag(
-            "Resize between Sub tools and Tool property",
+            "Resize between 보조 도구 and 도구 속성",
             egui::vec2(1000., 0.),
             false,
         );
@@ -599,19 +595,19 @@ mod tests {
             .unwrap();
         placement.location = Location::Floating;
         placement.rect = [500., 150., 270., 219.];
-        fixture.drag("Resize Navigator right", egui::vec2(90., 0.), false);
+        fixture.drag("Resize 내비게이터 right", egui::vec2(90., 0.), false);
         assert_eq!(fixture.placement(Palette::Navigator).rect[2], 360.);
         assert_eq!(fixture.placement(Palette::Navigator).height, 190.);
-        fixture.drag("Resize Navigator left", egui::vec2(50., 0.), true);
+        fixture.drag("Resize 내비게이터 left", egui::vec2(50., 0.), true);
         assert_eq!(fixture.placement(Palette::Navigator).rect[0], 550.);
         assert_eq!(fixture.placement(Palette::Navigator).rect[2], 310.);
-        fixture.drag("Resize Navigator bottom", egui::vec2(0., 40.), true);
+        fixture.drag("Resize 내비게이터 bottom", egui::vec2(0., 40.), true);
         assert_eq!(fixture.placement(Palette::Navigator).height, 230.);
-        fixture.drag("Resize Navigator top", egui::vec2(0., -25.), false);
+        fixture.drag("Resize 내비게이터 top", egui::vec2(0., -25.), false);
         assert_eq!(fixture.placement(Palette::Navigator).rect[1], 125.);
         assert_eq!(fixture.placement(Palette::Navigator).height, 255.);
         fixture.drag(
-            "Resize Navigator bottom right",
+            "Resize 내비게이터 bottom right",
             egui::vec2(-1000., -1000.),
             true,
         );
@@ -626,7 +622,7 @@ mod tests {
         let mut fixture = Fixture::new();
         fixture.frame(vec![]);
         fixture.frame(vec![]);
-        let start = fixture.target("Resize row below Sub tools").center();
+        let start = fixture.target("Resize row below 보조 도구").center();
         fixture.frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
         fixture.frame(vec![egui::Event::PointerMoved(
             start + egui::vec2(0., 1000.),

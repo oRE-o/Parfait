@@ -322,6 +322,8 @@ const LAYER: &[MenuItem] = &[
             Action(Command::RenameLayer),
             Planned("팔레트 색을 부모 폴더에 표시"),
             Planned("팔레트 색을 캔버스에 표시"),
+            Planned("상세 설정…"),
+            Separator,
             Action(Command::LayerDetails),
         ],
     ),

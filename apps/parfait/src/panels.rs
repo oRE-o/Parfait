@@ -354,46 +354,26 @@ impl Parfait {
                 let mut opacity = self.doc.layers[active].opacity;
                 ui.horizontal(|ui| {
                     let mut mode = self.doc.layers[active].blend_mode;
-                    egui::ComboBox::from_id_salt("layer_blend_mode")
-                        .width(ui.available_width())
-                        .truncate()
-                        .selected_text(mode.label())
-                        .show_ui(ui, |ui| {
-                            for candidate in parfait_core::BlendMode::ALL {
-                                ui.selectable_value(&mut mode, candidate, candidate.label());
-                            }
-                        });
+                    let width = ui.available_width();
+                    let blend = crate::layer_controls::blend_select(
+                        ui,
+                        &mut mode,
+                        (width * 0.4).clamp(72., 120.),
+                    );
+                    #[cfg(test)]
+                    ui.data_mut(|data| data.insert_temp(egui::Id::new("layer_blend"), blend.rect));
+                    #[cfg(not(test))]
+                    let _ = blend;
                     if mode != self.doc.layers[active].blend_mode {
                         self.edit_named("Layer blend mode", |document| {
                             document.layers[active].blend_mode = mode
                         });
                     }
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Opacity");
-                    ui.spacing_mut().slider_width = (ui.available_width() - 48.).max(24.);
-                    let r = ui.add_enabled(
-                        !self.cancelled_layer_drag,
-                        egui::Slider::new(&mut opacity, 0.0..=1.)
-                            .step_by(0.01)
-                            .custom_parser(|text| {
-                                text.trim()
-                                    .trim_end_matches('%')
-                                    .trim()
-                                    .parse::<f64>()
-                                    .ok()
-                                    .map(|value| value / 100.)
-                            })
-                            .custom_formatter(|v, _| format!("{:.0}%", v * 100.)),
-                    );
-                    #[cfg(test)]
-                    ui.data_mut(|data| {
-                        data.insert_temp(egui::Id::new("layer_opacity_focus"), r.id);
-                        data.insert_temp(
-                            egui::Id::new("layer_opacity"),
-                            (r.rect, ui.spacing().slider_width),
-                        )
-                    });
+                    let r = ui
+                        .add_enabled_ui(!self.cancelled_layer_drag, |ui| {
+                            crate::layer_controls::opacity(ui, &mut opacity)
+                        })
+                        .inner;
                     if r.changed() && opacity != self.doc.layers[active].opacity {
                         self.begin_layer_edit(
                             crate::editing::LayerEditKind::Opacity,
@@ -408,6 +388,11 @@ impl Parfait {
                 ui.horizontal_wrapped(|ui| {
                     for (icon, command, selected) in [
                         (
+                            Icon::Clipping,
+                            Command::LayerClipping,
+                            self.doc.layers[active].clipped,
+                        ),
+                        (
                             Icon::Reference,
                             Command::LayerReference,
                             self.doc.layers[active].reference,
@@ -416,11 +401,6 @@ impl Parfait {
                             Icon::Pencil,
                             Command::LayerDraft,
                             self.doc.layers[active].draft,
-                        ),
-                        (
-                            Icon::Clipping,
-                            Command::LayerClipping,
-                            self.doc.layers[active].clipped,
                         ),
                         (
                             Icon::Lock,
@@ -462,24 +442,25 @@ impl Parfait {
                 });
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.;
-                    self.layer_command_icon(ui, Icon::Plus, Command::NewLayer);
-                    self.layer_command_icon(ui, Icon::Copy, Command::DuplicateLayer);
-                    self.layer_command_icon(ui, Icon::Up, Command::MoveLayerUp);
-                    self.layer_command_icon(ui, Icon::Down, Command::MoveLayerDown);
-                    self.layer_command_icon(ui, Icon::Transfer, Command::TransferLayerDown);
-                    self.layer_command_icon(ui, Icon::Merge, Command::MergeLayerDown);
-                    self.layer_command_icon(ui, Icon::Trash, Command::DeleteLayer);
                     ui.menu_button(
                         RichText::new(Icon::More.glyph())
                             .family(egui::FontFamily::Name("icons".into())),
                         |ui| {
                             self.layer_operations_menu(ui);
                             ui.separator();
-                            ui.menu_button("Layer mask", |ui| self.layer_mask_menu(ui));
+                            ui.menu_button("레이어 마스크", |ui| self.layer_mask_menu(ui));
                         },
                     )
                     .response
-                    .on_hover_text("Layer operations");
+                    .on_hover_text("레이어 조작");
+                    self.layer_command_icon(ui, Icon::NewLayer, Command::NewLayer);
+                    self.layer_command_icon(ui, Icon::Copy, Command::DuplicateLayer);
+                    self.layer_command_icon(ui, Icon::Up, Command::MoveLayerUp);
+                    self.layer_command_icon(ui, Icon::Down, Command::MoveLayerDown);
+                    self.layer_command_icon(ui, Icon::Transfer, Command::TransferLayerDown);
+                    self.layer_command_icon(ui, Icon::Merge, Command::MergeLayerDown);
+                    self.layer_command_icon(ui, Icon::LayerMask, Command::LayerMaskRevealAll);
+                    self.layer_command_icon(ui, Icon::Trash, Command::DeleteLayer);
                 });
                 ui.separator();
                 let list_height = body_height - (ui.cursor().top() - controls_top);
@@ -615,6 +596,31 @@ mod tests {
                     "{palette:?}: width={width}, content={measured:?}"
                 );
                 assert_eq!(app.doc, artwork);
+                if palette == Palette::Layers {
+                    let blend: egui::Rect = ctx
+                        .data(|data| data.get_temp(egui::Id::new("layer_blend")))
+                        .unwrap();
+                    let (opacity, _): (egui::Rect, f32) = ctx
+                        .data(|data| data.get_temp(egui::Id::new("layer_opacity")))
+                        .unwrap();
+                    assert!((blend.center().y - opacity.center().y).abs() < 1.);
+                    assert!(blend.right() < opacity.left());
+                    let clipping: egui::Rect = ctx
+                        .data(|data| {
+                            data.get_temp(egui::Id::new(("layer_property", Command::LayerClipping)))
+                        })
+                        .unwrap();
+                    let reference: egui::Rect = ctx
+                        .data(|data| {
+                            data.get_temp(egui::Id::new((
+                                "layer_property",
+                                Command::LayerReference,
+                            )))
+                        })
+                        .unwrap();
+                    assert!(clipping.top() > opacity.bottom());
+                    assert!(clipping.right() < reference.left());
+                }
             }
             if matches!(palette, Palette::Color | Palette::Navigator) {
                 let mut previous_height = 0.;
@@ -656,5 +662,56 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn opacity_arrows_commit_single_steps_and_unchanged_display_preserves_redo() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+        app.doc = parfait_core::Document::new(8, 8);
+        app.doc.layers[1].opacity = 0.33333334;
+        let context = egui::Context::default();
+        crate::theme::apply(&context);
+        let render = |app: &mut Parfait, events| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(240., 500.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.palette(ui, crate::workspace::Palette::Layers, 400.),
+            );
+            output.textures_delta.clear();
+        };
+        for _ in 0..3 {
+            render(&mut app, vec![]);
+        }
+        assert_eq!(app.doc.layers[1].opacity, 0.33333334);
+        let arrow: egui::Rect = context
+            .data(|data| data.get_temp(egui::Id::new(("opacity_arrow", true))))
+            .unwrap();
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: arrow.center(),
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: Default::default(),
+        };
+        render(
+            &mut app,
+            vec![egui::Event::PointerMoved(arrow.center()), pointer(true)],
+        );
+        render(&mut app, vec![pointer(false)]);
+        assert_eq!(app.doc.layers[1].opacity, 0.34);
+        assert_eq!(app.history.rows().count(), 2);
+        app.undo();
+        assert_eq!(app.doc.layers[1].opacity, 0.33333334);
+        render(&mut app, vec![]);
+        assert_eq!(app.doc.layers[1].opacity, 0.33333334);
+        assert!(app.history.can_redo());
+        app.redo();
+        assert_eq!(app.doc.layers[1].opacity, 0.34);
     }
 }

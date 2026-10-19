@@ -431,7 +431,7 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (72, 322, 41));
+    assert_eq!(counts, (72, 323, 41));
     assert_eq!(Command::ALL.len(), 81);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",

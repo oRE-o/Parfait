@@ -74,17 +74,17 @@ impl Property {
     ];
     fn label(self) -> &'static str {
         match self {
-            Self::Size => "Brush size",
-            Self::Opacity => "Opacity",
-            Self::Flow => "Brush density",
-            Self::Smoothing => "Smoothing",
-            Self::Minimum => "Minimum size",
-            Self::Hardness => "Hardness",
-            Self::Roundness => "Roundness",
-            Self::Angle => "Angle",
-            Self::Spacing => "Spacing",
-            Self::Stretch => "Color stretch",
-            Self::BlurRadius => "Fixed blur radius",
+            Self::Size => "브러시 크기",
+            Self::Opacity => "불투명도",
+            Self::Flow => "브러시 농도",
+            Self::Smoothing => "손떨림 보정",
+            Self::Minimum => "최소 크기",
+            Self::Hardness => "경도",
+            Self::Roundness => "원형도",
+            Self::Angle => "각도",
+            Self::Spacing => "간격",
+            Self::Stretch => "색 늘이기",
+            Self::BlurRadius => "고정 흐림 반경",
         }
     }
     fn help(self) -> &'static str {
@@ -197,12 +197,12 @@ impl Category {
     ];
     fn label(self) -> &'static str {
         match self {
-            Self::Size => "Brush size",
-            Self::Ink => "Ink",
-            Self::Tip => "Brush tip",
-            Self::Stroke => "Stroke",
-            Self::Correction => "Correction",
-            Self::Pressure => "Pressure",
+            Self::Size => "브러시 크기",
+            Self::Ink => "잉크",
+            Self::Tip => "브러시 끝",
+            Self::Stroke => "스트로크",
+            Self::Correction => "보정",
+            Self::Pressure => "필압",
         }
     }
     fn help(self) -> &'static str {
@@ -1042,7 +1042,7 @@ mod tests {
         assert_eq!(app.brush.opacity_mode, OpacityMode::PerStroke);
         assert!(!ctx.any_popup_open());
         assert_eq!(app.doc, original);
-        assert_eq!(Property::Flow.label(), "Brush density");
+        assert_eq!(Property::Flow.label(), "브러시 농도");
         assert!(Category::Tip.properties().contains(&Property::Flow));
         assert!(!Category::Ink.properties().contains(&Property::Flow));
     }
@@ -1082,7 +1082,10 @@ mod tests {
         frame(&mut app, vec![]);
         let rect = ctx
             .data(|data| {
-                data.get_temp::<egui::Rect>(egui::Id::new(("parameter_dynamics", "Spacing")))
+                data.get_temp::<egui::Rect>(egui::Id::new((
+                    "parameter_dynamics",
+                    Property::Spacing.label(),
+                )))
             })
             .unwrap();
         let button = |pressed| egui::Event::PointerButton {

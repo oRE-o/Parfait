@@ -1,10 +1,14 @@
 # Stroke performance
 
+## Layer Control Layout
+
+The UI-only layout increment adds no dependency, persisted field, background work or canvas-sized buffer. The percent track builds a small mesh proportional to its displayed width. Pixel rendering and storage algorithms are unchanged. The arm64 release executable is 12,992,640 bytes, 16,528 above the preceding layer-role build; all 14 file-backed sections match the signed final QA app. This artifact-size measurement is not a runtime, memory or pen-latency result. No new runtime speedup is claimed.
+
 ## Layer Roles And Details
 
 Reference/draft roles add two persisted booleans per layer, at most 128 snapshot bytes across 64 layers. Metadata, History, duplicate and saved-state comparisons share existing pixel/mask buffers. The modal retains one shallow layer draft while editing is blocked and allocates no canvas-sized preview. PNG export bypasses role processing when there is no visible draft; otherwise it shallow-clones document metadata, hides drafts in that copy and reuses the compositor. It does not remove structural clipping bases or copy source pixel arrays. The normal RGBA output allocation and full export composition remain, and role edits currently follow ordinary revision-driven display invalidation. No runtime dependency, background service or persistent image cache is added.
 
-The arm64 release executable is 12,976,112 bytes, 49,904 above the save-state baseline. This is artifact size, not RAM or pen latency. All 14 file-backed Mach-O sections match the signed isolated QA executable. No new runtime speedup or frame/memory baseline is claimed. The synchronous-I/O measurements below describe the earlier v5-format revision `60650ea`; v6 adds two bytes per layer, so their serialized byte counts are historical rather than current-format assertions.
+The preceding layer-role arm64 release executable is 12,976,112 bytes, 49,904 above the save-state baseline. This is artifact size, not RAM or pen latency. All 14 file-backed Mach-O sections match its signed isolated QA executable. No new runtime speedup or frame/memory baseline is claimed. The synchronous-I/O measurements below describe the earlier v5-format revision `60650ea`; v6 adds two bytes per layer, so their serialized byte counts are historical rather than current-format assertions.
 
 ## Project Save State
 

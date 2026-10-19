@@ -515,7 +515,7 @@ impl Parfait {
                     let text = format!(
                         "{:.0}%  {}{}{}",
                         self.doc.layers[layer].opacity * 100.,
-                        self.doc.layers[layer].blend_mode.label(),
+                        crate::layer_controls::blend_label(self.doc.layers[layer].blend_mode),
                         if self.doc.layers[layer].reference {
                             "  참조"
                         } else {

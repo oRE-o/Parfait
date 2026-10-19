@@ -30,13 +30,13 @@ impl Palette {
     ];
     pub fn title(self) -> &'static str {
         match self {
-            Self::Brushes => "Sub tools",
-            Self::Properties => "Tool property",
-            Self::Sizes => "Brush size",
-            Self::Color => "Color wheel",
-            Self::Navigator => "Navigator",
-            Self::Layers => "Layers",
-            Self::History => "History",
+            Self::Brushes => "보조 도구",
+            Self::Properties => "도구 속성",
+            Self::Sizes => "브러시 크기",
+            Self::Color => "컬러 휠",
+            Self::Navigator => "내비게이터",
+            Self::Layers => "레이어",
+            Self::History => "작업 내역",
         }
     }
 }

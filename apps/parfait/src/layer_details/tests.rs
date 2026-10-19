@@ -1,5 +1,5 @@
 use super::*;
-use parfait_core::{Document, LayerMask, MaskCoverage};
+use parfait_core::{BlendMode, Document, LayerMask, MaskCoverage};
 
 fn fixture(directory: &std::path::Path) -> Parfait {
     let mut app = Parfait::open(directory.to_owned()).unwrap();

@@ -248,6 +248,9 @@ impl Parfait {
     }
 
     pub(crate) fn layer_command_icon(&mut self, ui: &mut egui::Ui, icon: Icon, command: Command) {
+        if ui.available_size_before_wrap().x < 22. {
+            ui.end_row();
+        }
         let reason = self.command_disabled_reason(command);
         let response = ui
             .add_enabled_ui(reason.is_none(), |ui| {
