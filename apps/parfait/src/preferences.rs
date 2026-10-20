@@ -1,8 +1,11 @@
 use crate::{app::Parfait, brushes::Preset, workspace::Workspace};
 use serde::{Deserialize, Serialize};
+pub(crate) const VERSION: u32 = 22;
 
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
+    #[serde(default)]
+    pub options: crate::settings::Options,
     #[serde(default)]
     pub keymap: crate::shortcuts::Keymap,
     #[serde(default)]
@@ -25,8 +28,9 @@ pub struct Preferences {
 impl Preferences {
     fn current(app: &Parfait) -> Self {
         Self {
+            options: app.options.clone(),
             calibration: app.calibration.clone(),
-            version: 21,
+            version: VERSION,
             keymap: app.keymap.preferences(),
             display: app.display,
             workspace: app.workspace.clone(),
@@ -40,7 +44,8 @@ impl Preferences {
     }
 
     pub(crate) fn matches(&self, app: &Parfait) -> bool {
-        self.version == 21
+        self.version == VERSION
+            && self.options == app.options
             && self.keymap == app.keymap
             && self.display == app.display
             && self.calibration == app.calibration
@@ -56,7 +61,8 @@ impl Preferences {
     }
 
     pub fn validate(&self) -> bool {
-        (1..=21).contains(&self.version)
+        (1..=VERSION).contains(&self.version)
+            && self.options.validate()
             && self.keymap.validate()
             && self.display.validate()
             && self.calibration.validate()
@@ -88,6 +94,7 @@ impl Parfait {
                     pref.validate(),
                     "Invalid or unsupported preferences"
                 );
+                self.options = pref.options.clone();
                 self.calibration = pref.calibration.clone();
                 self.display = pref.display;
                 self.keymap = pref.keymap.clone();
@@ -201,7 +208,7 @@ mod history_migration_tests {
             restored.persist_preferences(true);
             assert_eq!(
                 restored.preferences_saved.as_ref().unwrap().version,
-                21
+                22
             );
         }
         legacy["version"] = 10.into();
@@ -334,7 +341,7 @@ mod tests {
         parfait_storage::save_preferences(&path, &json.to_string()).unwrap();
         app.restore_preferences();
         app.persist_preferences(true);
-        assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
+        assert_eq!(app.preferences_saved.as_ref().unwrap().version, 22);
         json["version"] = serde_json::json!(999);
         let future = json.to_string();
         parfait_storage::save_preferences(&path, &future).unwrap();

@@ -68,7 +68,7 @@ pub fn apply(ctx: &egui::Context) {
     ctx.set_fonts(font_definitions());
 }
 
-fn font_definitions() -> egui::FontDefinitions {
+pub(crate) fn font_definitions() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
         "Pretendard".into(),

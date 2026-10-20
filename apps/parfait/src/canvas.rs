@@ -139,6 +139,7 @@ impl Parfait {
         let inset = if self.display.rulers { 18. } else { 0. };
         let rect =
             Rect::from_min_max(outer.min + Vec2::splat(inset), outer.max);
+        self.image_edit.canvas_rect = Some(rect);
         #[cfg(test)]
         ui.data_mut(|data| {
             data.insert_temp(egui::Id::new("canvas_rect"), rect)
@@ -150,9 +151,16 @@ impl Parfait {
         self.documents.active_session.view.update_zoom(rect, size);
         let ctx = ui.ctx().clone();
         let events = ctx.input(|i| i.events.clone());
-        let space =
-            ctx.input(|i| i.key_down(Key::Space)) || self.navigation_tool == 1;
         let modifiers = ctx.input(|i| i.modifiers);
+        let space = ctx.input(|i| i.key_down(Key::Space))
+            && (if modifiers.shift {
+                self.options.space_rotate
+            } else if modifiers.command || modifiers.ctrl {
+                self.options.space_zoom
+            } else {
+                self.options.space_pan
+            })
+            || self.navigation_tool == 1;
         let blocked = self.dialog_open()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
@@ -231,15 +239,20 @@ impl Parfait {
                         && response.hovered()
                         && !blocked
                     {
-                        if button == PointerButton::Middle
+                        if (button == PointerButton::Middle
+                            && self.options.middle_pan)
                             || (button == PointerButton::Primary && space)
                         {
                             self.documents.active_session.view.gesture =
                                 Some(if button == PointerButton::Middle {
                                     Gesture::Pan
-                                } else if modifiers.shift {
+                                } else if modifiers.shift
+                                    && self.options.space_rotate
+                                {
                                     Gesture::Rotate
-                                } else if modifiers.command || modifiers.ctrl {
+                                } else if (modifiers.command || modifiers.ctrl)
+                                    && self.options.space_zoom
+                                {
                                     Gesture::Zoom
                                 } else {
                                     Gesture::Pan
@@ -256,7 +269,8 @@ impl Parfait {
                                 && p.x < size.x
                                 && p.y < size.y
                             {
-                                if (modifiers.command || modifiers.ctrl)
+                                if self.options.layer_picker
+                                    && (modifiers.command || modifiers.ctrl)
                                     && modifiers.shift
                                     && !modifiers.alt
                                 {
@@ -274,7 +288,8 @@ impl Parfait {
                                     {
                                         self.select_layer(layer);
                                     }
-                                } else if modifiers.alt
+                                } else if (modifiers.alt
+                                    && self.options.alt_picker)
                                     || self.navigation_tool == 2
                                 {
                                     let pixels = self
@@ -504,7 +519,11 @@ impl Parfait {
                 self.documents.active_session.document.revision;
             self.render_cache.rendered_overlay = overlay;
         }
-        if let Some(texture) = &self.render_cache.texture {
+        if let Some(texture) = self
+            .local_canvas_texture()
+            .or(self.transform_canvas_texture())
+            .or(self.render_cache.texture.as_ref())
+        {
             let corners = [
                 Vec2::ZERO,
                 egui::vec2(size.x, 0.),
@@ -527,11 +546,19 @@ impl Parfait {
                 });
             }
             mesh.indices = vec![0, 1, 2, 0, 2, 3];
-            ui.painter().with_clip_rect(rect).add(egui::Shape::mesh(mesh));
+            // Disable edits behind the modeless transform controls without
+            // fading artwork colors through the disabled Ui's painter.
+            let painter = if self.image_edit.dialog.as_ref().is_some() {
+                egui::Painter::new(ctx.clone(), ui.layer_id(), rect)
+            } else {
+                ui.painter().with_clip_rect(rect)
+            };
+            painter.add(egui::Shape::mesh(mesh));
         }
         if self.display.pixel_grid {
             self.documents.active_session.view.paint_pixel_grid(ui, rect, size);
         }
+        self.alignment_guides(ui, rect);
         self.render_cache.selection_boundary.paint(
             ui,
             &self.documents.active_session.document,

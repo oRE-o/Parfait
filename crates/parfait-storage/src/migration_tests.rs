@@ -85,7 +85,7 @@ fn folder_tree_roundtrip_analytic_budget_and_malformed_head_recovery() {
     let mut raw = SNAPSHOT_V10.to_vec();
     bincode::DefaultOptions::new()
         .with_fixint_encoding()
-        .serialize_into(&mut raw, &expected)
+        .serialize_into(&mut raw, &crate::legacy_v10::Borrowed::from(&expected))
         .unwrap();
     assert_eq!(snapshot_size(&expected), Some(raw.len() as u64));
     assert_eq!(expected.logical_pixel_bytes(), 54);
@@ -115,7 +115,10 @@ fn folder_tree_roundtrip_analytic_budget_and_malformed_head_recovery() {
         let mut raw = SNAPSHOT_V10.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .serialize_into(&mut raw, &broken)
+            .serialize_into(
+                &mut raw,
+                &crate::legacy_v10::Borrowed::from(&broken),
+            )
             .unwrap();
         insert_raw(&store, broken.revision, &raw);
         let mut recovered = store.load().unwrap().unwrap();
@@ -227,7 +230,7 @@ fn current_flags_roundtrip_and_corrupt_head_falls_back() {
     }
     let encoded = bincode::DefaultOptions::new()
         .with_fixint_encoding()
-        .serialize(&document)
+        .serialize(&crate::legacy_v10::Borrowed::from(&document))
         .unwrap();
     assert_eq!(
         snapshot_size(&document).unwrap(),
@@ -339,7 +342,10 @@ fn malformed_dense_masks_fall_back_to_valid_generation_without_changing_original
         let mut raw = SNAPSHOT_V9.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .serialize_into(&mut raw, &document)
+            .serialize_into(
+                &mut raw,
+                &crate::legacy_v10::Borrowed::from(&document),
+            )
             .unwrap();
         insert_raw(&store, document.revision, &raw);
         let recovered = store.load().unwrap().unwrap();
@@ -496,7 +502,10 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
         let mut raw = SNAPSHOT_V9.to_vec();
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .serialize_into(&mut raw, &document)
+            .serialize_into(
+                &mut raw,
+                &crate::legacy_v10::Borrowed::from(&document),
+            )
             .unwrap();
         insert_raw(&store, 2, &raw);
         store.connection.pragma_update(None, "user_version", 3).unwrap();
@@ -513,7 +522,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
 
 #[test]
 fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
-    for version in [-1, 11] {
+    for version in [-1, 12] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("future.parfait");
         let connection = Connection::open(&path).unwrap();
@@ -574,7 +583,7 @@ fn identity_exhaustion_and_alpha_flags_roundtrip_and_size_matches_exact_serializ
         SNAPSHOT_V10.len() as u64
             + bincode::DefaultOptions::new()
                 .with_fixint_encoding()
-                .serialized_size(&document)
+                .serialized_size(&crate::legacy_v10::Borrowed::from(&document))
                 .unwrap()
     );
     store.save(&document).unwrap();

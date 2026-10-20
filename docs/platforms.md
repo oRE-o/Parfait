@@ -37,3 +37,11 @@ CPU architecture coverage will be declared per tested artifact. A successful bui
 4. Prototype mobile shells using the shared core, then test touch/stylus workflows, sandboxed files, memory pressure and OS termination on actual devices.
 
 Declare a platform supported only after its build, package, interaction and recovery checks pass. Document known gaps per release. Desktop process-kill tests alone do not establish mobile lifecycle safety or power-loss durability.
+
+## Edit-menu integrations (2026-10-20)
+
+This change adds local clipboard (`arboard`), screen capture (`xcap` 0.9.8), and optional gamepad input (`gilrs` 0.11.2). The Windows build uses gilrs XInput. Native content rasterization uses Rust `ttf-parser` and `tiny-skia`; it does not use OS font discovery or a network service. Fonts selected for a document are embedded; a custom UI font instead remains a local path preference.
+
+For Debian/Ubuntu, xcap lists `pkg-config libclang-dev libxcb1-dev libxrandr-dev libdbus-1-dev libpipewire-0.3-dev libwayland-dev libegl-dev`; gilrs also needs `libudev-dev`. These are additional to the existing desktop windowing requirements. Other distributions should use equivalent development packages. xcap's 0.9.8 implementation table marks Wayland screen capture as available with incomplete support in some scenarios. Parfait has not verified the Wayland path, screen-permission prompts, or real controllers on macOS/Linux. Display-capture errors appear in the picker without changing artwork.
+
+Wireless discovery delegates to the operating system's Bluetooth settings. Device registration refers to connected gamepads and their button mappings; it does not imply that Parfait implements a Bluetooth pairing stack, tablet-driver installation, or pressure input from a gamepad.

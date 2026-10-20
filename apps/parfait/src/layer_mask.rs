@@ -180,6 +180,16 @@ impl Parfait {
             return Some("Unlock the layer before changing its mask.");
         }
         if command == Command::ApplyLayerMask
+            && self
+                .documents
+                .active_session
+                .document
+                .native_content(layer)
+                .is_some()
+        {
+            return Some("텍스트·벡터를 먼저 래스터화해 주세요 (레이어 메뉴).");
+        }
+        if command == Command::ApplyLayerMask
             && target.kind == parfait_core::LayerKind::Folder
         {
             return Some(
@@ -291,6 +301,20 @@ impl Parfait {
         let Some(target) = self.documents.active_key() else {
             return false;
         };
+        if !self.editing_layer_mask()
+            && self
+                .documents
+                .active_session
+                .document
+                .native_content(self.documents.active_session.document.active)
+                .is_some()
+        {
+            self.notice = Some(
+                "텍스트·벡터에 그리려면 먼저 래스터화해 주세요 (레이어 메뉴)."
+                    .into(),
+            );
+            return false;
+        }
         let session = self.documents.get_by_key(target).unwrap();
         if session.editing.stroke.is_some()
             || self.dialog_open()

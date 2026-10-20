@@ -13,6 +13,9 @@ impl BufferCensus {
             .or_insert(buffer.capacity() as u64);
     }
     pub fn add_document(&mut self, doc: &Document) {
+        for node in &doc.contents {
+            self.add_content(node.body());
+        }
         for layer in &doc.layers {
             self.add_buffer(&layer.pixels);
             if let Some(mask) = &layer.mask {
@@ -21,6 +24,31 @@ impl BufferCensus {
         }
         if let Some(selection) = &doc.selection {
             self.add_coverage(selection);
+        }
+    }
+    pub fn add_content(&mut self, body: &Arc<crate::LayerContent>) {
+        self.buffers.entry(Arc::as_ptr(body) as usize).or_insert_with(|| {
+            match body.as_ref() {
+                crate::LayerContent::Text(t) => {
+                    std::mem::size_of::<crate::LayerContent>() as u64
+                        + t.text.capacity() as u64
+                }
+                crate::LayerContent::Vector(v) => {
+                    std::mem::size_of::<crate::LayerContent>() as u64
+                        + v.paths.capacity() as u64
+                            * std::mem::size_of::<crate::VectorPath>() as u64
+                }
+            }
+        });
+        match body.as_ref() {
+            crate::LayerContent::Text(t) => self.add_buffer(&t.font),
+            crate::LayerContent::Vector(v) => {
+                for p in &v.paths {
+                    self.buffers
+                        .entry(Arc::as_ptr(&p.points) as usize)
+                        .or_insert(p.points.capacity() as u64 * 8);
+                }
+            }
         }
     }
     fn add_coverage(&mut self, coverage: &MaskCoverage) {

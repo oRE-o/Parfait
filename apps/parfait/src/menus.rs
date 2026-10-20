@@ -51,14 +51,7 @@ impl Parfait {
                 for menu in TopMenu::ALL {
                     let response = ui.menu_button(menu.label(), |ui| {
                         ui.set_min_width(188.);
-                        if self.documents.is_empty() {
-                            for &command in Command::ALL.iter().filter(|command| command.category() == match menu {
-                                TopMenu::File => crate::shortcuts::Category::File,
-                                TopMenu::Edit => crate::shortcuts::Category::Edit,
-                                TopMenu::Layer => crate::shortcuts::Category::Layer,
-                                _ => crate::shortcuts::Category::View,
-                            }) { self.command_menu_item(ui, command); }
-                        } else { self.top_menu_contents(ui, menu); }
+                        self.top_menu_contents(ui, menu);
                     });
                     #[cfg(test)]
                     ui.data_mut(|data| {
@@ -174,6 +167,7 @@ impl Parfait {
                         catalog::MenuItem::Group(label, children) => {
                             let response = ui.menu_button(*label, |ui| {
                                 self.catalog_menu(ui, children, id);
+                                if *label=="캔버스" {ui.separator();self.canvas_menu_entries(ui);}
                             });
                             #[cfg(test)]
                             ui.data_mut(|data| {
@@ -202,7 +196,20 @@ impl Parfait {
     }
 
     fn menu_selected(&self, command: Command) -> bool {
+        if self.documents.is_empty() {
+            return false;
+        }
+        if let Some(reference) = command.align_reference() {
+            return self.documents.active_session.editing.align.reference
+                == reference;
+        }
         match command {
+            Command::EditTextInkBounds => {
+                self.documents.active_session.editing.align.text_ink
+            }
+            Command::EditVectorCenters => {
+                self.documents.active_session.editing.align.vector_center
+            }
             Command::LayerVisibility => {
                 self.documents.active_session.document.layers
                     [self.documents.active_session.document.active]

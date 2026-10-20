@@ -37,11 +37,24 @@ fn crash(mode: &str, expected_layers: usize) {
     let mask = loaded.document.layers[1].mask.as_ref().unwrap();
     assert!(mask.enabled);
     match (&mask.coverage, mode) {
-        (parfait_core::MaskCoverage::Uniform(128), "during") => {}
-        (parfait_core::MaskCoverage::Dense(values), "after") => {
+        (parfait_core::MaskCoverage::Uniform(128), m)
+            if m.ends_with("during") => {}
+        (parfait_core::MaskCoverage::Dense(values), m)
+            if m.ends_with("after") =>
+        {
             assert_eq!(values.as_slice(), [127; 64 * 64])
         }
         _ => panic!("the last committed mask did not survive the process kill"),
+    }
+    if mode.starts_with("native-") {
+        assert_eq!(loaded.document.contents.len(), 1);
+        let node = &loaded.document.contents[0];
+        let index = loaded.document.layer_index(node.layer).unwrap();
+        assert_eq!(
+            node.render(64, 64).unwrap(),
+            loaded.document.layers[index].pixels
+        );
+        assert!(loaded.document.validate());
     }
     assert_eq!(
         loaded.document.layers[1].blend_mode,
@@ -59,4 +72,13 @@ fn force_kill_during_transaction_retains_previous_drawing() {
 #[test]
 fn force_kill_after_commit_recovers_latest_layers_and_pixels() {
     crash("after", 3);
+}
+
+#[test]
+fn native_content_survives_kill_before_transaction_commit() {
+    crash("native-during", 3);
+}
+#[test]
+fn native_content_survives_kill_after_commit() {
+    crash("native-after", 4);
 }

@@ -107,7 +107,10 @@ fn previous_preferences_keep_existing_keys_and_new_folder_bindings_roundtrip() {
             .unwrap();
     }
     app.persist_preferences(true);
-    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
+    assert_eq!(
+        app.preferences_saved.as_ref().unwrap().version,
+        crate::preferences::VERSION
+    );
     let keys = app.keymap.clone();
     drop(app);
     let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();

@@ -587,7 +587,7 @@ fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fif
             &app.saved_preferences_json()
         )
         .unwrap()["version"],
-        21
+        crate::preferences::VERSION
     );
     drop(app);
     let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();

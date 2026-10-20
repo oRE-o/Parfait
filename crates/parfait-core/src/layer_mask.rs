@@ -68,7 +68,10 @@ impl Document {
     pub fn logical_pixel_bytes(&self) -> u64 {
         let pixels = u64::from(self.width) * u64::from(self.height);
         self.layers.iter().fold(
-            pixels * u64::from(self.selection.is_some()),
+            self.contents.iter().fold(
+                pixels * u64::from(self.selection.is_some()),
+                |total, n| total.saturating_add(n.logical_bytes()),
+            ),
             |bytes, layer| {
                 bytes.saturating_add(pixels.saturating_mul(
                     4 * u64::from(layer.kind == crate::LayerKind::Raster)
@@ -180,6 +183,9 @@ impl Document {
     }
 
     pub fn apply_layer_mask(&mut self, layer: usize) -> bool {
+        if self.native_content(layer).is_some() {
+            return false;
+        }
         if !self.validate()
             || !self.layer_ancestors_unlocked(layer)
             || self

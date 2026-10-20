@@ -31,7 +31,8 @@ impl Document {
     }
 
     pub fn has_non_raster_layers(&self) -> bool {
-        self.layers.iter().any(|layer| layer.kind != LayerKind::Raster)
+        !self.contents.is_empty()
+            || self.layers.iter().any(|layer| layer.kind != LayerKind::Raster)
     }
 
     pub(crate) fn folder_layout(&self) -> Option<FolderLayout> {

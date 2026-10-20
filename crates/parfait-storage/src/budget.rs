@@ -139,6 +139,12 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
             bytes = bytes.checked_add(mask_payload_size(mask)?)?;
         }
     }
+    if !document.contents.is_empty() {
+        bytes = bytes.checked_add(8)?;
+        for node in &document.contents {
+            bytes = bytes.checked_add(node.encoded_bytes()?)?;
+        }
+    }
     Some(bytes)
 }
 
@@ -246,6 +252,9 @@ pub fn layer_duplication_error(
                     )?
                     .checked_add(5 * u64::from(roots & (1 << index) != 0))?
                     .checked_add(layer.pixels.len() as u64)?;
+                if let Some(node) = document.native_content(index) {
+                    bytes = bytes.checked_add(node.encoded_bytes()?)?;
+                }
                 if let Some(mask) = &layer.mask {
                     bytes = bytes.checked_add(mask_payload_size(mask)?)?;
                 }
@@ -440,7 +449,7 @@ mod tests {
             bytes,
             bincode::DefaultOptions::new()
                 .with_fixint_encoding()
-                .serialized_size(&document)
+                .serialized_size(&crate::legacy_v10::Borrowed::from(&document))
                 .unwrap()
                 + super::super::SNAPSHOT_V10.len() as u64
         );
@@ -467,7 +476,7 @@ mod tests {
             snapshot_size(&document).unwrap(),
             bincode::DefaultOptions::new()
                 .with_fixint_encoding()
-                .serialized_size(&document)
+                .serialized_size(&crate::legacy_v10::Borrowed::from(&document))
                 .unwrap()
                 + super::super::SNAPSHOT_V10.len() as u64
         );
@@ -535,7 +544,9 @@ mod tests {
                     snapshot_size(&document).unwrap(),
                     bincode::DefaultOptions::new()
                         .with_fixint_encoding()
-                        .serialized_size(&document)
+                        .serialized_size(&crate::legacy_v10::Borrowed::from(
+                            &document
+                        ))
                         .unwrap()
                         + super::super::SNAPSHOT_V10.len() as u64
                 );
@@ -562,7 +573,9 @@ mod tests {
                     snapshot_size(&document).unwrap(),
                     bincode::DefaultOptions::new()
                         .with_fixint_encoding()
-                        .serialized_size(&document)
+                        .serialized_size(&crate::legacy_v10::Borrowed::from(
+                            &document
+                        ))
                         .unwrap()
                         + super::super::SNAPSHOT_V10.len() as u64
                 );

@@ -1,46 +1,89 @@
 //! Conservative preflight reservations. No pixel copy is needed to plan history eviction.
-use crate::{app::Parfait, document_session::SessionKey};
+use crate::{
+    app::Parfait,
+    document_session::{DocumentId, SessionKey},
+};
 use parfait_core::BufferCensus;
 use std::collections::HashMap;
 
 impl Parfait {
+    pub(crate) fn can_reserve_pixel_headroom(&self, additional: u64) -> bool {
+        self.pixel_headroom_fits(additional, &HashMap::new())
+    }
+    fn pixel_headroom_fits(
+        &self,
+        additional: u64,
+        remove: &HashMap<DocumentId, usize>,
+    ) -> bool {
+        let mut census = BufferCensus::default();
+        if let Some(runtime) = &self.recovery_runtime {
+            for snapshot in runtime.worker.snapshots() {
+                census.add_document(&snapshot);
+            }
+        }
+        for prompt in &self.source_saves.prompts {
+            census.add_document(&prompt.request.snapshot);
+        }
+        if let Some(snapshot) = &self.tabs.pinned_save {
+            census.add_document(snapshot);
+        }
+        if let Some(cached) = self.local_preview_cached() {
+            census.add_document(cached);
+        }
+        if let Some(source) = self.local_preview_source() {
+            census.add_document(source);
+        }
+        if let Some(cached) = self.transform_cached_result() {
+            census.add_document(cached);
+        }
+        if let Some(source) = self.transform_preview_source() {
+            census.add_document(source);
+        }
+        if let Some(draft) = &self.native_dialog {
+            census.add_content(&draft.body);
+        }
+        for session in self.documents.sessions() {
+            census.add_document(&session.document);
+            if let Some(saved) = &session.project_saved_state {
+                census.add_document(saved);
+            }
+            session.history.visit_after_eviction(
+                *remove.get(&session.key.document_id).unwrap_or(&0),
+                |doc| census.add_document(doc),
+            );
+        }
+        census
+            .bytes()
+            .saturating_add(
+                self.image_edit
+                    .clipboard
+                    .as_ref()
+                    .map_or(0, |c| c.pixels.len() as u64),
+            )
+            .saturating_add(self.transform_reserved_bytes())
+            .saturating_add(self.local_preview_reservation())
+            .saturating_add(
+                self.image_edit
+                    .dialog
+                    .as_ref()
+                    .and_then(|d| d.reference_bytes())
+                    .unwrap_or(0),
+            )
+            .saturating_add(additional)
+            .saturating_add(self.tabs.reserved_pixels())
+            .saturating_add(self.source_saves.reserved_pixels())
+            .saturating_add(
+                self.documents
+                    .sessions()
+                    .map(|s| s.edit_reservation)
+                    .sum::<u64>(),
+            )
+            <= self.documents.retained_limit
+    }
     pub(crate) fn reserve_pixel_headroom(&mut self, additional: u64) -> bool {
         let mut remove = HashMap::new();
         let fits = |remove: &HashMap<_, usize>| {
-            let mut census = BufferCensus::default();
-            if let Some(runtime) = &self.recovery_runtime {
-                for snapshot in runtime.worker.snapshots() {
-                    census.add_document(&snapshot);
-                }
-            }
-            for prompt in &self.source_saves.prompts {
-                census.add_document(&prompt.request.snapshot);
-            }
-            if let Some(snapshot) = &self.tabs.pinned_save {
-                census.add_document(snapshot);
-            }
-            for session in self.documents.sessions() {
-                census.add_document(&session.document);
-                if let Some(saved) = &session.project_saved_state {
-                    census.add_document(saved);
-                }
-                session.history.visit_after_eviction(
-                    *remove.get(&session.key.document_id).unwrap_or(&0),
-                    |doc| census.add_document(doc),
-                );
-            }
-            census
-                .bytes()
-                .saturating_add(additional)
-                .saturating_add(self.tabs.reserved_pixels())
-                .saturating_add(self.source_saves.reserved_pixels())
-                .saturating_add(
-                    self.documents
-                        .sessions()
-                        .map(|s| s.edit_reservation)
-                        .sum::<u64>(),
-                )
-                <= self.documents.retained_limit
+            self.pixel_headroom_fits(additional, remove)
         };
         if fits(&remove) {
             return true;

@@ -143,7 +143,7 @@ fn solid_parameters_and_shared_masks_roundtrip_with_exact_version_ten_byte_accou
         snapshot_size(&document).unwrap(),
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .serialized_size(&document)
+            .serialized_size(&crate::legacy_v10::Borrowed::from(&document))
             .unwrap()
             + SNAPSHOT_V10.len() as u64
     );
@@ -206,7 +206,12 @@ fn mislabeled_new_kinds_and_invalid_paper_heads_fall_back_to_committed_artwork()
                 )
                 .unwrap();
         } else {
-            options.serialize_into(&mut raw, &damaged).unwrap();
+            options
+                .serialize_into(
+                    &mut raw,
+                    &crate::legacy_v10::Borrowed::from(&damaged),
+                )
+                .unwrap();
         }
         inject(&store, damaged.revision, &raw);
         let loaded = store.load().unwrap().unwrap();

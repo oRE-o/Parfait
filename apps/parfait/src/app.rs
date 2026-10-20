@@ -18,6 +18,13 @@ pub struct Parfait {
     pub(crate) source_saves: crate::source_saves::SourceSaves,
     pub(crate) recovery_runtime:
         Option<crate::recovery_runtime::RecoveryRuntime>,
+    pub(crate) options: crate::settings::Options,
+    pub(crate) settings: crate::settings::SettingsState,
+    pub(crate) screen_picker: Option<crate::screen_picker::ScreenPicker>,
+    pub(crate) screen_capture_busy:
+        std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) native_dialog: Option<crate::native_content::NativeDialog>,
+    pub(crate) image_edit: crate::image_edit::ImageEditState,
     pub(crate) tabs: crate::document_tabs::DocumentTabs,
     pub(crate) render_cache: WindowRenderCache,
     pub calibration: parfait_core::PressureCalibration,
@@ -100,6 +107,12 @@ impl Parfait {
             documents,
             source_saves: Default::default(),
             recovery_runtime: None,
+            options: Default::default(),
+            settings: Default::default(),
+            screen_picker: None,
+            screen_capture_busy: Default::default(),
+            native_dialog: None,
+            image_edit: Default::default(),
             tabs: Default::default(),
             render_cache: WindowRenderCache::default(),
             calibration: Default::default(),
@@ -151,7 +164,13 @@ impl Parfait {
                 session.layer_ui.rename.is_some()
                     || session.layer_ui.details.is_some()
             });
-        document_dialog
+        self.tab_close_dialog_open()
+            || self.settings.dialog.is_some()
+            || self.settings.quick_open
+            || self.screen_picker.is_some()
+            || self.native_dialog.is_some()
+            || self.image_edit.dialog.is_some()
+            || document_dialog
             || !self.source_saves.prompts.is_empty()
             || self.calibration_dialog.is_some()
             || self.brush_details.dialog_open()
@@ -520,7 +539,7 @@ impl Parfait {
         let interval = if session.recovery.failed {
             Duration::from_secs(3)
         } else {
-            Duration::from_millis(400)
+            Duration::from_millis(u64::from(self.options.autosave_delay_ms))
         };
         if session.document.revision != session.recovery.submitted
             && session.recovery.last_submit.elapsed() > interval
@@ -533,6 +552,9 @@ impl Parfait {
     pub(crate) fn draw_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.saving();
+        self.poll_transform_preview(&ctx);
+        self.poll_local_preview(&ctx);
+        self.poll_controllers(&ctx);
         if !self.documents.is_empty() {
             self.prepare_layer_list(&ctx);
         }
@@ -540,11 +562,11 @@ impl Parfait {
         // Native window controls remain usable while an editor dialog is open.
         self.title_bar(ui);
         ui.add_enabled_ui(!self.dialog_open(), |ui| {
-            if self.tabs.enabled {
-                self.document_tabs_ui(ui);
-            }
             if self.documents.is_empty() {
                 self.menu_bar(ui);
+                if self.tabs.enabled {
+                    self.document_tabs_ui(ui);
+                }
                 egui::CentralPanel::default().show(ui, |ui| {
                     ui.heading("No drawing open");
                     if ui.button("New drawing").clicked() {
@@ -569,9 +591,17 @@ impl Parfait {
                         self.display.background,
                     )),
                 )
-                .show(ui, |ui| self.canvas(ui));
+                .show(ui, |ui| {
+                    self.canvas_document_strip(ui);
+                    self.canvas(ui);
+                });
         });
+        self.settings_ui(&ctx);
+        self.screen_picker_ui(&ctx);
+        self.image_edit_dialog_ui(&ctx);
+        self.native_content_ui(&ctx);
         self.source_save_dialogs(&ctx);
+        self.tab_close_prompt_ui(&ctx);
         self.brush_details_ui(&ctx);
         self.calibration_ui(&ctx);
         self.display_settings_ui(&ctx);
@@ -700,7 +730,8 @@ impl Parfait {
         ctx.request_repaint_after(self.maintenance_interval());
         crate::chrome::resize_edges(ui);
         self.persist_preferences(false);
-        if let Some(capture) = &mut self.capture
+        if !self.image_edit_preview_pending()
+            && let Some(capture) = &mut self.capture
             && let Err(error) = capture.update(&ctx)
         {
             self.error = Some(format!("Screenshot failed: {error}"));

@@ -30,6 +30,30 @@ impl Parfait {
                 Some("Open a drawing first.")
             };
         }
+        if matches!(
+            command,
+            Command::NextCanvas
+                | Command::PreviousCanvas
+                | Command::CloseCanvas
+        ) {
+            if !self.tabs.enabled {
+                return Some(
+                    "여러 그림을 여는 작업 공간에서 사용할 수 있습니다.",
+                );
+            }
+            if self.dialog_open() {
+                return Some("현재 편집 창을 마쳐 주세요.");
+            }
+            if command != Command::CloseCanvas
+                && self.documents.tab_order.len() < 2
+            {
+                return Some("열린 그림이 하나뿐입니다.");
+            }
+            return None;
+        }
+        if command.is_image_edit() {
+            return self.image_edit_reason(command);
+        }
         if command.is_pixel_selection() {
             return self.pixel_selection_reason(command);
         }

@@ -102,6 +102,8 @@ pub struct Workspace {
     #[serde(skip)]
     dock_bounds: Vec<(Location, Rect)>,
     #[serde(skip)]
+    dock_clips: Vec<(Location, Rect)>,
+    #[serde(skip)]
     drag_origin: Option<(usize, Placement)>,
     #[cfg(test)]
     #[serde(skip)]
@@ -142,6 +144,7 @@ impl Default for Workspace {
             slots: Vec::new(),
             drag_offset: egui::Vec2::ZERO,
             dock_bounds: Vec::new(),
+            dock_clips: Vec::new(),
             drag_origin: None,
             #[cfg(test)]
             headers: Vec::new(),
@@ -433,7 +436,7 @@ impl Workspace {
                 })
                 .frame(false),
             )
-            .on_hover_text("Collapse / expand palette")
+            .on_hover_text("팔레트 접기 / 펼치기")
             .clicked()
         {
             self.panels[i].collapsed = !self.panels[i].collapsed;
@@ -446,7 +449,7 @@ impl Workspace {
             self.panels[i].visible = false;
         }
         response.context_menu(|ui| {
-            let spawn = ui.button("Open in separate window");
+            let spawn = ui.button("독립 창으로 열기");
             #[cfg(test)]
             ui.ctx().data_mut(|d| {
                 d.insert_temp(
@@ -458,17 +461,17 @@ impl Workspace {
                 self.panels[i].location = Location::Window;
                 ui.close();
             }
-            if ui.button("Float inside main window").clicked() {
+            if ui.button("앱 안에 띄우기").clicked() {
                 self.panels[i].location = Location::Floating;
                 ui.close();
             }
-            if ui.button("Dock on left").clicked() {
+            if ui.button("왼쪽에 도킹").clicked() {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Left;
                 self.panels[i].row = None;
                 ui.close();
             }
-            if ui.button("Dock on right").clicked() {
+            if ui.button("오른쪽에 도킹").clicked() {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Right;
                 self.panels[i].row = None;
@@ -486,15 +489,20 @@ impl Workspace {
                 .unwrap_or(rect.min)
                 - rect.min;
             let item = &mut self.panels[i];
+            if matches!(item.location, Location::Left | Location::Right)
+                && !item.collapsed
+            {
+                item.height = (ui.max_rect().height() - 29.).clamp(60., 2000.);
+            }
             item.location = Location::Floating;
             item.rect[0] = rect.left();
             item.rect[1] = rect.top();
             item.rect[2] = rect.width().max(180.);
             self.dragging = Some(palette);
         }
-        response
-            .on_hover_cursor(egui::CursorIcon::Grab)
-            .on_hover_text("Drag to move or dock. Right-click for separate window / dock commands. Escape cancels a move.");
+        response.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text(
+            "드래그하여 이동 / 도킹 · 우클릭하여 배치 선택 · Esc로 이동 취소",
+        );
     }
     /// Identical header, content and resize grip in both docked and floating hosts.
     fn shell(
@@ -543,6 +551,23 @@ impl Workspace {
             egui::Stroke::new(1., Color32::GRAY),
         );
     }
+    fn dock_minimum(&self, side: Location, margin: f32) -> f32 {
+        (self.dock_rows(side).iter().map(|row| row.len()).max().unwrap_or(1)
+            as f32
+            * 180.
+            + margin)
+            .min(800.)
+    }
+    fn dock_width(&self, side: Location, margin: f32) -> f32 {
+        let minimum = self.dock_minimum(side, margin);
+        let width = if side == Location::Left {
+            self.left_width
+        } else {
+            self.right_width
+        };
+        width.clamp(minimum, 800.)
+    }
+
     fn side(
         &mut self,
         ui: &mut egui::Ui,
@@ -562,17 +587,7 @@ impl Workspace {
             egui::Frame::side_top_panel(ui.style()).total_margin().sum().x
                 + ui.spacing().scroll.allocated_width()
                 + 1.;
-        let minimum = (self
-            .dock_rows(location)
-            .iter()
-            .map(|row| row.len())
-            .max()
-            .unwrap_or(1) as f32
-            * 180.
-            + dock_margin)
-            .min(800.);
-        let width = if left { self.left_width } else { self.right_width }
-            .clamp(minimum, 800.);
+        let width = self.dock_width(location, dock_margin);
         let result = panel.exact_size(width).resizable(false).show(ui, |ui| {
             let viewport = ui.available_rect_before_wrap();
             let dock_width =
@@ -619,18 +634,23 @@ impl Workspace {
             self.dock_bounds.push((
                 location,
                 Rect::from_min_size(
-                    stack.inner_rect.min,
+                    stack.inner_rect.min - stack.state.offset,
                     egui::vec2(
                         stack.inner_rect.width().min(dock_width),
                         stack.inner_rect.height(),
                     ),
                 ),
             ));
+            self.dock_clips.push((location, stack.inner_rect));
             #[cfg(test)]
             ui.data_mut(|data| {
                 data.insert_temp(
                     egui::Id::new(("dock_scroll_geometry", left)),
                     (stack.inner_rect, stack.content_size),
+                );
+                data.insert_temp(
+                    egui::Id::new(("dock_scroll_id", left)),
+                    stack.id,
                 )
             });
         });
@@ -655,7 +675,7 @@ impl Workspace {
         .map(|drag| {
             self.resizing = true;
             (drag.initial[0] + drag.delta.x * if left { 1. } else { -1. })
-                .clamp(minimum, 800.)
+                .clamp(self.dock_minimum(location, dock_margin), 800.)
         })
         .unwrap_or(width);
         if left {
@@ -668,6 +688,7 @@ impl Workspace {
         self.resizing = false;
         self.slots.clear();
         self.dock_bounds.clear();
+        self.dock_clips.clear();
         #[cfg(test)]
         self.headers.clear();
         let ctx = ui.ctx().clone();
@@ -720,6 +741,14 @@ impl Workspace {
                     .order(egui::Order::Foreground)
                     .fixed_pos(pos)
                     .movable(false)
+                    // Only the header is constrained above. Constraining the
+                    // entire Area makes tall palettes jump while dragging.
+                    .constrain(false)
+                    .fade_in(false)
+                    .default_size(egui::vec2(
+                        p.rect[2],
+                        if p.collapsed { 23. } else { p.height + 29. },
+                    ))
                     .show(&ctx, |ui| {
                         egui::Frame::NONE.fill(Color32::from_gray(57)).show(
                             ui,
@@ -763,6 +792,9 @@ impl Workspace {
             .collect();
         for p in windows {
             let mut builder = egui::ViewportBuilder::default()
+                .with_visible(
+                    app.screen_picker.as_ref().is_none_or(|p| !p.hidden),
+                )
                 .with_title(format!("Parfait · {}", p.palette.title()))
                 .with_decorations(false)
                 .with_inner_size([
@@ -854,91 +886,108 @@ impl Workspace {
                     egui::Order::Tooltip,
                     egui::Id::new("dock_feedback"),
                 ));
-                let direction =
-                    target.map(|(_, _, r)| DockDirection::at(r, pos));
+                let direction = target.map(|(_, side, rect)| {
+                    let full = self
+                        .dock_bounds
+                        .iter()
+                        .find(|(s, _)| *s == side)
+                        .and_then(|(_, bounds)| {
+                            self.dock_layout(side, *bounds).into_iter().find(
+                                |(p, _)| Some(*p) == target.map(|(p, _, _)| p),
+                            )
+                        })
+                        .map_or(rect, |(_, rect)| rect);
+                    DockDirection::at(full, pos)
+                });
                 let mut planned = self.clone();
-                if let Some((other, side, _)) = target {
+                let side = if let Some((other, side, _)) = target {
                     planned.dock_to(palette, other, direction.unwrap());
-                    if let Some((_, bounds)) =
-                        self.dock_bounds.iter().find(|(s, _)| *s == side)
-                        && let Some((_, preview)) = planned
-                            .dock_layout(side, {
-                                let mut bounds = *bounds;
-                                let desired = planned
-                                    .dock_rows(side)
-                                    .iter()
-                                    .map(|r| r.len())
-                                    .max()
-                                    .unwrap_or(1)
-                                    as f32
-                                    * 180.;
-                                let desired = desired.min(784.);
-                                if side == Location::Right
-                                    && desired > bounds.width()
-                                {
-                                    bounds.min.x = bounds.right() - desired;
-                                }
-                                bounds
-                            })
-                            .into_iter()
-                            .find(|(p, _)| *p == palette)
-                    {
-                        paint.rect_filled(
-                            preview,
-                            0.,
-                            Color32::from_rgba_unmultiplied(90, 160, 240, 75),
-                        );
-                        paint.rect_stroke(
-                            preview,
-                            0.,
-                            egui::Stroke::new(2., Color32::LIGHT_BLUE),
-                            egui::StrokeKind::Inside,
-                        );
-                    }
+                    Some(side)
                 } else if let Some(side) = edge {
                     planned.relocate(palette, side, None, pos);
-                    let bounds = self
+                    Some(side)
+                } else {
+                    None
+                };
+                if let Some(side) = side {
+                    let frame_margin =
+                        egui::Frame::side_top_panel(ui.style()).total_margin();
+                    let scroll_width = ui.spacing().scroll.allocated_width();
+                    let margin = frame_margin.sum().x + scroll_width + 1.;
+                    let width = planned.dock_width(side, margin);
+                    let content_width =
+                        width - frame_margin.sum().x - scroll_width;
+                    let mut bounds = self
                         .dock_bounds
                         .iter()
                         .find(|(s, _)| *s == side)
                         .map(|(_, r)| *r)
                         .unwrap_or_else(|| {
-                            let width = if side == Location::Left {
-                                self.left_width
-                            } else {
-                                self.right_width
-                            };
                             Rect::from_min_size(
                                 egui::pos2(
                                     if side == Location::Left {
-                                        dock_area.left() + 8.
+                                        dock_area.left() + frame_margin.left
                                     } else {
-                                        dock_area.right() - width + 8.
+                                        dock_area.right() - width
+                                            + frame_margin.left
                                     },
-                                    dock_area.top() + 8.,
+                                    dock_area.top() + frame_margin.top,
                                 ),
                                 egui::vec2(
-                                    width - 16.,
-                                    dock_area.height() - 16.,
+                                    content_width,
+                                    dock_area.height() - frame_margin.sum().y,
                                 ),
                             )
                         });
+                    if side == Location::Right {
+                        bounds.min.x = bounds.right() - content_width;
+                    }
+                    bounds.max.x = bounds.left() + content_width;
                     if let Some((_, preview)) = planned
                         .dock_layout(side, bounds)
                         .into_iter()
                         .find(|(p, _)| *p == palette)
                     {
-                        paint.rect_filled(
-                            preview,
-                            0.,
-                            Color32::from_rgba_unmultiplied(90, 160, 240, 75),
-                        );
-                        paint.rect_stroke(
-                            preview,
-                            0.,
-                            egui::Stroke::new(2., Color32::LIGHT_BLUE),
-                            egui::StrokeKind::Inside,
-                        );
+                        let clip = self
+                            .dock_clips
+                            .iter()
+                            .find(|(s, _)| *s == side)
+                            .map_or(dock_area, |(_, r)| *r);
+                        let left = if side == Location::Right {
+                            clip.right() - content_width
+                        } else {
+                            clip.left()
+                        };
+                        let clip = Rect::from_min_max(
+                            egui::pos2(left, clip.top()),
+                            egui::pos2(left + content_width, clip.bottom()),
+                        )
+                        .intersect(ctx.content_rect());
+                        let preview = preview.intersect(clip);
+                        if preview.is_positive() {
+                            // A quiet footprint leaves the target's contents readable.
+                            let paint = paint.with_clip_rect(clip);
+                            paint.rect_filled(
+                                preview,
+                                0.,
+                                Color32::from_rgba_unmultiplied(
+                                    110, 170, 225, 18,
+                                ),
+                            );
+                            paint.rect_stroke(
+                                preview,
+                                0.,
+                                egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
+                                egui::StrokeKind::Inside,
+                            );
+                            #[cfg(test)]
+                            ctx.data_mut(|data| {
+                                data.insert_temp(
+                                    egui::Id::new("dock_preview_rect"),
+                                    preview,
+                                )
+                            });
+                        }
                     }
                 }
                 if ctx.input(|i| i.pointer.any_released()) {
@@ -1057,7 +1106,7 @@ mod tests {
                 .data(|data| {
                     data.get_temp::<Rect>(egui::Id::new((
                         "flat_icon",
-                        "Sub tool detail",
+                        "보조 도구 상세",
                     )))
                 })
                 .unwrap();
@@ -1554,5 +1603,177 @@ mod tests {
         assert!(
             matches!(&restored.presets.last().unwrap().brush.tip,parfait_core::BrushTip::Image{mask,..} if mask.as_slice()==[0,128,255,64])
         );
+    }
+    #[test]
+    fn docking_feedback_tracks_both_sides_and_scrolled_content() {
+        for side in [Location::Left, Location::Right] {
+            for scrolled in [false, true] {
+                let dir = tempfile::tempdir().unwrap();
+                let mut app =
+                    Parfait::open_legacy(dir.path().to_owned()).unwrap();
+                for p in &mut app.workspace.panels {
+                    p.location = side;
+                    p.height = 280.;
+                }
+                let ctx = egui::Context::default();
+                crate::theme::apply(&ctx);
+                let run = |app: &mut Parfait, events| {
+                    let mut out = ctx.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(Rect::from_min_size(
+                                Pos2::ZERO,
+                                egui::vec2(1600., 1000.),
+                            )),
+                            events,
+                            ..Default::default()
+                        },
+                        |ui| app.workspace_ui(ui),
+                    );
+                    out.textures_delta.clear();
+                };
+                run(&mut app, vec![]);
+                run(&mut app, vec![]);
+                let start = app
+                    .workspace
+                    .headers
+                    .iter()
+                    .find(|(p, _)| *p == Palette::Brushes)
+                    .unwrap()
+                    .1
+                    .center();
+                let button = |pos, pressed| egui::Event::PointerButton {
+                    pos,
+                    pressed,
+                    button: egui::PointerButton::Primary,
+                    modifiers: Default::default(),
+                };
+                run(
+                    &mut app,
+                    vec![egui::Event::PointerMoved(start), button(start, true)],
+                );
+                run(
+                    &mut app,
+                    vec![egui::Event::PointerMoved(
+                        start + egui::vec2(20., 0.),
+                    )],
+                );
+                run(
+                    &mut app,
+                    vec![egui::Event::PointerMoved(egui::pos2(800., 300.))],
+                );
+                if scrolled {
+                    // Read the actual stack ID from the rendered ScrollArea in side().
+                    let actual_id = ctx
+                        .data(|d| {
+                            d.get_temp::<egui::Id>(egui::Id::new((
+                                "dock_scroll_id",
+                                side == Location::Left,
+                            )))
+                        })
+                        .unwrap();
+                    let mut state =
+                        egui::scroll_area::State::load(&ctx, actual_id)
+                            .unwrap();
+                    state.offset.y = 140.;
+                    state.store(&ctx, actual_id);
+                    run(&mut app, vec![]);
+                }
+                let target = app
+                    .workspace
+                    .slots
+                    .iter()
+                    .find(|(p, _, _)| *p == Palette::Properties)
+                    .unwrap()
+                    .2;
+                let to = target.right_center() - egui::vec2(4., 0.);
+                run(&mut app, vec![egui::Event::PointerMoved(to)]);
+                let preview = ctx
+                    .data(|d| {
+                        d.get_temp::<Rect>(egui::Id::new("dock_preview_rect"))
+                    })
+                    .unwrap();
+                run(&mut app, vec![button(to, false)]);
+                run(&mut app, vec![]);
+                let actual = app
+                    .workspace
+                    .slots
+                    .iter()
+                    .find(|(p, _, _)| *p == Palette::Brushes)
+                    .unwrap()
+                    .2;
+                assert!(
+                    (actual.min - preview.min).length() < 3.,
+                    "{side:?} scroll={scrolled}: {actual:?} != {preview:?}"
+                );
+                assert!(
+                    (actual.size() - preview.size()).length() < 3.,
+                    "{side:?} scroll={scrolled}: {actual:?} != {preview:?}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn tall_floating_palette_keeps_grabbed_header_position() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        for p in &mut app.workspace.panels {
+            p.visible = p.palette == Palette::Brushes;
+            if p.visible {
+                p.location = Location::Floating;
+                p.height = 1200.;
+                p.rect = [150., 200., 260., 1229.];
+            }
+        }
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        let run = |app: &mut Parfait, events| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(960., 640.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.workspace_ui(ui),
+            );
+            out.textures_delta.clear();
+        };
+        run(&mut app, vec![]);
+        run(&mut app, vec![]);
+        let header = app.workspace.headers[0].1;
+        assert!((header.top() - 200.).abs() < 2., "{header:?}");
+        let from = header.min + egui::vec2(30., 11.);
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: Default::default(),
+        };
+        run(
+            &mut app,
+            vec![egui::Event::PointerMoved(from), button(from, true)],
+        );
+        run(
+            &mut app,
+            vec![egui::Event::PointerMoved(from + egui::vec2(10., 0.))],
+        );
+        let to = egui::pos2(550., 400.);
+        run(&mut app, vec![egui::Event::PointerMoved(to)]);
+        let header = app.workspace.headers[0].1;
+        assert!(
+            (header.min - (to - egui::vec2(30., 11.))).length() < 2.,
+            "{header:?}"
+        );
+        run(&mut app, vec![button(to, false)]);
+        let item = app
+            .workspace
+            .panels
+            .iter()
+            .find(|p| p.palette == Palette::Brushes)
+            .unwrap();
+        assert_eq!(item.height, 1200.);
+        assert_eq!(item.location, Location::Floating);
     }
 }

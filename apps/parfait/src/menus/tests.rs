@@ -154,6 +154,10 @@ fn frame(
             ..Default::default()
         },
         |ui| {
+            if app.documents.is_empty() {
+                app.menu_bar(ui);
+                return;
+            }
             app.prepare_layer_list(ui.ctx());
             app.shortcuts(ui.ctx());
             ui.add_enabled_ui(!app.dialog_open(), |ui| {
@@ -346,7 +350,7 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     }
     assert_eq!(app.documents.active_session.document, before);
     assert_eq!(app.documents.active_session.history.rows().count(), 0);
-    assert_eq!(Command::ALL.len(), 93);
+    assert_eq!(Command::ALL.len(), 187);
 }
 
 #[test]
@@ -555,7 +559,10 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
                                     | Command::FlipHorizontal
                                     | Command::FlipVertical
                                     | Command::HidePalettes
+                                    | Command::EditTextInkBounds
+                                    | Command::EditVectorCenters
                             ) || command.palette().is_some()
+                                || command.align_reference().is_some()
                         );
                     }
                     counts.0 += 1;
@@ -593,8 +600,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (84, 311, 41));
-    assert_eq!(Command::ALL.len(), 93);
+    assert_eq!(counts, (176, 221, 41));
+    assert_eq!(Command::ALL.len(), 187);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",
         counts.0, counts.1, counts.2
@@ -703,6 +710,15 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
     for menu in TopMenu::ALL {
         collect(menu, catalog::entries(menu), vec![], &mut groups);
     }
+    let expected = groups
+        .iter()
+        .map(|(_, _, items)| {
+            items
+                .iter()
+                .filter(|item| matches!(item, catalog::MenuItem::Planned(_)))
+                .count()
+        })
+        .sum::<usize>();
     let mut checked = 0;
     for (menu, chain, items) in groups {
         open(&mut app, &ctx, menu);
@@ -740,7 +756,7 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
         escape(&mut app, &ctx);
         assert!(!egui::Popup::is_any_open(&ctx));
     }
-    assert!(checked >= 250);
+    assert_eq!(checked, expected);
 }
 
 #[test]
@@ -821,4 +837,37 @@ fn nested_layer_flags_and_subtool_details_keep_the_shared_command_path() {
     assert!(app.brush_details.open);
     assert!(app.documents.active_session.history.can_redo());
     assert_eq!(app.documents.active_session.document.layers, original.layers);
+}
+
+#[test]
+fn edit_menu_contains_no_planned_leaves() {
+    fn walk(items: &[catalog::MenuItem]) {
+        for item in items {
+            match item {
+                catalog::MenuItem::Planned(label) => {
+                    panic!("Unimplemented Edit item: {label}")
+                }
+                catalog::MenuItem::Group(_, children) => walk(children),
+                _ => {}
+            }
+        }
+    }
+    walk(catalog::entries(TopMenu::Edit));
+}
+
+#[test]
+fn empty_workspace_keeps_all_eight_distinct_menus_safe_to_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open_document_tabs(dir.path().into()).unwrap();
+    let id = app.documents.active_id().unwrap();
+    assert!(app.close_document_tab(id));
+    let ctx = egui::Context::default();
+    crate::theme::apply(&ctx);
+    frame(&mut app, &ctx, vec![], 960.);
+    frame(&mut app, &ctx, vec![], 960.);
+    for menu in TopMenu::ALL {
+        open(&mut app, &ctx, menu);
+        escape(&mut app, &ctx);
+        assert!(app.documents.is_empty());
+    }
 }

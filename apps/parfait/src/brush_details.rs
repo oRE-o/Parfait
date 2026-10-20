@@ -181,7 +181,7 @@ enum Category {
 impl Category {
     fn summary(self) -> &'static str {
         match self {
-            Self::Size => "Set brush size and pressure response.",
+            Self::Size => "브러시 크기와 필압에 따른 변화를 설정합니다.",
             Self::Ink => "Choose a pixel operation and its strength.",
             Self::Tip => "Set the brush tip shape and orientation.",
             Self::Stroke => "Set dab intervals and continuous spraying.",
@@ -557,7 +557,7 @@ impl Parfait {
                 ui,
                 Icon::Settings,
                 false,
-                "Sub tool detail",
+                "보조 도구 상세",
                 24.,
             )
             .clicked()
@@ -574,7 +574,7 @@ impl Parfait {
                     ui,
                     Icon::Undo,
                     false,
-                    "Restore saved brush and visible properties",
+                    "저장된 브러시와 표시 항목으로 복원",
                     24.,
                 )
                 .clicked()
@@ -610,7 +610,7 @@ impl Parfait {
         self.brush_details.pin_targets.clear();
         #[cfg(test)]
         self.brush_details.category_targets.clear();
-        egui::Window::new(egui::RichText::new("Sub tool detail").size(11.5))
+        egui::Window::new(egui::RichText::new("보조 도구 상세").size(11.5))
             .id(egui::Id::new("brush_details"))
             .open(&mut open)
             .collapsible(false)
@@ -722,9 +722,9 @@ impl Parfait {
                                         Category::Size => {
                                             ui.checkbox(
                                                 &mut self.brush.pressure,
-                                                "Pressure controls size",
+                                                "필압으로 크기 조절",
                                             );
-                                            if ui.button("Pressure response…").clicked() {
+                                            if ui.button("필압 설정…").clicked() {
                                                 self.brush_details.category = Category::Pressure;
                                                 self.brush_details.help = None;
                                             }
@@ -800,10 +800,10 @@ impl Parfait {
                                             ui.strong(
                                                 self.brush_details
                                                     .help
-                                                    .map_or("Parameter guide", Property::label),
+                                                    .map_or("항목 설명", Property::label),
                                             );
                                             ui.label(self.brush_details.help.map_or(
-                                                "Point to a setting to read its description. Edits apply immediately.",
+                                                "항목 위에 포인터를 올리면 설명이 표시됩니다. 변경 사항은 즉시 적용됩니다.",
                                                 Property::help,
                                             ));
                                         });
@@ -812,7 +812,7 @@ impl Parfait {
                     });
                     ui.separator();
                     widgets::action_row(ui, |ui| {
-                        let close_button = widgets::action_button(ui, "Close", 56.);
+                        let close_button = widgets::action_button(ui, "닫기", 56.);
                         #[cfg(test)]
                         ui.data_mut(|data| {
                             data.insert_temp(egui::Id::new("detail_close"), close_button.rect)
@@ -820,25 +820,25 @@ impl Parfait {
                         if close_button.clicked() {
                             close = true;
                         }
-                        if widgets::action_button(ui, "Save preset", 82.).clicked() {
+                        if widgets::action_button(ui, "브러시 저장", 82.).clicked() {
                             self.save_current_preset();
                         }
                         let restorable = self.preset_modified() && self.presets.iter().any(|preset| preset.name == self.tip_name);
                         ui.add_enabled_ui(restorable, |ui| {
-                            if widgets::action_button(ui, "Restore saved", 96.).clicked() {
+                            if widgets::action_button(ui, "저장 상태 복원", 96.).clicked() {
                                 self.restore_current_preset();
                             }
                         });
                         let options = ui.menu_button(egui::RichText::new(Icon::More.glyph()).font(egui::FontId::new(14., egui::FontFamily::Name("icons".into()))), |ui| {
-                            if ui.button("Default property layout").on_hover_text("Reset visible properties only; brush values are retained").clicked() {
+                            if ui.button("표시 항목 초기화").on_hover_text("브러시 값은 유지하고 표시 항목만 초기화합니다").clicked() {
                                 self.brush_details.properties = Default::default();
                                 ui.close();
                             }
                         });
-                        options.response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Property display options"));
-                        options.response.on_hover_text("Property display options");
+                        options.response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "항목 표시 설정"));
+                        options.response.on_hover_text("항목 표시 설정");
                     });
-                    ui.weak("Eye: show in Tool property · edits apply immediately");
+                    ui.weak("눈 아이콘: 도구 속성에 표시 · 변경 즉시 적용");
                 });
             });
         if !calibration_open
@@ -907,10 +907,10 @@ impl Parfait {
                     ui.weak("Device calibration is separate. Tilt, velocity and random dynamics are not supported.");
                 });
                 widgets::action_row(ui, |ui| {
-                    let response = widgets::action_button(ui, "Close", 64.);
+                    let response = widgets::action_button(ui, "닫기", 64.);
                     #[cfg(test)] { if let Some(targets) = &mut self.brush_details.dynamics_targets { targets.1 = response.rect; } }
                     if response.clicked() { close = true; }
-                    if widgets::action_button(ui, "Save preset", 90.).clicked() { self.save_current_preset(); }
+                    if widgets::action_button(ui, "브러시 저장", 90.).clicked() { self.save_current_preset(); }
                 });
             });
         if self.calibration_dialog.is_none()
@@ -1009,7 +1009,7 @@ mod tests {
                                     < 0.5,
                                 "{size:?} {} {operation:?} {}: {close:?} -> {actual:?}",
                                 category.label(),
-                                help.map_or("Parameter guide", Property::label),
+                                help.map_or("항목 설명", Property::label),
                             );
                         }
                     }
@@ -1334,8 +1334,8 @@ mod tests {
         );
         output.textures_delta.clear();
         let actions: Vec<egui::Rect> = [
-            "Sub tool detail",
-            "Restore saved brush and visible properties",
+            "보조 도구 상세",
+            "저장된 브러시와 표시 항목으로 복원",
             "Save brush settings and visible properties",
         ]
         .iter()
@@ -1368,7 +1368,7 @@ mod tests {
             output.textures_delta.clear();
         }
         let buttons: Vec<egui::Rect> =
-            ["Close", "Save preset", "Restore saved"]
+            ["닫기", "브러시 저장", "저장 상태 복원"]
                 .iter()
                 .map(|label| {
                     ctx.data(|data| {

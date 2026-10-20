@@ -131,7 +131,7 @@ fn malformed_selection_head_falls_back_and_invalid_saves_leave_committed_data_un
     let mut raw = SNAPSHOT_V9.to_vec();
     bincode::DefaultOptions::new()
         .with_fixint_encoding()
-        .serialize_into(&mut raw, &document)
+        .serialize_into(&mut raw, &crate::legacy_v10::Borrowed::from(&document))
         .unwrap();
     inject(&store, document.revision, &raw);
     let loaded = store.load().unwrap().unwrap();

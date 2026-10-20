@@ -62,6 +62,7 @@ pub(crate) struct RecoveryState {
 
 #[derive(Default)]
 pub(crate) struct DocumentEditingState {
+    pub align: crate::alignment::AlignSettings,
     pub stroke: Option<Stroke>,
     pub stroke_owner: Option<SessionKey>,
     pub layer_edit: Option<LayerEdit>,

@@ -111,6 +111,48 @@ impl Document {
                 );
             }
         }
+        if !self.contents.is_empty() {
+            use crate::LayerContent;
+            fn float(h: &mut Sha256, v: f32) {
+                h.update(
+                    (if v == 0. { 0_f32 } else { v }).to_bits().to_le_bytes(),
+                );
+            }
+            hash.update(b"Parfait.NativeContent\0");
+            hash.update((self.contents.len() as u64).to_le_bytes());
+            for node in &self.contents {
+                hash.update(node.layer.0.to_le_bytes());
+                match node.body().as_ref() {
+                    LayerContent::Text(t) => {
+                        hash.update([0]);
+                        hash.update((t.text.len() as u64).to_le_bytes());
+                        hash.update(t.text.as_bytes());
+                        hash.update((t.font.len() as u64).to_le_bytes());
+                        hash.update(t.font.as_slice());
+                        float(&mut hash, t.size);
+                        hash.update(t.color);
+                    }
+                    LayerContent::Vector(v) => {
+                        hash.update([1]);
+                        hash.update((v.paths.len() as u64).to_le_bytes());
+                        for p in &v.paths {
+                            hash.update((p.points.len() as u64).to_le_bytes());
+                            for point in p.points.iter() {
+                                for x in point {
+                                    float(&mut hash, *x);
+                                }
+                            }
+                            hash.update(p.color);
+                            float(&mut hash, p.width);
+                            hash.update([p.closed as u8, p.fill as u8]);
+                        }
+                    }
+                }
+                for x in node.body().matrix().0 {
+                    float(&mut hash, x);
+                }
+            }
+        }
         Some(ArtDigestV1(hash.finalize().into()))
     }
 }

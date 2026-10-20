@@ -188,7 +188,10 @@ fn shortcuts_are_fresh_defaults_and_old_keymaps_are_not_injected() {
     assert!(app.keymap.hint(Command::SelectAll).is_empty());
     assert_eq!(app.keymap.hint(Command::LayerSelectionCreate), "F7");
     app.persist_preferences(true);
-    assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
+    assert_eq!(
+        app.preferences_saved.as_ref().unwrap().version,
+        crate::preferences::VERSION
+    );
 }
 
 #[test]

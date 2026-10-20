@@ -1,5 +1,34 @@
 # Testing
 
+## Edit-menu implementation and native content
+
+2026-10-20, Windows x86_64 / Intel Core i7-8700 / Rust 1.99.1 GNU. `cargo test --workspace --quiet` passes **513 tests, zero failures, nine opt-in workloads ignored**. All-target warnings-denied Clippy and formatting checks pass. The two old malformed-snapshot fixtures additionally use the explicit v10 encoder so their failures still exercise invalid layer/selection validation rather than merely trailing bytes; the storage library suite was rerun after that adjustment.
+
+The Edit menu's original 85 planned leaves are wired; a catalog acceptance check rejects any remaining `Planned` Edit leaf. Implementation scope and actual limitations are recorded in [edit-menu.md](edit-menu.md), including canvas-handle transforms, local color assistance, clipboard defaults, device delegation and native-text limitations.
+
+- Raster checks cover copy/cut atomicity on clipboard failure, selection/alpha locks, correction math, premultiplied interpolation, canvas masks/selections, identity transforms, fold rejection and history restoration.
+- Local transform follow-up tests use actual pointer events to move/scale, add/move/delete pins, select and move multiple mesh nodes, and respect rotated view coordinates. They verify mask-only editing, exact pin constraints, pin rotation, projective corner fitting, row cancellation, memory refusal preserving redo, stale-preview rejection, released reservations and buffer-identity reuse on confirmation, and unfaded canvas mesh colors while the surrounding UI is disabled. The core/storage file formats are unchanged by these transient tool settings.
+- Native-content checks distinguish text advance/ink and vector stroke/centerline geometry, translate and resize real source data with exact cache regeneration, preserve shared sources through duplication and Undo/Redo, reject invalid/oversized input atomically, and keep explicit rasterization pixel-equivalent.
+- Settings checks use actual egui buttons and Escape, keep minimum-size footers visible, persist valid options without injecting new keys, reject bad controller/font/list settings, and restore active options/font styles on a settings-save failure before retry/reopen.
+- Screen-picker checks use synthetic pixels and an injected capture guard. They test cancellation, released job ownership and visibility-restoration requests without capturing the user's desktop or claiming physical monitor/driver validation.
+- Storage checks retain v1–v10 migrations and exact ordinary v10 bytes. New v11 checks cover embedded text/font readback, analytic snapshot size, read-only loading, corrupted-head fallback and retaining a database's declared version after rasterization. Two new subprocess tests kill native-vector recovery before/after commit and compare the recovered model's raster output with its stored cache. Existing ten-boundary session/migration kills remain enabled.
+
+Release CPU workload `cargo run --release -p parfait-core --example edit_bench` passes exact rotated-composite, native-rasterization and region/full-composite comparisons. Nine-sample edit-plus-composite timings, deterministic checksums, hardware and scope are in [performance.md](performance.md). This is not physical pen latency or competitive performance evidence.
+
+The independently authored artwork in `cargo run -p parfait-storage --example native_content_fixture -- <new-output.parfait>` provides embedded Korean/Latin text and colored editable vector paths for visual QA. The output path must be new. A native debug launch with an isolated QA recovery folder reopened that v11 fixture and exported its own 1440 × 920 framebuffer; Korean/Latin glyphs, vector strokes/fills and native layer labels were visually inspected. The ignored output is `.local/qa-edit-menu-20261020/workspace.png`. A second isolated native launch used the raster variant (`--raster`) and `--transform mesh --screenshot <new.png>`; its final framebuffer `.local/qa-local-transform-20261020/mesh-final.png` was inspected for readable controls, canvas handles and unfaded artwork. Native desktop input, real screen permissions, Bluetooth pairing/gamepad buttons and macOS/Linux validation remain separate field checks.
+
+
+## Palette dragging and layer-center grouping
+
+2026-10-20, Windows x86_64 / Rust 1.99.1 GNU, local working tree. `cargo test --workspace --quiet` passes 448 tests, with nine opt-in workloads ignored. The additional UI-event regressions cover:
+
+- Left/right dock feedback versus committed visible slots, including vertical scroll and column expansion.
+- A floating palette taller than the application retaining its header grab position and expanded height.
+- Multi-layer center drops, including release-only movement, one-step Undo/Redo, stable pixel-buffer identity and exact composite pixels for a colored Normal-layer fixture.
+- Self/descendant drops, different-parent selections, nested sibling grouping, the 64-node limit and cancellation preserving redo.
+
+An isolated native debug launch exported its own startup framebuffer, which was inspected. Windows Computer Use capture failed twice (`FrameArrived timed out` / `window capture timed out`), so native mouse-driven drag validation was unavailable. Event tests cover the interactions; this does not certify physical pen input, other platforms or end-to-end latency. No canvas compositor or artwork/recovery format changed; the existing storage and process-crash recovery suites were retained.
+
 ## Multi-document Stages 3–4: default durable workflow
 
 2026-10-20, macOS 26.4.1 arm64 / Rust 1.99.1, current uncommitted working tree. Ordinary launch now uses tabs, per-document recovery and asynchronous original saves; there is **no activation flag**. Stage 2's development-only behavior below is historical, not the current launch contract.
@@ -300,8 +329,41 @@ Compact-library input tests verify header controls fit 190–360-point palette w
 
 Detail regressions render all six categories at 960 × 640, assert that category buttons remain visible and vertically separated, and click the actual Spacing eye target. This checks layout-only edits, unchanged brush values/artwork, preset restore, family switching, preferences/preset visibility after restart and compatibility with older records missing property layouts. Native checks should pin a hidden property, close Details, verify its palette row, save/reopen the preset, and confirm that an unsupported tip parameter remains disabled while its visibility can still be configured.
 
-Parameter-row tests exercise both 42-point palette and 28-point detail densities: independent number/chevron/dynamics targets, logarithmic bar click/drag, keyboard bounds, deferred typed-value commit and disabled-value preservation. Geometry checks keep bar, number, arrows and dynamics separate in a 210-point test viewport. Native checks should compare the compact rows with the unchanged palette rows and verify the overlaid preset name, short category guidance, parameter hover help and right-aligned Gap buttons.
+Parameter-row tests exercise both 46-point palette and 42-point detail densities: independent number/chevron/dynamics targets, logarithmic bar click/drag, keyboard bounds, deferred typed-value commit and disabled-value preservation. Geometry checks keep bar, number, arrows and dynamics separate in a 210-point test viewport. Native checks should compare the compact rows with the unchanged palette rows and verify the overlaid preset name, short category guidance, parameter hover help and right-aligned Gap buttons.
 
 Pressure-spacing tests cover independent curves, inverse response, the 0.5 px floor, invalid values, unchanged disabled/automatic-mode pixels, actual dab separation and residual distance across 1/2/8/64/256-event versions of one linear-pressure path. Partition comparisons allow at most one alpha byte of floating-point rounding difference. All-tip/all-operation partial/full compositing includes inverse spacing dynamics. UI checks click the dynamics target, retain automatic-mode values, keep graph/footer visible at 960 × 640 and dismiss the child with Escape. Portable v7 and preferences restart preserve curves; files v1–6 without new fields retain disabled dynamics.
 
 Shortcut tests cover catalog/cache ordering, serialization, limits, reserved keys, atomic conflict replacement, shared-tool cycling and removal without reviving old keys. Real egui events verify Enter conflict rejection and child-first Escape. Apply/Cancel tests click actual footer buttons, induce a local save failure, verify active-key rollback/draft retention and retry/reopen successfully without modifying artwork. Fifty-frame minimum-size checks catch scrollbar-driven window growth. Preference versions 1–7 default missing bindings; corrupt keys preserve the original record. Native checks cover conflict/cancel/apply, synchronized hints and remapped command execution; physical keyboard layouts and other OS interception remain separate checks.
+
+
+## Local color and image editors (2026-10-20)
+
+At the preceding local-color-editor stage: **534 passed, 0 failed, 9 ignored**. Formatting and all-target Clippy with `-D warnings` pass; the debug executable builds. The small size-preview comparison visibility follow-up is also checked with the existing minimum-window/undimmed-artwork regression.
+
+The Windows x86_64 GNU workspace suite now includes exact master/channel level LUT identity and inversion, independent RGB curves, arbitrary curve interpolation, weighted histograms, tone-range targeting and luminance preservation, HSV, multistop/reversed/linear-light gradients, scalar/prepared-gradient pixel equivalence, nearest resizing with selection/masks, two clipped silhouette-lighting layers, exact base alpha preservation, reference-line influence, cancellation, stale preview rejection and cached-buffer commit.
+
+Application checks cover multi-selected raster correction in one Undo, locked-member refusal, preview memory refusal without losing redo, original comparison, off/on cancellation recovery, shading Undo, 960×640 footer visibility and undimmed artwork meshes across the new local editors. These are synthetic egui inputs and CPU assertions, not physical pen or native mouse testing. Existing format/migration/crash/recovery tests remain enabled.
+
+Native opt-in framebuffer exports of the independently authored raster fixture are inspected in `.local/qa-tone-edit-20261020/` for levels, curves, gradient map, shading and canvas extent. Initial inspection found antialiased seams between gradient-bar strips; the bar now uses one mesh with shared vertices. The curve's tone-only delete label is Korean. Distance-field lighting is smoothed in linear-time passes before differentiation. QA helpers use isolated recovery directories; the user's original Parfait session remains running. CLIP STUDIO/PAINT launch succeeded, but `FrameArrived timed out` and `window capture timed out` prevented comparison against its live dialogs; official public usage documentation supplied the interaction reference. No proprietary binary, model, module or reverse-engineering material was imported.
+
+
+## Canvas-tab and editor interaction follow-up
+
+Synthetic egui pointer tests drag three document tabs, cancel a reorder with Escape, and reopen the durable session to verify visual order. A full-workspace geometry assertion places the strip inside both docks, below the command bar and above the ruler/canvas. Next/previous commands and middle-click dirty-close behavior are tested. Close-choice pointer tests cover cancel, explicit discard of only the target, and asynchronous save-then-close followed by exact reopening of the original file.
+
+Hue, saturation and value sliders are individually clicked/dragged with actual egui pointer events. Each must generate different composite pixels, paint the preview texture on the canvas, leave the source/history untouched and restore the original on Cancel. Window-header pointer drags verify independent per-tool position retention. All eight top menus and all catalog groups are traversed by the existing menu tests, including the empty workspace, where each menu now keeps its own contents. Settings and text/vector editors reuse the constrained movable-window contract and retain their existing cancel/save/limit checks.
+
+CSP live-window inspection remains incomplete: its accessibility tree exposes only generic windows, and two screenshot attempts failed (`FrameArrived timed out`, `window capture timed out`). Official public documentation is the reference; no direct native CSP menu clicking is claimed. Native Parfait review uses `--demo-tabs --edit hsv --edit-values 70,45,10` on an isolated copy of the independently authored fixture, with `--screenshot` waiting for pending image previews to finish. These flags never apply the draft. Original user processes are preserved while the new executable is built.
+
+
+The HSV drag regression additionally requires at least two output meshes sharing the changed preview texture (canvas and navigator). Core regressions retain every neutral grayscale value under hue/saturation changes and verify exact white/black lightness endpoints while preserving alpha. The release edit workload includes deterministic `hsv_preview_edit` with partial selection and checks exact region/full-composite equivalence.
+
+
+Final follow-up workspace result: **543 passed, 0 failed, 9 ignored**. Formatting and all-target Clippy with warnings denied pass. Current Windows framebuffer QA files are in `.local/qa-canvas-tabs-20261020/`: baseline three-tab layout and an unapplied HSV draft. The final HSV frame also verifies navigator/canvas agreement and neutral-preserving color behavior. This is application-owned framebuffer inspection, not native mouse automation of CSP.
+
+
+## Numeric-control layout checks (2026-10-21)
+
+Width checks render the shared control at 160, 280, 480 and 900 points: the numeric column stays 64 points, tracks fill the remaining width, and targets remain inside their host. Idle rendering must preserve exact fractional transform coordinates. Existing HSV drag/preview/cancel, mesh/pin direct-manipulation, independent brush-target/keyboard/deferred-entry checks and minimum-screen editor checks remain enabled. Native isolated framebuffer exports are inspected in `.local/qa-slider-ui-20261021/`; CSP screenshot capture remains unavailable due to the reported tool timeouts. This is layout work with no changes to pixel processing or file formats.
+
+Numeric-layout workspace verification: **544 passed, 0 failed, 9 ignored**. The concluding application-only recheck also covers the translated brush labels and corrected preferences placement. All-target Clippy with warnings denied and formatting pass. HSV, preferences, brush detail and shading framebuffer exports show the resized controls, and the final preferences frame places the dialog at the screen center.

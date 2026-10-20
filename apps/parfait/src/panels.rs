@@ -10,15 +10,8 @@ impl Parfait {
     pub fn top_panel(&mut self, ui: &mut egui::Ui) {
         self.menu_bar(ui);
         egui::Panel::top("command_bar").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                self.command_icon(ui, Icon::Plus, Command::NewDrawing);
-                self.command_icon(ui, Icon::Folder, Command::OpenProject);
-                self.command_icon(ui, Icon::Save, Command::SaveProject);
-                ui.separator();
-                self.command_icon(ui, Icon::Undo, Command::Undo);
-                self.command_icon(ui, Icon::Redo, Command::Redo);
-                ui.separator();
-                self.command_icon(ui, Icon::Fit, Command::FitCanvas);
+            ui.horizontal_wrapped(|ui| {
+                self.configured_command_bar(ui);
                 ui.separator();
                 ui.label(
                     RichText::new(format!(
@@ -30,7 +23,10 @@ impl Parfait {
                 );
             });
         });
+    }
+    pub(crate) fn canvas_document_strip(&mut self, ui: &mut egui::Ui) {
         if self.tabs.enabled {
+            self.document_tabs_ui(ui);
             return;
         }
         egui::Panel::top("document_tab")
@@ -388,7 +384,11 @@ impl Parfait {
                 ui.color_edit_button_srgb(&mut self.brush.color);
             }
             Palette::Navigator => {
-                if let Some(texture) = &self.render_cache.texture {
+                if let Some(texture) = self
+                    .local_canvas_texture()
+                    .or(self.transform_canvas_texture())
+                    .or(self.render_cache.texture.as_ref())
+                {
                     let w = ui.available_width();
                     let h = (w * self.documents.active_session.document.height
                         as f32
@@ -401,8 +401,25 @@ impl Parfait {
                         h,
                     );
                     ui.vertical_centered(|ui| {
-                        ui.add(
-                            egui::Image::new(texture).fit_to_exact_size(size),
+                        let (rect, _) =
+                            ui.allocate_exact_size(size, egui::Sense::hover());
+                        let painter = if self.dialog_open() {
+                            egui::Painter::new(
+                                ui.ctx().clone(),
+                                ui.layer_id(),
+                                ui.clip_rect(),
+                            )
+                        } else {
+                            ui.painter().clone()
+                        };
+                        painter.image(
+                            texture.id(),
+                            rect,
+                            egui::Rect::from_min_max(
+                                egui::Pos2::ZERO,
+                                egui::pos2(1., 1.),
+                            ),
+                            Color32::WHITE,
                         );
                     });
                 }

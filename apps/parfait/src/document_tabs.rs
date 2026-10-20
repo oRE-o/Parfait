@@ -5,6 +5,8 @@ use crate::{
     project_loader::{LoadResult, ProjectLoader, RequestId},
 };
 use eframe::egui;
+mod close;
+mod ui;
 use parfait_core::Document;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -25,6 +27,10 @@ pub(crate) struct DocumentTabs {
     latest_focus: Option<RequestId>,
     pub input_barrier: bool,
     pub pinned_save: Option<Document>,
+    drag: Option<ui::TabDrag>,
+    drawn_active: Option<DocumentId>,
+    close_prompt: Option<DocumentId>,
+    close_after_save: Option<crate::document_session::SessionKey>,
 }
 impl DocumentTabs {
     fn next(&mut self) -> u64 {
@@ -106,7 +112,6 @@ impl Parfait {
         self.render_cache = Default::default();
         true
     }
-    #[cfg(test)]
     pub(crate) fn new_document_tab(
         &mut self,
         document: Document,
@@ -152,6 +157,13 @@ impl Parfait {
         Ok(id)
     }
     pub(crate) fn close_document_tab(&mut self, id: DocumentId) -> bool {
+        self.close_document_tab_checked(id, false)
+    }
+    fn close_document_tab_checked(
+        &mut self,
+        id: DocumentId,
+        discard: bool,
+    ) -> bool {
         if self.tab_switch_blocked() {
             return false;
         }
@@ -171,7 +183,7 @@ impl Parfait {
         let Some(session) = self.documents.get(id) else {
             return false;
         };
-        if session.modified() && !session.pristine() {
+        if session.modified() && !session.pristine() && !discard {
             self.notice =
                 Some("Save this drawing manually before closing it.".into());
             return false;
@@ -357,94 +369,6 @@ impl Parfait {
             }
             Err(error) => self.error = Some(format!("Open failed: {error:#}")),
         }
-    }
-    pub(crate) fn document_tabs_ui(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::top("multi_document_tabs").show(ui, |ui| {
-            self.recovery_items_ui(ui);
-            if let Some(message) = self.notice.clone() {
-                ui.horizontal(|ui| {
-                    let width = (ui.available_width() - 26.).max(1.);
-                    ui.add_sized(
-                        [width, 18.],
-                        egui::Label::new(&message).truncate(),
-                    )
-                    .on_hover_text(&message);
-                    if ui
-                        .small_button("×")
-                        .on_hover_text("Dismiss notification")
-                        .clicked()
-                    {
-                        self.notice = None;
-                    }
-                });
-            }
-            egui::ScrollArea::horizontal().show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    for id in self.documents.tab_order.clone() {
-                        let session = self.documents.get(id).unwrap();
-                        let title = format!(
-                            "{}{}",
-                            session.title(),
-                            if session.modified() { " *" } else { "" }
-                        );
-                        let source = session
-                            .project
-                            .as_ref()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|| {
-                                "Not saved to an original file".into()
-                            });
-                        ui.push_id(id, |ui| {
-                            let tab = ui
-                                .selectable_label(
-                                    self.documents.active_id() == Some(id),
-                                    title,
-                                )
-                                .on_hover_text(&source);
-                            tab.context_menu(|ui| {
-                                ui.label("File information");
-                                ui.separator();
-                                ui.label(&source);
-                            });
-                            #[cfg(test)]
-                            ui.data_mut(|data| {
-                                data.insert_temp(
-                                    egui::Id::new(("tab", id)),
-                                    tab.rect,
-                                )
-                            });
-                            if tab.clicked() {
-                                self.activate_document(id, true);
-                            }
-                            if ui.small_button("×").clicked() {
-                                self.close_document_tab(id);
-                            }
-                        });
-                    }
-                    for (id, title) in self
-                        .tabs
-                        .pending
-                        .iter()
-                        .map(|p| {
-                            (
-                                p.id,
-                                p.path
-                                    .file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                                    .into_owned(),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                    {
-                        ui.label(format!("Loading {title}"));
-                        if ui.small_button("Cancel").clicked() {
-                            self.cancel_project_open(id);
-                        }
-                    }
-                });
-            });
-        });
     }
 }
 

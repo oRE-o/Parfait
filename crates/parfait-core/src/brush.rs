@@ -491,7 +491,9 @@ impl Dab {
             return None;
         }
         let layer = &doc.layers[doc.active];
-        if (!mask && layer.kind != crate::LayerKind::Raster)
+        if (!mask
+            && (layer.kind != crate::LayerKind::Raster
+                || doc.native_content(doc.active).is_some()))
             || !doc.layer_ancestors_allow_edit(doc.active)
         {
             return None;

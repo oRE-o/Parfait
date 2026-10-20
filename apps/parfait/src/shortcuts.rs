@@ -63,6 +63,35 @@ impl Parfait {
         {
             return;
         }
+        // Native backends translate clipboard shortcuts to semantic events.
+        // Keep them outside text fields and preserve configured Copy/Cut owners.
+        let clipboard_events: Vec<_> = ctx.input(|input| {
+            input
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    egui::Event::Copy => self.keymap.resolve(
+                        Chord::new(Key::C, true, false, false),
+                        self.active_tool_command(),
+                    ),
+                    egui::Event::Cut => self.keymap.resolve(
+                        Chord::new(Key::X, true, false, false),
+                        self.active_tool_command(),
+                    ),
+                    egui::Event::Paste(_) => self
+                        .keymap
+                        .resolve(
+                            Chord::new(Key::V, true, false, false),
+                            self.active_tool_command(),
+                        )
+                        .or(Some(Command::EditPaste)),
+                    _ => None,
+                })
+                .collect()
+        });
+        for command in clipboard_events {
+            self.execute_command(command, ctx);
+        }
         let keys: Vec<_> = ctx.input(|input| {
             input
                 .events
@@ -286,7 +315,10 @@ mod tests {
         frame(&mut app, Key::CloseBracket, false);
         assert!((app.brush.size - size * 1.2).abs() < 1e-5);
         frame(&mut app, Key::Tab, false);
-        assert!(app.hide_panels);
+        assert!(
+            !app.hide_panels,
+            "Ctrl+Tab is a canvas command and must not fall through to plain Tab"
+        );
         let layers = app.documents.active_session.document.layers.len();
         frame(&mut app, Key::N, true);
         assert_eq!(

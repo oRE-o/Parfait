@@ -102,6 +102,100 @@ pub enum Command {
     SelectAll,
     Deselect,
     InvertSelection,
+    EditCut,
+    EditCopy,
+    EditPaste,
+    EditPasteAtView,
+    EditClearOutside,
+    EditFill,
+    EditAdvancedFill,
+    EditBorder,
+    EditBrightnessContrast,
+    EditHsl,
+    EditPosterize,
+    EditInvert,
+    EditLevels,
+    EditToneCurve,
+    EditColorBalance,
+    EditThreshold,
+    EditGradientMap,
+    EditResolution,
+    EditCanvasSize,
+    EditCrop,
+    EditCanvasRotateRight,
+    EditCanvasRotateHalf,
+    EditCanvasRotateLeft,
+    EditCanvasFlipX,
+    EditCanvasFlipY,
+    EditClearHistory,
+    EditPressure,
+    EditAlignTop,
+    EditAlignCenterY,
+    EditAlignBottom,
+    EditAlignLeft,
+    EditAlignCenterX,
+    EditAlignRight,
+    EditDistributeTop,
+    EditDistributeCenterY,
+    EditDistributeBottom,
+    EditDistributeLeft,
+    EditDistributeCenterX,
+    EditDistributeRight,
+    EditSpaceY,
+    EditSpaceX,
+    EditRefBounds,
+    EditRefCanvas,
+    EditRefSelection,
+    EditRefGuides,
+    EditRefAuto,
+    EditTransformScaleRotate,
+    EditTransformScale,
+    EditTransformRotate,
+    EditTransformFree,
+    EditTransformDistort,
+    EditTransformShear,
+    EditTransformPerspective,
+    EditTransformFlipX,
+    EditTransformFlipY,
+    EditTransformMesh,
+    EditTransformPins,
+    EditTransformApply,
+    EditTransformCancel,
+    EditSuperResolution,
+    EditAutoColor,
+    EditAutoColorHints,
+    EditAutoColorOptions,
+    EditAutoShade,
+    EditColorReference,
+    EditMaterialImage,
+    EditMaterialTemplate,
+    EditPreferences,
+    EditModifierSettings,
+    EditCommandBarSettings,
+    EditFontSettings,
+    EditControllerSettings,
+    EditQuickSettings,
+    EditToolCycleSettings,
+    EditWirelessSearch,
+    EditControllerAdd,
+    EditExternalDevice,
+    EditPrivacySettings,
+    EditSystemServices,
+    EditCanvasBasic,
+    EditCopySvg,
+    ShowQuickMenu,
+    CycleTools,
+    EditScreenColor,
+    EditScreenColorHide,
+    EditTextInkBounds,
+    EditVectorCenters,
+    NewTextLayer,
+    NewVectorLayer,
+    EditNativeLayer,
+    RasterizeNativeLayer,
+    NextCanvas,
+    PreviousCanvas,
+    CloseCanvas,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -236,10 +330,198 @@ impl Command {
         Self::SelectAll,
         Self::Deselect,
         Self::InvertSelection,
+        Self::EditCut,
+        Self::EditCopy,
+        Self::EditPaste,
+        Self::EditPasteAtView,
+        Self::EditClearOutside,
+        Self::EditFill,
+        Self::EditAdvancedFill,
+        Self::EditBorder,
+        Self::EditBrightnessContrast,
+        Self::EditHsl,
+        Self::EditPosterize,
+        Self::EditInvert,
+        Self::EditLevels,
+        Self::EditToneCurve,
+        Self::EditColorBalance,
+        Self::EditThreshold,
+        Self::EditGradientMap,
+        Self::EditResolution,
+        Self::EditCanvasSize,
+        Self::EditCrop,
+        Self::EditCanvasRotateRight,
+        Self::EditCanvasRotateHalf,
+        Self::EditCanvasRotateLeft,
+        Self::EditCanvasFlipX,
+        Self::EditCanvasFlipY,
+        Self::EditClearHistory,
+        Self::EditPressure,
+        Self::EditAlignTop,
+        Self::EditAlignCenterY,
+        Self::EditAlignBottom,
+        Self::EditAlignLeft,
+        Self::EditAlignCenterX,
+        Self::EditAlignRight,
+        Self::EditDistributeTop,
+        Self::EditDistributeCenterY,
+        Self::EditDistributeBottom,
+        Self::EditDistributeLeft,
+        Self::EditDistributeCenterX,
+        Self::EditDistributeRight,
+        Self::EditSpaceY,
+        Self::EditSpaceX,
+        Self::EditRefBounds,
+        Self::EditRefCanvas,
+        Self::EditRefSelection,
+        Self::EditRefGuides,
+        Self::EditRefAuto,
+        Self::EditTransformScaleRotate,
+        Self::EditTransformScale,
+        Self::EditTransformRotate,
+        Self::EditTransformFree,
+        Self::EditTransformDistort,
+        Self::EditTransformShear,
+        Self::EditTransformPerspective,
+        Self::EditTransformFlipX,
+        Self::EditTransformFlipY,
+        Self::EditTransformMesh,
+        Self::EditTransformPins,
+        Self::EditTransformApply,
+        Self::EditTransformCancel,
+        Self::EditSuperResolution,
+        Self::EditAutoColor,
+        Self::EditAutoColorHints,
+        Self::EditAutoColorOptions,
+        Self::EditAutoShade,
+        Self::EditColorReference,
+        Self::EditMaterialImage,
+        Self::EditMaterialTemplate,
+        Self::EditPreferences,
+        Self::EditModifierSettings,
+        Self::EditCommandBarSettings,
+        Self::EditFontSettings,
+        Self::EditControllerSettings,
+        Self::EditQuickSettings,
+        Self::EditToolCycleSettings,
+        Self::EditWirelessSearch,
+        Self::EditControllerAdd,
+        Self::EditExternalDevice,
+        Self::EditPrivacySettings,
+        Self::EditSystemServices,
+        Self::EditCanvasBasic,
+        Self::EditCopySvg,
+        Self::ShowQuickMenu,
+        Self::CycleTools,
+        Self::EditScreenColor,
+        Self::EditScreenColorHide,
+        Self::EditTextInkBounds,
+        Self::EditVectorCenters,
+        Self::NewTextLayer,
+        Self::NewVectorLayer,
+        Self::EditNativeLayer,
+        Self::RasterizeNativeLayer,
+        Self::NextCanvas,
+        Self::PreviousCanvas,
+        Self::CloseCanvas,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::NextCanvas => "다음 캔버스",
+            Self::PreviousCanvas => "이전 캔버스",
+            Self::CloseCanvas => "닫기",
+            Self::EditTextInkBounds => "텍스트 그리기 경계 정렬",
+            Self::EditVectorCenters => "벡터 중심선 정렬",
+            Self::NewTextLayer => "텍스트 레이어…",
+            Self::NewVectorLayer => "벡터 레이어…",
+            Self::EditNativeLayer => "텍스트 / 벡터 내용 편집…",
+            Self::RasterizeNativeLayer => "텍스트 / 벡터 래스터화",
+            Self::EditScreenColor => "화면색 추출…",
+            Self::EditScreenColorHide => "창을 숨기고 화면색 추출…",
+            Self::EditPreferences => "환경설정…",
+            Self::EditModifierSettings => "보조키 설정…",
+            Self::EditCommandBarSettings => "커맨드 바 설정…",
+            Self::EditFontSettings => "글꼴 관리…",
+            Self::EditControllerSettings => "컨트롤러 설정…",
+            Self::EditQuickSettings => "퀵 메뉴 설정…",
+            Self::EditToolCycleSettings => "도구 순환 설정…",
+            Self::EditWirelessSearch => "무선 장치 검색",
+            Self::EditControllerAdd => "새 장치 등록…",
+            Self::EditExternalDevice => "외부 장치 연결…",
+            Self::EditPrivacySettings => "개인정보 설정…",
+            Self::EditSystemServices => "시스템 서비스 설정…",
+            Self::EditCanvasBasic => "캔버스 기본 설정…",
+            Self::EditCopySvg => "벡터를 SVG로 복사",
+            Self::ShowQuickMenu => "퀵 메뉴 열기",
+            Self::CycleTools => "다음 도구로 순환",
+            Self::EditSuperResolution => "초해상도 확대…",
+            Self::EditAutoColor => "전자동 채색",
+            Self::EditAutoColorHints => "힌트 이미지로 채색",
+            Self::EditAutoColorOptions => "상세 설정으로 채색…",
+            Self::EditAutoShade => "자동 음영…",
+            Self::EditColorReference => "컬러 참조…",
+            Self::EditMaterialImage => "이미지…",
+            Self::EditMaterialTemplate => "템플릿…",
+            Self::EditTransformScaleRotate => "확대 / 축소 / 회전…",
+            Self::EditTransformScale => "확대 / 축소…",
+            Self::EditTransformRotate => "회전…",
+            Self::EditTransformFree => "자유 변형…",
+            Self::EditTransformDistort => "왜곡…",
+            Self::EditTransformShear => "평행 왜곡…",
+            Self::EditTransformPerspective => "원근 왜곡…",
+            Self::EditTransformFlipX => "좌우 반전…",
+            Self::EditTransformFlipY => "상하 반전…",
+            Self::EditTransformMesh => "메시 변형…",
+            Self::EditTransformPins => "퍼펫 변형…",
+            Self::EditTransformApply => "변형 확정",
+            Self::EditTransformCancel => "변형 취소",
+            Self::EditAlignTop => "상단 정렬",
+            Self::EditAlignCenterY => "수직 중앙 정렬",
+            Self::EditAlignBottom => "하단 정렬",
+            Self::EditAlignLeft => "왼쪽 정렬",
+            Self::EditAlignCenterX => "수평 중앙 정렬",
+            Self::EditAlignRight => "오른쪽 정렬",
+            Self::EditDistributeTop => "상단 분포",
+            Self::EditDistributeCenterY => "수직 중앙 분포",
+            Self::EditDistributeBottom => "하단 분포",
+            Self::EditDistributeLeft => "왼쪽 분포",
+            Self::EditDistributeCenterX => "수평 중앙 분포",
+            Self::EditDistributeRight => "오른쪽 분포",
+            Self::EditSpaceY => "수직 등간격 분포",
+            Self::EditSpaceX => "수평 등간격 분포",
+            Self::EditRefBounds => "정렬 대상 기준",
+            Self::EditRefCanvas => "캔버스 기준",
+            Self::EditRefSelection => "선택 범위 기준",
+            Self::EditRefGuides => "가이드 기준",
+            Self::EditRefAuto => "기준 자동 결정",
+            Self::EditCut => "잘라내기",
+            Self::EditCopy => "복사",
+            Self::EditPaste => "붙여넣기",
+            Self::EditPasteAtView => "표시 위치에 붙여넣기",
+            Self::EditClearOutside => "선택 범위 이외 지우기",
+            Self::EditFill => "채우기",
+            Self::EditAdvancedFill => "고급 채우기…",
+            Self::EditBorder => "선택 범위에 테두리 넣기…",
+            Self::EditBrightnessContrast => "밝기 / 대비…",
+            Self::EditHsl => "색조 / 채도 / 명도…",
+            Self::EditPosterize => "계조화…",
+            Self::EditInvert => "계조 반전",
+            Self::EditLevels => "레벨 보정…",
+            Self::EditToneCurve => "톤 커브…",
+            Self::EditColorBalance => "컬러 밸런스…",
+            Self::EditThreshold => "2치화…",
+            Self::EditGradientMap => "그라데이션 맵…",
+            Self::EditResolution => "이미지 해상도 변경…",
+            Self::EditCanvasSize => "캔버스 크기 변경…",
+            Self::EditCrop => "선택 범위에 맞춰 자르기",
+            Self::EditCanvasRotateRight => "시계 방향 90° 회전",
+            Self::EditCanvasRotateHalf => "180° 회전",
+            Self::EditCanvasRotateLeft => "반시계 방향 90° 회전",
+            Self::EditCanvasFlipX => "좌우 반전",
+            Self::EditCanvasFlipY => "상하 반전",
+            Self::EditClearHistory => "작업 내역 비우기",
+            Self::EditPressure => "장치 필압 설정…",
             Self::NewDrawing => "New drawing",
             Self::OpenProject => "Open project",
             Self::SaveProject => "Save project",
@@ -337,6 +619,12 @@ impl Command {
     }
 
     pub fn category(self) -> Category {
+        if self.is_native_command() {
+            return Category::Layer;
+        }
+        if self.is_image_edit() {
+            return Category::Edit;
+        }
         match self {
             Self::SelectAll | Self::Deselect | Self::InvertSelection => {
                 Category::Edit
@@ -347,6 +635,8 @@ impl Command {
             | Self::LayerSelectionIntersect
             | Self::LayerMaskOutsideSelection
             | Self::LayerMaskSelection => Category::Layer,
+            Self::CloseCanvas => Category::File,
+            Self::NextCanvas | Self::PreviousCanvas => Category::Window,
             Self::NewDrawing
             | Self::OpenProject
             | Self::SaveProject
@@ -419,6 +709,119 @@ impl Command {
         }
     }
 
+    pub(crate) fn is_raster_transform(self) -> bool {
+        matches!(
+            self,
+            Self::EditTransformScaleRotate
+                | Self::EditTransformScale
+                | Self::EditTransformRotate
+                | Self::EditTransformFree
+                | Self::EditTransformDistort
+                | Self::EditTransformShear
+                | Self::EditTransformPerspective
+                | Self::EditTransformFlipX
+                | Self::EditTransformFlipY
+                | Self::EditTransformMesh
+                | Self::EditTransformPins
+        )
+    }
+    pub(crate) fn is_settings_command(self) -> bool {
+        matches!(
+            self,
+            Self::EditPreferences
+                | Self::EditModifierSettings
+                | Self::EditCommandBarSettings
+                | Self::EditFontSettings
+                | Self::EditControllerSettings
+                | Self::EditQuickSettings
+                | Self::EditToolCycleSettings
+                | Self::EditWirelessSearch
+                | Self::EditControllerAdd
+                | Self::EditExternalDevice
+                | Self::EditPrivacySettings
+                | Self::EditSystemServices
+                | Self::ShowQuickMenu
+                | Self::CycleTools
+        )
+    }
+    pub(crate) fn is_native_command(self) -> bool {
+        matches!(
+            self,
+            Self::NewTextLayer
+                | Self::NewVectorLayer
+                | Self::EditNativeLayer
+                | Self::RasterizeNativeLayer
+        )
+    }
+    pub(crate) fn is_image_edit(self) -> bool {
+        if self.is_native_command()
+            || matches!(self, Self::EditTextInkBounds | Self::EditVectorCenters)
+        {
+            return true;
+        }
+        if matches!(self, Self::EditScreenColor | Self::EditScreenColorHide) {
+            return true;
+        }
+        if self.is_settings_command()
+            || matches!(self, Self::EditCanvasBasic | Self::EditCopySvg)
+        {
+            return true;
+        }
+        if matches!(
+            self,
+            Self::EditSuperResolution
+                | Self::EditAutoColor
+                | Self::EditAutoColorHints
+                | Self::EditAutoColorOptions
+                | Self::EditAutoShade
+                | Self::EditColorReference
+                | Self::EditMaterialImage
+                | Self::EditMaterialTemplate
+        ) {
+            return true;
+        }
+        if self.is_raster_transform()
+            || matches!(
+                self,
+                Self::EditTransformApply | Self::EditTransformCancel
+            )
+        {
+            return true;
+        }
+        if self.alignment().is_some() || self.align_reference().is_some() {
+            return true;
+        }
+        matches!(
+            self,
+            Self::EditCut
+                | Self::EditCopy
+                | Self::EditPaste
+                | Self::EditPasteAtView
+                | Self::EditClearOutside
+                | Self::EditFill
+                | Self::EditAdvancedFill
+                | Self::EditBorder
+                | Self::EditBrightnessContrast
+                | Self::EditHsl
+                | Self::EditPosterize
+                | Self::EditInvert
+                | Self::EditLevels
+                | Self::EditToneCurve
+                | Self::EditColorBalance
+                | Self::EditThreshold
+                | Self::EditGradientMap
+                | Self::EditResolution
+                | Self::EditCanvasSize
+                | Self::EditCrop
+                | Self::EditCanvasRotateRight
+                | Self::EditCanvasRotateHalf
+                | Self::EditCanvasRotateLeft
+                | Self::EditCanvasFlipX
+                | Self::EditCanvasFlipY
+                | Self::EditClearHistory
+                | Self::EditPressure
+        )
+    }
     pub fn is_tool(self) -> bool {
         self.category() == Category::Tools
     }
@@ -559,6 +962,9 @@ impl Parfait {
             return;
         }
         match command {
+            command if command.is_image_edit() => {
+                self.execute_image_edit(command, ctx)
+            }
             command if command.is_pixel_selection() => {
                 self.execute_pixel_selection(command)
             }
@@ -567,6 +973,13 @@ impl Parfait {
             Command::SaveProject => self.save_project(false),
             Command::SaveAs => self.save_project(true),
             Command::ExportPng => self.export(),
+            Command::NextCanvas => self.cycle_canvas(false),
+            Command::PreviousCanvas => self.cycle_canvas(true),
+            Command::CloseCanvas => {
+                if let Some(id) = self.documents.active_id() {
+                    self.request_tab_close(id);
+                }
+            }
             Command::Undo => self.undo(),
             Command::Redo => self.redo(),
             Command::ConvertToDrawingColor | Command::BrightnessToOpacity => {

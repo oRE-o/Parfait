@@ -213,7 +213,8 @@ impl Parfait {
 
     pub fn display_menu(&mut self, ui: &mut egui::Ui) {
         ui.add_enabled_ui(
-            self.documents.active_session.editing.stroke.is_none(),
+            self.documents.is_empty()
+                || self.documents.active_session.editing.stroke.is_none(),
             |ui| self.expanded_view_menu(ui),
         );
     }
@@ -239,10 +240,8 @@ impl Parfait {
                         ui.checkbox(&mut self.display.pixel_grid, "Pixel grid at 800% or higher");
                         ui.checkbox(&mut self.display.brush_cursor, "Brush cursor outline");
                         ui.separator();
-                        ui.label("Outside-canvas background");
-                        ui.add(egui::Slider::new(&mut self.display.background, 20..=96));
-                        ui.label("Rotation step");
-                        ui.add(egui::Slider::new(&mut self.display.rotation_step, 1.0..=90.).suffix("°"));
+                        widgets::numeric_slider(ui, &mut self.display.background, 20..=96, "캔버스 바깥 밝기", 0, "");
+                        widgets::numeric_slider(ui, &mut self.display.rotation_step, 1.0..=90., "보기 회전 간격", 1, "°");
                         ui.weak("View changes never transform artwork. Pixel grid is a display guide, not snapping.");
                     });
                 ui.separator();

@@ -338,7 +338,9 @@ impl Parfait {
             let interval = if session.recovery.failed {
                 std::time::Duration::from_secs(3)
             } else {
-                std::time::Duration::from_millis(400)
+                std::time::Duration::from_millis(u64::from(
+                    self.options.autosave_delay_ms,
+                ))
             };
             if needs && session.recovery.last_submit.elapsed() >= interval {
                 self.submit_document_recovery(session.key);

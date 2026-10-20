@@ -42,6 +42,9 @@ impl Document {
         let Some(target) = self.layers.get(layer) else {
             return Some("The target layer no longer exists.");
         };
+        if self.native_content(layer).is_some() {
+            return Some("텍스트·벡터를 먼저 래스터화해 주세요 (레이어 메뉴).");
+        }
         if target.kind != crate::LayerKind::Raster {
             return Some("Select a raster layer before converting its pixels.");
         }

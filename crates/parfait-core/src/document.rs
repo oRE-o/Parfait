@@ -76,6 +76,11 @@ pub struct Document {
     pub revision: u64,
     pub next_layer_id: u64,
     pub selection: Option<crate::MaskCoverage>,
+    #[serde(
+        default,
+        deserialize_with = "crate::content::deserialize_contents"
+    )]
+    pub contents: Vec<crate::ContentNode>,
 }
 
 impl Document {
@@ -91,6 +96,7 @@ impl Document {
             height,
             name: "Untitled".into(),
             selection: None,
+            contents: Vec::new(),
             layers: vec![
                 Layer {
                     id: LayerId(1),
@@ -139,7 +145,15 @@ impl Document {
         }
     }
     pub fn validate(&self) -> bool {
-        self.width > 0
+        self.contents.len() <= 64
+            && self.contents.iter().enumerate().all(|(i, n)| {
+                n.validate()
+                    && (i == 0 || self.contents[i - 1].layer.0 < n.layer.0)
+                    && self.layers.iter().any(|l| {
+                        l.id == n.layer && l.kind == crate::LayerKind::Raster
+                    })
+            })
+            && self.width > 0
             && self.height > 0
             && self.width <= 4096
             && self.height <= 4096
@@ -201,10 +215,17 @@ impl Document {
             })
     }
     pub fn touch(&mut self) {
+        self.prune_contents();
         self.revision += 1;
     }
     pub fn same_edit_state(&self, other: &Self) -> bool {
-        self.width == other.width
+        self.contents.len() == other.contents.len()
+            && self
+                .contents
+                .iter()
+                .zip(&other.contents)
+                .all(|(a, b)| a.same_state(b))
+            && self.width == other.width
             && self.height == other.height
             && match (&self.selection, &other.selection) {
                 (None, None) => true,
@@ -287,6 +308,16 @@ impl Document {
             .filter(|below| {
                 self.layers[*below].blend_mode != BlendMode::Through
             })
+    }
+    pub fn layer_insertion_reason(&self) -> Option<&'static str> {
+        let Some(active) = self.layers.get(self.active) else {
+            return Some("유효한 그림을 먼저 열어 주세요.");
+        };
+        self.folder_edit_reason(if active.kind == crate::LayerKind::Folder {
+            Some(active.id)
+        } else {
+            active.parent
+        })
     }
     pub fn add_layer(&mut self) {
         let Some(active) = self.layers.get(self.active) else {

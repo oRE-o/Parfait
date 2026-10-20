@@ -27,6 +27,12 @@ struct LayerDrag {
     moved: bool,
     collapse: Option<usize>,
 }
+#[derive(Clone, Copy)]
+enum LayerDrop {
+    Move { boundary: usize, parent: Option<LayerId>, y: f32 },
+    Inside { folder: usize, rect: Rect },
+    Group { target: usize, rect: Rect },
+}
 impl LayerList {
     pub(crate) fn has_name_editor(&self) -> bool {
         self.rename.is_some()
@@ -1000,14 +1006,28 @@ impl Parfait {
                         )),
                         Sense::click_and_drag(),
                     );
+                    let doc = &self.documents.active_session.document;
+                    let row_label: std::borrow::Cow<'_, str> =
+                        doc.native_content(layer).map_or_else(
+                            || {
+                                std::borrow::Cow::Borrowed(
+                                    doc.layers[layer].name.as_str(),
+                                )
+                            },
+                            |n| {
+                                std::borrow::Cow::Owned(format!(
+                                    "{} · {}",
+                                    n.body().kind_label(),
+                                    doc.layers[layer].name
+                                ))
+                            },
+                        );
                     response.widget_info(|| {
                         egui::WidgetInfo::selected(
                             egui::WidgetType::SelectableLabel,
                             ui.is_enabled(),
                             chosen,
-                            &self.documents.active_session.document.layers
-                                [layer]
-                                .name,
+                            row_label.as_ref(),
                         )
                     });
                     let name = Rect::from_min_max(
@@ -1069,9 +1089,7 @@ impl Parfait {
                         clipped_text(
                             ui,
                             name.min,
-                            &self.documents.active_session.document.layers
-                                [layer]
-                                .name,
+                            row_label.as_ref(),
                             12.,
                             name.width(),
                             ui.visuals().text_color(),
@@ -1234,6 +1252,10 @@ impl Parfait {
                         }
                         ui.separator();
                         for command in [
+                            Command::NewTextLayer,
+                            Command::NewVectorLayer,
+                            Command::EditNativeLayer,
+                            Command::RasterizeNativeLayer,
                             Command::NewLayerFolder,
                             Command::GroupLayersInFolder,
                             Command::UngroupLayerFolder,
@@ -1310,74 +1332,54 @@ impl Parfait {
             && let Some(pointer) =
                 ui.input(|input| input.pointer.interact_pos())
         {
-            if let Some((boundary, y)) = if self
-                .documents
-                .active_session
-                .document
-                .has_non_raster_layers()
+            if let Some(target) =
+                self.layer_drop_target(&targets, viewport, pointer)
             {
-                self.tree_drop_target(&targets, viewport, pointer).map(
-                    |(boundary, parent, y, inside)| {
-                        let valid = parfait_storage::layer_reparent_error(
-                            &self.documents.active_session.document,
-                            drag.mask,
-                            boundary,
-                            parent,
-                        )
-                        .is_none();
-                        if inside {
-                            ui.painter().rect_stroke(
-                                Rect::from_min_max(
-                                    egui::pos2(viewport.left(), y - 20.),
-                                    egui::pos2(viewport.right(), y + 20.),
-                                ),
-                                0.,
-                                egui::Stroke::new(
-                                    1.5,
-                                    if valid {
-                                        crate::theme::ACCENT
-                                    } else {
-                                        Color32::RED
-                                    },
-                                ),
-                                egui::StrokeKind::Inside,
-                            );
-                        }
-                        (
-                            if valid {
-                                boundary
-                            } else {
-                                self.documents
-                                    .active_session
-                                    .document
-                                    .layers
-                                    .len()
-                                    + 1
-                            },
-                            y,
-                        )
-                    },
-                )
-            } else {
-                drop_boundary(
-                    &targets,
-                    viewport,
-                    pointer,
-                    self.documents.active_session.document.layers.len(),
-                )
-            } {
-                let color = if boundary
-                    <= self.documents.active_session.document.layers.len()
-                {
+                let reason = self.layer_drop_reason(drag.mask, target);
+                let color = if reason.is_none() {
                     crate::theme::ACCENT
                 } else {
                     Color32::RED
                 };
-                ui.painter().hline(
-                    viewport.x_range(),
-                    y.clamp(viewport.top(), viewport.bottom()),
-                    egui::Stroke::new(2., color),
-                );
+                let painter = ui.painter().with_clip_rect(viewport);
+                match target {
+                    LayerDrop::Move { y, .. } => {
+                        painter.hline(
+                            viewport.x_range(),
+                            y.clamp(viewport.top(), viewport.bottom()),
+                            egui::Stroke::new(2., color),
+                        );
+                    }
+                    LayerDrop::Inside { rect, .. }
+                    | LayerDrop::Group { rect, .. } => {
+                        let rect = rect.intersect(viewport).shrink(1.);
+                        painter.rect_filled(
+                            rect,
+                            0.,
+                            color.gamma_multiply(0.12),
+                        );
+                        painter.rect_stroke(
+                            rect,
+                            0.,
+                            egui::Stroke::new(1.5, color),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                }
+                let text = reason.unwrap_or(match target {
+                    LayerDrop::Move { .. } => "순서 변경",
+                    LayerDrop::Inside { .. } => "폴더 안으로 이동",
+                    LayerDrop::Group { .. } => "새 폴더로 묶기",
+                });
+                egui::Area::new(egui::Id::new("layer_drop_hint"))
+                    .order(egui::Order::Tooltip)
+                    .interactable(false)
+                    .fixed_pos(pointer + egui::vec2(14., 18.))
+                    .show(ui.ctx(), |ui| {
+                        egui::Frame::popup(ui.style()).show(ui, |ui| {
+                            ui.colored_label(color, text);
+                        });
+                    });
             }
             let direction = if pointer.y < viewport.top() + 18. {
                 -1.
@@ -1401,57 +1403,84 @@ impl Parfait {
             }
         }
     }
-    fn tree_drop_target(
+    fn layer_drop_target(
         &self,
         targets: &[(usize, Rect, Rect)],
         viewport: Rect,
         pointer: Pos2,
-    ) -> Option<(usize, Option<LayerId>, f32, bool)> {
+    ) -> Option<LayerDrop> {
         if !viewport.contains(pointer) {
             return None;
         }
+        let document = &self.documents.active_session.document;
         for (index, rect, _) in targets {
             if pointer.y <= rect.bottom() {
-                let layer =
-                    &self.documents.active_session.document.layers[*index];
-                if layer.kind == parfait_core::LayerKind::Folder
-                    && pointer.y > rect.top() + 10.
+                let layer = &document.layers[*index];
+                if pointer.y > rect.top() + 10.
                     && pointer.y < rect.bottom() - 10.
                 {
-                    return Some((
-                        *index,
-                        Some(layer.id),
-                        rect.center().y,
-                        true,
-                    ));
+                    return Some(
+                        if layer.kind == parfait_core::LayerKind::Folder {
+                            LayerDrop::Inside { folder: *index, rect: *rect }
+                        } else {
+                            LayerDrop::Group { target: *index, rect: *rect }
+                        },
+                    );
                 }
                 if pointer.y < rect.center().y {
-                    return Some((index + 1, layer.parent, rect.top(), false));
+                    return Some(LayerDrop::Move {
+                        boundary: index + 1,
+                        parent: layer.parent,
+                        y: rect.top(),
+                    });
                 }
-                let subtree = self
-                    .documents
-                    .active_session
-                    .document
-                    .layer_subtree_mask(*index)?;
-                return Some((
-                    subtree.trailing_zeros() as usize,
-                    layer.parent,
-                    rect.bottom(),
-                    false,
-                ));
+                return Some(LayerDrop::Move {
+                    boundary: document
+                        .layer_subtree_mask(*index)?
+                        .trailing_zeros()
+                        as usize,
+                    parent: layer.parent,
+                    y: rect.bottom(),
+                });
             }
         }
         let (index, rect, _) = targets.last()?;
-        Some((
-            self.documents
-                .active_session
-                .document
-                .layer_subtree_mask(*index)?
-                .trailing_zeros() as usize,
-            self.documents.active_session.document.layers[*index].parent,
-            rect.bottom(),
-            false,
-        ))
+        Some(LayerDrop::Move {
+            boundary: document.layer_subtree_mask(*index)?.trailing_zeros()
+                as usize,
+            parent: document.layers[*index].parent,
+            y: rect.bottom(),
+        })
+    }
+
+    fn layer_drop_reason(
+        &self,
+        selection: u64,
+        target: LayerDrop,
+    ) -> Option<&'static str> {
+        let document = &self.documents.active_session.document;
+        match target {
+            LayerDrop::Group { target, .. } => {
+                self.group_layer_drop_reason(selection, target)
+            }
+            LayerDrop::Inside { folder, .. } => {
+                parfait_storage::layer_reparent_error(
+                    document,
+                    selection,
+                    folder,
+                    Some(document.layers[folder].id),
+                )
+            }
+            // Flat raster documents keep their existing reorder semantics.
+            LayerDrop::Move { boundary, parent, .. }
+                if document.has_non_raster_layers() =>
+            {
+                parfait_storage::layer_reparent_error(
+                    document, selection, boundary, parent,
+                )
+            }
+            LayerDrop::Move { .. } => None,
+        }
     }
 
     fn layer_drag_events(
@@ -1551,30 +1580,54 @@ impl Parfait {
                     {
                         drag.moved |= drag.origin.distance(pos) > 4.;
                         if drag.moved {
-                            if self
-                                .documents
-                                .active_session
-                                .document
-                                .has_non_raster_layers()
+                            if let Some(target) =
+                                self.layer_drop_target(targets, viewport, pos)
                             {
-                                if let Some((boundary, parent, _, _)) = self
-                                    .tree_drop_target(targets, viewport, pos)
+                                if let Some(reason) =
+                                    self.layer_drop_reason(drag.mask, target)
                                 {
-                                    self.move_tree_selection(
-                                        drag.mask, boundary, parent,
-                                    );
+                                    self.notice = Some(reason.into());
+                                } else {
+                                    match target {
+                                        LayerDrop::Group { target, .. } => self
+                                            .group_layer_drop(
+                                                drag.mask, target,
+                                            ),
+                                        LayerDrop::Inside {
+                                            folder, ..
+                                        } => self.move_tree_selection(
+                                            drag.mask,
+                                            folder,
+                                            Some(
+                                                self.documents
+                                                    .active_session
+                                                    .document
+                                                    .layers[folder]
+                                                    .id,
+                                            ),
+                                        ),
+                                        LayerDrop::Move {
+                                            boundary,
+                                            parent,
+                                            ..
+                                        } => {
+                                            if self
+                                                .documents
+                                                .active_session
+                                                .document
+                                                .has_non_raster_layers()
+                                            {
+                                                self.move_tree_selection(
+                                                    drag.mask, boundary, parent,
+                                                );
+                                            } else {
+                                                self.reorder_layer_mask(
+                                                    drag.mask, boundary,
+                                                );
+                                            }
+                                        }
+                                    }
                                 }
-                            } else if let Some((boundary, _)) = drop_boundary(
-                                targets,
-                                viewport,
-                                pos,
-                                self.documents
-                                    .active_session
-                                    .document
-                                    .layers
-                                    .len(),
-                            ) {
-                                self.reorder_layer_mask(drag.mask, boundary);
                             }
                         } else if let Some(layer) = drag.collapse {
                             self.layer_click(layer, Default::default(), false);
@@ -1670,32 +1723,6 @@ impl Parfait {
     }
 }
 
-fn drop_boundary(
-    targets: &[(usize, Rect, Rect)],
-    viewport: Rect,
-    pointer: Pos2,
-    count: usize,
-) -> Option<(usize, f32)> {
-    if !viewport.contains(pointer) {
-        return None;
-    }
-    for (layer, _, rect) in targets {
-        if pointer.y < rect.center().y {
-            return Some((layer + 1, rect.top()));
-        }
-        if pointer.y <= rect.bottom() {
-            return Some((*layer, rect.bottom()));
-        }
-    }
-    Some((
-        0,
-        targets
-            .last()
-            .map_or(viewport.top(), |(_, _, rect)| rect.bottom())
-            .min(viewport.bottom()),
-    ))
-    .filter(|(boundary, _)| *boundary <= count)
-}
 fn widgets_alpha_icon(ui: &egui::Ui, rect: Rect, selected: bool) {
     crate::widgets::paint_flat_icon(ui, rect, Icon::AlphaLock, selected, 20.);
 }

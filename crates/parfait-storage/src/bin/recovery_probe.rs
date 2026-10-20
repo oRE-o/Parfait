@@ -18,8 +18,26 @@ fn main() -> anyhow::Result<()> {
     doc.layers[1].reference = true;
     doc.layers[1].draft = true;
     assert!(doc.create_layer_mask(1, 128));
+    if args[3].starts_with("native-") {
+        use parfait_core::{Affine, LayerContent, VectorContent, VectorPath};
+        use std::sync::Arc;
+        doc.create_content_layer(
+            LayerContent::Vector(VectorContent {
+                matrix: Affine::translation(8., 8.),
+                paths: vec![VectorPath {
+                    points: Arc::new(vec![[0., 0.], [32., 24.]]),
+                    color: [20, 40, 100, 200],
+                    width: 5.,
+                    closed: false,
+                    fill: false,
+                }],
+            }),
+            "Vector".into(),
+        )
+        .unwrap();
+    }
     store.save(&doc)?;
-    if args[3] == "during" {
+    if args[3].ends_with("during") {
         let conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch("BEGIN IMMEDIATE; DELETE FROM snapshots; INSERT INTO snapshots VALUES(999,x'00',x'00');")?;
         std::fs::write(ready, "transaction-open")?;

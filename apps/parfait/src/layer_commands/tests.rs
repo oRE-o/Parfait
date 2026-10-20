@@ -714,7 +714,7 @@ fn new_commands_ignore_key_repeat_and_text_focus() {
 
 #[test]
 fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
-    assert_eq!(Command::ALL.len(), 93);
+    assert_eq!(Command::ALL.len(), 187);
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     app.documents.active_session.document = Document::new(4, 4);
@@ -759,7 +759,7 @@ fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
     let keys = app.keymap.clone();
     let mut saved: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
-    assert_eq!(saved["version"], 21);
+    assert_eq!(saved["version"], crate::preferences::VERSION);
     drop(app);
     let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     assert!(app.keymap == keys);
@@ -1015,7 +1015,7 @@ fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindin
             &app.saved_preferences_json()
         )
         .unwrap()["version"],
-        21
+        crate::preferences::VERSION
     );
 }
 
@@ -1244,7 +1244,7 @@ fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
             &app.saved_preferences_json()
         )
         .unwrap()["version"],
-        21
+        crate::preferences::VERSION
     );
     drop(app);
     let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();

@@ -32,14 +32,14 @@ struct ParameterGeometry {
 impl ParameterLayout {
     fn height(self) -> f32 {
         match self {
-            Self::Palette => 42.,
-            Self::Detail => 28.,
+            Self::Palette => 46.,
+            Self::Detail => 42.,
         }
     }
 
-    fn geometry(self, rect: Rect) -> ParameterGeometry {
+    fn geometry(self, rect: Rect, has_dynamics: bool) -> ParameterGeometry {
         let right = rect.right() - 2.;
-        let number_right = right - 36.;
+        let number_right = right - if has_dynamics { 36. } else { 15. };
         let (
             number_width,
             top,
@@ -48,8 +48,8 @@ impl ParameterLayout {
             dynamics_top,
             dynamics_height,
         ) = match self {
-            Self::Palette => (49., 8., 33., 25., 6., 28.),
-            Self::Detail => (42., 2., 25., 18., 2., 24.),
+            Self::Palette => (49., 2., 26., 33., 6., 28.),
+            Self::Detail => (49., 2., 23., 31., 2., 24.),
         };
         let number = Rect::from_min_max(
             egui::pos2(number_right - number_width, rect.top() + top),
@@ -58,10 +58,10 @@ impl ParameterLayout {
         ParameterGeometry {
             number,
             track: Rect::from_min_max(
-                rect.min + egui::vec2(24., track_top),
+                rect.min + egui::vec2(8., track_top),
                 egui::pos2(
-                    (number.left() - 10.).max(rect.left() + 44.),
-                    rect.top() + bottom,
+                    right - if has_dynamics { 26. } else { 0. },
+                    rect.top() + track_top + 6.,
                 ),
             ),
             arrows: Rect::from_min_max(
@@ -143,14 +143,21 @@ pub fn parameter(
         egui::vec2(ui.available_width(), options.layout.height()),
         Sense::hover(),
     );
-    let geometry = options.layout.geometry(rect);
+    let geometry = options.layout.geometry(rect, options.dynamics.is_some());
     let compact = options.layout == ParameterLayout::Detail;
     let number_rect = geometry.number;
-    ui.painter().text(
-        rect.min + egui::vec2(6., 2.),
-        egui::Align2::LEFT_TOP,
-        options.label,
+    let mut label = egui::text::LayoutJob::simple_singleline(
+        options.label.to_owned(),
         egui::FontId::proportional(if compact { 11.5 } else { 13. }),
+        ui.visuals().strong_text_color(),
+    );
+    label.wrap = egui::text::TextWrapping::truncate_at_width(
+        (number_rect.left() - rect.left() - 12.).max(1.),
+    );
+    let galley = ui.painter().layout_job(label);
+    ui.painter().galley(
+        rect.min + egui::vec2(6., 3.),
+        galley,
         ui.visuals().strong_text_color(),
     );
     let track = geometry.track;
@@ -403,7 +410,7 @@ mod tests {
         };
         let (rect, _, _) = frame(vec![]);
         assert_eq!(rect.height(), layout.height());
-        let geometry = layout.geometry(rect);
+        let geometry = layout.geometry(rect, true);
         let button = |pos, pressed| egui::Event::PointerButton {
             pos,
             pressed,
@@ -518,7 +525,7 @@ mod tests {
                 (row_rect, value)
             };
             let (rect, _) = frame(vec![]);
-            let geometry = layout.geometry(rect);
+            let geometry = layout.geometry(rect, true);
             for target in [
                 geometry.track,
                 geometry.number,
@@ -527,7 +534,8 @@ mod tests {
             ] {
                 assert!(rect.contains_rect(target));
             }
-            assert!(geometry.track.right() + 1. < geometry.number.left());
+            assert!(geometry.track.top() - 6. > geometry.number.bottom());
+            assert!(geometry.track.right() < geometry.dynamics.left());
             assert!(geometry.number.right() < geometry.arrows.left());
             assert!(geometry.arrows.right() < geometry.dynamics.left());
             for target in [

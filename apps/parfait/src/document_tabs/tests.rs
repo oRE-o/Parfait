@@ -73,6 +73,145 @@ fn button(pos: egui::Pos2, pressed: bool) -> egui::Event {
         modifiers: Default::default(),
     }
 }
+#[test]
+fn tab_drag_reorders_without_editing_documents_and_escape_cancels() {
+    let (dir, mut app) = fixture();
+    app.documents.active_session.untouched_new = false;
+    let a = app.documents.active_id().unwrap();
+    let b = app.new_document_tab(pattern(70)).unwrap();
+    let c = app.new_document_tab(pattern(130)).unwrap();
+    let originals: Vec<_> = app
+        .documents
+        .tab_order
+        .iter()
+        .map(|id| (*id, app.documents.get(*id).unwrap().document.clone()))
+        .collect();
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        frame(&mut app, &ctx, vec![]);
+    }
+    let rect = |id| {
+        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("tab", id))))
+            .unwrap()
+    };
+    let from = rect(a).center();
+    let to = rect(c).right_center() + egui::vec2(22., 0.);
+    frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(from), button(from, true)],
+    );
+    frame(&mut app, &ctx, vec![egui::Event::PointerMoved(to)]);
+    frame(&mut app, &ctx, vec![button(to, false)]);
+    assert_eq!(app.documents.tab_order, [b, c, a]);
+    assert_eq!(app.documents.active_id(), Some(c));
+    for (id, doc) in &originals {
+        assert_eq!(&app.documents.get(*id).unwrap().document, doc);
+        assert!(!app.documents.get(*id).unwrap().history.can_undo());
+    }
+    for _ in 0..2 {
+        frame(&mut app, &ctx, vec![]);
+    }
+    let from = rect(b).center();
+    let to = rect(a).right_center() + egui::vec2(22., 0.);
+    frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(from), button(from, true)],
+    );
+    frame(&mut app, &ctx, vec![egui::Event::PointerMoved(to)]);
+    frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        }],
+    );
+    frame(&mut app, &ctx, vec![button(to, false)]);
+    assert_eq!(app.documents.tab_order, [b, c, a]);
+    app.flush_document_recovery(true).unwrap();
+    drop(app);
+    let restored = Parfait::open_document_tabs(dir.path().into()).unwrap();
+    assert_eq!(restored.documents.tab_order, [b, c, a]);
+}
+#[test]
+fn full_workspace_places_tabs_between_command_bar_and_canvas_inside_docks() {
+    let (_dir, mut app) = fixture();
+    let id = app.documents.active_id().unwrap();
+    app.new_document_tab(pattern(70)).unwrap();
+    let ctx = egui::Context::default();
+    crate::theme::apply(&ctx);
+    for _ in 0..3 {
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1440., 920.),
+                )),
+                ..Default::default()
+            },
+            |ui| app.draw_ui(ui),
+        );
+        out.textures_delta.clear();
+    }
+    let strip = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new("canvas_tab_strip")))
+        .unwrap();
+    let canvas = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new("canvas_rect")))
+        .unwrap();
+    let tab = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("tab", id))))
+        .unwrap();
+    assert!(strip.left() > 200. && strip.right() < 1440. - 150., "{strip:?}");
+    assert!(strip.bottom() <= canvas.top());
+    assert!(strip.contains_rect(tab));
+    assert!(strip.top() > 60.);
+    assert!(canvas.height() > 300.);
+}
+#[test]
+fn canvas_commands_follow_visual_order_and_dirty_middle_click_requires_a_choice()
+ {
+    let (_dir, mut app) = fixture();
+    let a = app.documents.active_id().unwrap();
+    let b = app.new_document_tab(pattern(70)).unwrap();
+    let ctx = egui::Context::default();
+    app.execute_command(Command::NextCanvas, &ctx);
+    assert_eq!(app.documents.active_id(), Some(a));
+    app.execute_command(Command::PreviousCanvas, &ctx);
+    assert_eq!(app.documents.active_id(), Some(b));
+    for _ in 0..3 {
+        frame(&mut app, &ctx, vec![]);
+    }
+    let p = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("tab", b))))
+        .unwrap()
+        .center();
+    for pressed in [true, false] {
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(p),
+                egui::Event::PointerButton {
+                    pos: p,
+                    button: egui::PointerButton::Middle,
+                    pressed,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+    }
+    assert_eq!(app.tabs.close_prompt, Some(b));
+    assert!(app.documents.get(b).is_some());
+    assert!(app.dialog_open());
+    app.tabs.close_prompt = None;
+    assert!(app.documents.get(b).is_some());
+}
 
 #[test]
 fn multi_document_tabs_isolate_pixels_history_view_and_cache() {

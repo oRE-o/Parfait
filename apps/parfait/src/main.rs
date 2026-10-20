@@ -1,4 +1,5 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+mod alignment;
 mod app;
 mod brush_details;
 mod brush_stroke;
@@ -14,19 +15,23 @@ mod document_session;
 mod document_tabs;
 mod documents;
 mod editing;
+mod editor_window;
 mod folder_ui;
 mod history_palette;
+mod image_edit;
 mod layer_commands;
 mod layer_controls;
 mod layer_details;
 mod layer_mask;
 mod layer_organize;
 mod layers;
+mod local_materials;
 mod mask_area;
 mod memory_budget;
 mod menus;
 #[cfg(test)]
 mod multi_document_tests;
+mod native_content;
 mod panels;
 mod pixel_selection;
 mod preferences;
@@ -36,8 +41,10 @@ mod project_state;
 mod raster_conversion;
 mod recovery_runtime;
 mod rulers;
+mod screen_picker;
 #[cfg(test)]
 mod session_target_tests;
+mod settings;
 mod shortcuts;
 mod source_saves;
 mod theme;
@@ -109,6 +116,68 @@ fn run() -> anyhow::Result<()> {
     if args.iter().any(|arg| arg == "--brush-dynamics") {
         app.brush_details.open_pressure_dynamics();
     }
+    let transform_command =
+        args.windows(2).find(|a| a[0] == "--transform").and_then(|a| {
+            Some(match a[1].as_str() {
+                "mesh" => shortcuts::Command::EditTransformMesh,
+                "pins" => shortcuts::Command::EditTransformPins,
+                "free" => shortcuts::Command::EditTransformFree,
+                "rotate" => shortcuts::Command::EditTransformRotate,
+                "scale" => shortcuts::Command::EditTransformScaleRotate,
+                _ => return None,
+            })
+        });
+    // Review a local editor without applying it or touching a project file.
+    let edit_command =
+        args.windows(2).find(|a| a[0] == "--edit").and_then(|a| {
+            Some(match a[1].as_str() {
+                "levels" => shortcuts::Command::EditLevels,
+                "curve" => shortcuts::Command::EditToneCurve,
+                "balance" => shortcuts::Command::EditColorBalance,
+                "gradient" => shortcuts::Command::EditGradientMap,
+                "hsv" => shortcuts::Command::EditHsl,
+                "shade" => shortcuts::Command::EditAutoShade,
+                "resize" => shortcuts::Command::EditResolution,
+                "canvas" => shortcuts::Command::EditCanvasSize,
+                "preferences" => shortcuts::Command::EditPreferences,
+                "brightness" => shortcuts::Command::EditBrightnessContrast,
+                "posterize" => shortcuts::Command::EditPosterize,
+                "threshold" => shortcuts::Command::EditThreshold,
+                _ => return None,
+            })
+        });
+    let hsv_preview =
+        args.windows(2).find(|a| a[0] == "--edit-values").and_then(|a| {
+            let values: Vec<_> = a[1]
+                .split(',')
+                .map(str::parse::<f32>)
+                .collect::<Result<_, _>>()
+                .ok()?;
+            (values.len() == 3 && values.iter().all(|n| n.is_finite()))
+                .then(|| [values[0], values[1], values[2]])
+        });
+    if args.iter().any(|a| a == "--demo-tabs")
+        && app.documents.tab_order.len() == 1
+    {
+        let original = app.documents.active_id().unwrap();
+        let source = app.documents.active_session.document.clone();
+        for n in 1..=2 {
+            let mut doc = source.clone();
+            doc.name = format!("그림 {} · 탭 확인", n + 1);
+            for i in 0..doc.layers.len() {
+                doc.edit_layer_pixels(
+                    i,
+                    parfait_core::PixelEdit::Hsl {
+                        hue: n as f32 * 65.,
+                        saturation: 0.,
+                        lightness: 0.,
+                    },
+                );
+            }
+            app.new_document_tab(doc)?;
+        }
+        app.activate_document(original, false);
+    }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_decorations(false)
@@ -121,6 +190,15 @@ fn run() -> anyhow::Result<()> {
         options,
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
+            if let Err(error) = app.apply_font_options(&cc.egui_ctx) {
+                app.notice = Some(error.to_string());
+            }
+            if let Some(command) = transform_command.or(edit_command) {
+                app.execute_command(command, &cc.egui_ctx);
+                if let Some(values) = hsv_preview {
+                    app.configure_hsv_preview(values);
+                }
+            }
             Ok(Box::new(app))
         }),
     )

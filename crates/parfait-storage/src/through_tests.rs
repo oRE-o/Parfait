@@ -117,7 +117,10 @@ fn current_through_roundtrips_and_bad_current_or_mislabelled_legacy_heads_fall_b
             let mut raw = SNAPSHOT_V9.to_vec();
             bincode::DefaultOptions::new()
                 .with_fixint_encoding()
-                .serialize_into(&mut raw, &document)
+                .serialize_into(
+                    &mut raw,
+                    &crate::legacy_v10::Borrowed::from(&document),
+                )
                 .unwrap();
             raw
         };
@@ -131,7 +134,9 @@ fn current_through_roundtrips_and_bad_current_or_mislabelled_legacy_heads_fall_b
             snapshot_size(&loaded.document).unwrap(),
             bincode::DefaultOptions::new()
                 .with_fixint_encoding()
-                .serialized_size(&loaded.document)
+                .serialized_size(&crate::legacy_v10::Borrowed::from(
+                    &loaded.document
+                ))
                 .unwrap()
                 + SNAPSHOT_V10.len() as u64
         );

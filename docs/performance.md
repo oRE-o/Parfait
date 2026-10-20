@@ -1,5 +1,57 @@
 # Stroke performance
 
+## Edit-menu CPU workload, Windows 2026-10-20
+
+Intel Core i7-8700 @ 3.20 GHz (6 cores / 12 logical processors), Windows x86_64 GNU, Rust 1.99.1, workspace release profile. Reproduce with `cargo run --release -p parfait-core --example edit_bench`. The deterministic fixture has eight layers including paper, a mask, dense partial selection and coordinate-generated alpha/color values. The native variant adds one vector and one embedded-font Korean/Latin text layer. Nine independent COW edits include full compositing; p95 below is the maximum of nine samples, a coarse observation rather than a production tail estimate. Validation and checksums occur outside the timed interval.
+
+| Canvas | Edit + full composite | Median ms | Observed p95 ms | RGBA FNV-1a |
+| --- | --- | ---: | ---: | --- |
+| 512 × 384 | Brightness/contrast | 41.429 | 42.214 | ff66e62d6b8f3d40 |
+| 512 × 384 | Rotate right | 47.591 | 48.524 | d42d06b7b9b434b6 |
+| 512 × 384 | Resize 125% | 166.634 | 167.573 | 438f8eb542ff845c |
+| 512 × 384 | Projective transform | 60.402 | 60.492 | 472160a43e7c533c |
+| 512 × 384 | Resize with native content | 188.076 | 188.615 | ab0cf5419d583d8f |
+| 1024 × 768 | Brightness/contrast | 161.744 | 162.348 | 463ad80b6c8eb6ac |
+| 1024 × 768 | Rotate right | 229.190 | 236.305 | e529cb4cd770804b |
+| 1024 × 768 | Resize 125% | 660.992 | 671.307 | 589fffff77d135f1 |
+| 1024 × 768 | Projective transform | 240.081 | 245.827 | aa5d88ab553e5095 |
+| 1024 × 768 | Resize with native content | 743.363 | 825.526 | a8992c12b0f3600a |
+
+Exact comparisons pass for every pixel of the rotated composite, every region/full-composite sample and native-to-raster conversion. Four native canvas quarter-turns also restore the original model and composite in the core regression suite. These measurements describe CPU editing workloads; they do not measure physical pen-to-display latency, working-set high-water, screen capture or background-save contention. At that initial stage previews required a click. The later local-edit work described below moves previews to a bounded worker and can reuse completed result buffers; confirmation before a result is ready can still stall the UI. This work does not establish SAI/CSP performance parity or the 16.7 ms drawing-frame aspiration.
+
+
+### Local transform follow-up
+
+Same machine/toolchain and nine-sample workload after adding arbitrary puppet pins, a variable mesh and a target-space triangle index. Existing projective checksums remain `472160a43e7c533c` / `aa5d88ab553e5095` and exact rotation/native-rasterization/region comparisons still pass. No speedup is inferred from separate runs.
+
+| Canvas | Edit + full composite | Median ms | Observed p95 ms | RGBA FNV-1a |
+| --- | --- | ---: | ---: | --- |
+| 512 × 384 | 4 × 5 mesh | 49.897 | 50.418 | 236fe81a1d3fb78c |
+| 512 × 384 | Three arbitrary puppet pins | 52.949 | 54.202 | ce50abc99d703049 |
+| 1024 × 768 | 4 × 5 mesh | 197.132 | 202.429 | 5a366dd84b665d87 |
+| 1024 × 768 | Three arbitrary puppet pins | 207.824 | 208.247 | d2e80dd2633dbe46 |
+
+Transform previews now use a single bounded local worker. Intermediate requests are coalesced, row-level cancellation preserves the source, and an already completed exact preview can be committed by sharing its result buffers. A pointer-event regression verifies buffer identity, not just equal pixels. These CPU numbers include neither the worker-to-frame delivery interval nor physical display/pen latency. Confirming before a preview is ready still runs the final transform synchronously; UI upload/compositing work also remains on the UI thread.
+
+### Local tone and silhouette-lighting follow-up
+
+Same Windows/CPU/toolchain and nine-sample release workload. The following final run was sequential, after tests/builds and before native framebuffer QA helpers were launched; exploratory runs overlapping compilation/tests are excluded. Levels and curves affect two selected raster layers; gradient mapping affects one. Shading adds two clipped raster layers and computes a smoothed silhouette-distance height field. Every timing includes the resulting full composite. These are editing costs, not frame/pen latency or a performance comparison against CSP.
+
+| Canvas | Edit + full composite | Median ms | Observed p95 ms | RGBA FNV-1a |
+| --- | --- | ---: | ---: | --- |
+| 512 × 384 | Master + channel levels | 39.739 | 40.059 | 19e13c3e01390b50 |
+| 512 × 384 | Smooth RGB curves | 40.346 | 43.931 | 874e6ca1e4d97859 |
+| 512 × 384 | Three-stop linear-light gradient | 84.420 | 87.125 | 09871e729373a9e2 |
+| 512 × 384 | Smoothed silhouette lighting | 49.049 | 49.794 | f7aa8190b6ad5a51 |
+| 1024 × 768 | Master + channel levels | 152.572 | 162.969 | 766611407e8765bc |
+| 1024 × 768 | Smooth RGB curves | 154.105 | 156.614 | b6c9b2ea6ae4096a |
+| 1024 × 768 | Three-stop linear-light gradient | 335.590 | 339.861 | 468f134a42537f20 |
+| 1024 × 768 | Smoothed silhouette lighting | 194.402 | 197.896 | e4f12ad685f8b40e |
+
+Exact rotation, native rasterization and region/full pixel equivalence still pass. Existing projective checksums remain unchanged. LUTs are prepared once per edit. Gradient segments cache constant color-space conversions; deterministic RGB-grid tests require byte-exact agreement with scalar gradient sampling, and workload checksums remain identical for that preparation change. Silhouette smoothing intentionally changes new shading results, separately covered by layer/alpha/cancellation tests.
+
+Tone/shading previews run in one local worker with conservative source/result/scratch/reference reservations. Peak process RSS, GPU texture memory, native input/frame delivery and arbitrary large-document timings remain unmeasured. Confirmation before completion can still run synchronously. Canvas resizing and region assistance do not yet cancel in the middle of their core operation.
+
 ## Multi-document Stages 3–4: default durable workflow
 
 2026-10-20, macOS 26.4.1 arm64 / Rust 1.99.1, workspace release profile. The processor model is not established, so this is not the named modest-reference-machine acceptance run. The current uncommitted tree defaults to tabs/recovery/asynchronous original saving, with no activation option. [Raw observations and executable SHA-256 values](validation/multi-document-3-4-release.json) retain all stdout and per-child peak RSS.
@@ -550,3 +602,15 @@ Run `cargo run --release -p parfait-core --example wash_bench`. Three Apple M1/m
 Capped mode is optional and costs extra work: the same 512 px per-dab cases average 0.3158–0.3256 ms for Paint and 0.2510–0.2558 ms for Erase, with zero contribution scratch. Capped first-dab times at 512 px are 3.6784–4.0105 ms for Paint and 4.2478–4.3152 ms for Erase, including the imposed COW. These small fixtures do not bound large-document COW, actual frame time or physical pen latency.
 
 Contribution storage is lazy 64²-cell tiles, not a full extra RGBA scratch image. Fully covering the largest supported 4096² document uses at most 64 MiB payload plus 32 KiB indexing on a 64-bit target, excluding allocator overhead, original/current layer pixels and history/save snapshots. Transparent erase and painting identical opaque ink allocate neither tiles nor destination COW and do not dirty the document. Baseline buffers remain shared until a real pixel change; whole-layer COW is still a follow-up bottleneck. The complete stripped release executable is 12,758,992 bytes, not a RAM measurement. No manifest/lockfile dependency or background task was added, and durability/format validation were not weakened.
+
+
+## HSV and canvas-tab follow-up (Windows, 2026-10-20)
+
+The same sequential nine-sample `edit_bench` workload adds `hsv_preview_edit`: hue +70°, saturation +45%, lightness +10%, one raster layer, partial selection, then full CPU composition. Hue/saturation preserves neutral colors and lightness reaches white/black endpoints. The final run was after checks/builds and before native QA helpers.
+
+| Canvas | Median ms | Observed p95/max of 9 ms | RGBA FNV-1a |
+| --- | ---: | ---: | --- |
+| 512 × 384 | 48.049 | 48.162 | 9123dc0122c4cd54 |
+| 1024 × 768 | 188.661 | 191.435 | 5ebb996690acca05 |
+
+All existing edit checksums and exact rotation/native-rasterization/region comparisons remain intact. This validates deterministic CPU pixels, not equivalence to CSP's formulas, pen latency or worker-to-screen preview latency. Canvas tabs add bounded metadata and share existing document ownership. The navigator reuses the canvas preview texture; it does not allocate another full preview buffer. Native framebuffer checks cover the new layout and visible preview agreement, not a timing benchmark.

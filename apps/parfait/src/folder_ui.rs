@@ -312,4 +312,43 @@ impl Parfait {
         );
         self.reveal_layer(self.documents.active_session.document.active);
     }
+
+    pub(crate) fn group_layer_drop_reason(
+        &self,
+        selection: u64,
+        target: usize,
+    ) -> Option<&'static str> {
+        let document = &self.documents.active_session.document;
+        let Some(layer) = document.layers.get(target) else {
+            return Some("대상 레이어가 없습니다.");
+        };
+        if layer.kind == LayerKind::Folder || layer.kind.is_paper() {
+            return Some("일반 레이어 위에 놓아 새 폴더로 묶어 주세요.");
+        }
+        if document
+            .layer_selection_subtrees(selection)
+            .is_none_or(|mask| mask & (1 << target) != 0)
+        {
+            return Some("선택하지 않은 레이어 위에 놓아 주세요.");
+        }
+        parfait_storage::layer_folder_growth_error(
+            document,
+            Some(selection | (1 << target)),
+            self.folder_name().len(),
+        )
+    }
+
+    pub(crate) fn group_layer_drop(&mut self, selection: u64, target: usize) {
+        if let Some(reason) = self.group_layer_drop_reason(selection, target) {
+            self.notice = Some(reason.into());
+            return;
+        }
+        let name = self.folder_name();
+        self.edit_named("레이어를 새 폴더로 묶기", |document| {
+            document.group_layers_in_folder(selection | (1 << target), name);
+        });
+        let active = self.documents.active_session.document.active;
+        self.set_layer_selection(1 << active, active);
+        self.reveal_layer(active);
+    }
 }

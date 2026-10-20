@@ -868,3 +868,181 @@ fn multi_document_layer_drag_cancels_before_switch_and_inline_name_blocks_switch
     app.documents.active_session.layer_ui.list.cancel_pointer();
     assert!(app.activate_document(a, true));
 }
+
+#[test]
+fn center_drop_groups_selection_in_one_edit_and_preserves_pixels_undo_and_redo()
+{
+    for release_only in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let ctx = egui::Context::default();
+        let mut time = 0.;
+        setup(&mut app, &ctx, &mut time);
+        app.set_layer_selection(0b1100, 2);
+        for (index, layer) in app
+            .documents
+            .active_session
+            .document
+            .layers
+            .iter_mut()
+            .enumerate()
+            .skip(1)
+        {
+            for (pixel, rgba) in Arc::make_mut(&mut layer.pixels)
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .enumerate()
+            {
+                if (pixel + index) % 3 == 0 {
+                    rgba.copy_from_slice(&[index as u8 * 60, 40, 200, 255]);
+                }
+            }
+        }
+        let before = app.documents.active_session.document.clone();
+        let pixels = before.composite();
+        let start = row(&ctx, "layer_row", 2).center();
+        let target = row(&ctx, "layer_row", 1).center();
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(start),
+                pointer(start, true, Default::default()),
+            ],
+            &mut time,
+        );
+        if !release_only {
+            frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(target)],
+                &mut time,
+            );
+            assert!(
+                app.documents.active_session.document.same_edit_state(&before)
+            );
+        }
+        frame(
+            &mut app,
+            &ctx,
+            vec![pointer(target, false, Default::default())],
+            &mut time,
+        );
+        let document = &app.documents.active_session.document;
+        assert!(document.validate());
+        assert_eq!(document.layers.len(), 5);
+        let folder = &document.layers[document.active];
+        assert_eq!(folder.kind, parfait_core::LayerKind::Folder);
+        assert_eq!(app.selected_layer_mask(), 1 << document.active);
+        for original in &before.layers[1..] {
+            let child =
+                &document.layers[document.layer_index(original.id).unwrap()];
+            assert_eq!(child.parent, Some(folder.id));
+            assert!(Arc::ptr_eq(&child.pixels, &original.pixels));
+        }
+        assert_eq!(document.composite(), pixels);
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
+        let grouped = app.documents.active_session.document.clone();
+        app.undo();
+        assert!(app.documents.active_session.document.same_edit_state(&before));
+        app.redo();
+        assert!(
+            app.documents.active_session.document.same_edit_state(&grouped)
+        );
+    }
+}
+
+#[test]
+fn center_drop_rejects_selected_descendants_different_parents_and_full_documents()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(2, 2);
+    app.documents.active_session.document.add_layer();
+    assert!(app.group_layer_drop_reason(2, 1).is_some());
+    let folder = app
+        .documents
+        .active_session
+        .document
+        .group_layers_in_folder(2, "Nested".into())
+        .unwrap();
+    assert!(app.group_layer_drop_reason(1 << 2, 1).is_some());
+    assert!(app.group_layer_drop_reason(1 << 3, 1).is_some());
+    let before = app.documents.active_session.document.clone();
+    app.group_layer_drop(1 << 3, 1);
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+    assert_eq!(app.documents.active_session.history.rows().count(), 0);
+    // Siblings within a folder may be grouped, and stay inside that parent.
+    app.documents.active_session.document.active = 1;
+    app.documents.active_session.document.add_layer();
+    assert!(app.group_layer_drop_reason(1 << 2, 1).is_none());
+    app.group_layer_drop(1 << 2, 1);
+    let document = &app.documents.active_session.document;
+    assert_eq!(document.layers[document.active].parent, Some(folder));
+    assert!(document.validate());
+    app.documents.active_session.document = Document::new(1, 1);
+    while app.documents.active_session.document.layers.len() < 64 {
+        app.documents.active_session.document.add_layer();
+    }
+    let before = app.documents.active_session.document.clone();
+    assert!(app.group_layer_drop_reason(2, 2).is_some());
+    app.group_layer_drop(2, 2);
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+}
+
+#[test]
+fn center_drop_cancel_and_self_drop_preserve_redo() {
+    for mode in 0..3 {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let ctx = egui::Context::default();
+        let mut time = 0.;
+        setup(&mut app, &ctx, &mut time);
+        app.edit_named("Opacity", |d| d.layers[1].opacity = 0.5);
+        app.undo();
+        let before = app.documents.active_session.document.clone();
+        let start = row(&ctx, "layer_row", 2).center();
+        let target = if mode == 2 {
+            start + egui::vec2(5., 0.)
+        } else {
+            row(&ctx, "layer_row", 1).center()
+        };
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(start),
+                pointer(start, true, Default::default()),
+                egui::Event::PointerMoved(target),
+            ],
+            &mut time,
+        );
+        let cancel = if mode == 0 {
+            egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }
+        } else if mode == 1 {
+            egui::Event::WindowFocused(false)
+        } else {
+            pointer(target, false, Default::default())
+        };
+        frame(&mut app, &ctx, vec![cancel], &mut time);
+        frame(
+            &mut app,
+            &ctx,
+            vec![pointer(target, false, Default::default())],
+            &mut time,
+        );
+        assert!(app.documents.active_session.document.same_edit_state(&before));
+        app.redo();
+        assert_eq!(
+            app.documents.active_session.document.layers[1].opacity,
+            0.5
+        );
+    }
+}

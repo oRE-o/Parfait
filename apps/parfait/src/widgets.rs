@@ -118,6 +118,67 @@ pub fn action_row<Result>(
     })
 }
 
+/// A label above a full-width track, with a stable numeric column on the right.
+/// Keep sizing local so compact palette rows don't inherit dialog dimensions.
+pub(crate) fn numeric_slider<N: egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    label: &str,
+    decimals: usize,
+    suffix: &str,
+) -> egui::Response {
+    ui.push_id(label, |ui| {
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.;
+            ui.add(egui::Label::new(label).truncate());
+            ui.horizontal(|ui| {
+                let number_width = 64.;
+                ui.spacing_mut().slider_width = (ui.available_width()
+                    - number_width
+                    - ui.spacing().item_spacing.x)
+                    .max(24.);
+                ui.spacing_mut().slider_rail_height = 3.;
+                let slider = ui
+                    .add(
+                        egui::Slider::new(value, range.clone())
+                            .show_value(false)
+                            .clamping(egui::SliderClamping::Edits)
+                            .max_decimals(decimals)
+                            .handle_shape(egui::style::HandleShape::Rect {
+                                aspect_ratio: 0.25,
+                            })
+                            .trailing_fill(false),
+                    )
+                    .on_hover_text(label);
+                let speed =
+                    (range.end().to_f64() - range.start().to_f64()) / 200.;
+                let number = ui
+                    .add_sized(
+                        [number_width, 22.],
+                        egui::DragValue::new(value)
+                            .range(range)
+                            .speed(speed)
+                            .max_decimals(decimals)
+                            .suffix(suffix),
+                    )
+                    .on_hover_text(label);
+                #[cfg(test)]
+                ui.data_mut(|data| {
+                    data.insert_temp(
+                        egui::Id::new(("numeric_slider", label)),
+                        (slider.rect, number.rect),
+                    );
+                });
+                slider.union(number)
+            })
+            .inner
+        })
+        .inner
+    })
+    .inner
+}
+
 pub fn menu_item(
     ui: &mut egui::Ui,
     label: &str,
@@ -571,6 +632,68 @@ pub fn color_wheel_sized(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn numeric_tracks_use_remaining_width_and_preserve_unedited_precision() {
+        for width in [160., 280., 480., 900.] {
+            let ctx = egui::Context::default();
+            crate::theme::apply(&ctx);
+            let original = 3. / 128.;
+            let mut value = original;
+            let mut targets = (Rect::NOTHING, Rect::NOTHING);
+            for _ in 0..2 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            Pos2::ZERO,
+                            egui::vec2(1000., 300.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        ui.scope_builder(
+                            egui::UiBuilder::new().max_rect(
+                                Rect::from_min_size(
+                                    egui::pos2(8., 8.),
+                                    egui::vec2(width, 200.),
+                                ),
+                            ),
+                            |ui| {
+                                ui.set_width(width);
+                                numeric_slider(
+                                    ui,
+                                    &mut value,
+                                    -1. ..=1.,
+                                    "긴 항목명도 숫자와 겹치지 않습니다",
+                                    2,
+                                    "",
+                                );
+                                targets = ui.data(|data| {
+                                    data.get_temp(egui::Id::new((
+                                        "numeric_slider",
+                                        "긴 항목명도 숫자와 겹치지 않습니다",
+                                    )))
+                                    .unwrap()
+                                });
+                            },
+                        );
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                value, original,
+                "Rendering a rounded display must not quantize canvas coordinates"
+            );
+            let (track, number) = targets;
+            assert!(
+                (track.width() - (width - 68.)).abs() < 1.,
+                "{width}: {targets:?}"
+            );
+            assert!((number.width() - 64.).abs() < 1.);
+            assert!(track.right() < number.left());
+            assert!((number.right() - (8. + width)).abs() < 1.);
+        }
+    }
     #[test]
     fn action_rows_align_equal_height_buttons_to_the_right_without_wrapping() {
         let ctx = egui::Context::default();

@@ -237,10 +237,12 @@ impl Document {
             .iter()
             .enumerate()
             .filter(|(index, _)| expanded & (1 << index) != 0)
-            .map(|(_, layer)| {
-                pixels
-                    * (4 * u64::from(layer.kind == crate::LayerKind::Raster)
-                        + u64::from(layer.mask.is_some()))
+            .map(|(index, layer)| {
+                self.native_content(index).map_or(0, |n| n.logical_bytes())
+                    + pixels
+                        * (4 * u64::from(
+                            layer.kind == crate::LayerKind::Raster,
+                        ) + u64::from(layer.mask.is_some()))
             })
             .sum();
         (self.logical_pixel_bytes().saturating_add(added) > 512 * 1024 * 1024)
@@ -286,6 +288,14 @@ impl Document {
                 copied |= 1 << (output.len() - 1);
             }
         }
+        let mapping: Vec<_> = self
+            .layers
+            .iter()
+            .zip(identities)
+            .filter(|(_, id)| id.0 != 0)
+            .map(|(l, id)| (l.id, id))
+            .collect();
+        self.duplicate_contents(&mapping);
         self.layers = output;
         self.active = 63 - copied.leading_zeros() as usize;
         self.touch();

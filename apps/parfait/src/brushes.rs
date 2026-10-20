@@ -983,7 +983,7 @@ mod tests {
                 &app.saved_preferences_json()
             )
             .unwrap()["version"],
-            21
+            crate::preferences::VERSION
         );
         drop(app);
         let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
@@ -1441,7 +1441,7 @@ mod tests {
         assert!(app.error.is_none());
         let saved: serde_json::Value =
             serde_json::from_str(&app.saved_preferences_json()).unwrap();
-        assert_eq!(saved["version"], 21);
+        assert_eq!(saved["version"], 22);
         drop(app);
         let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(restored.brush.pressure_curve, curve);
@@ -1622,7 +1622,7 @@ mod pressure_spacing_tests {
         let json = app.saved_preferences_json();
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
-            21
+            crate::preferences::VERSION
         );
         drop(app);
         let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();

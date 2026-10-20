@@ -10,6 +10,8 @@ Parfait should feel like a lightweight drawing tool from the moment it opens: im
 4. First-class Windows, macOS and Linux desktop releases, then mobile apps sharing the Rust core and project format.
 5. An optional community where creators can publish, discover and share brushes and other materials.
 
+External AI processing is forbidden by the current project direction (2026-10-20). Do not upload artwork to AI services, add cloud-AI clients, or automatically download models. Improve local algorithms and interactions; any future model execution must use explicitly selected local resources.
+
 Drawing, opening local materials and saving projects must work offline without an account. Community loading, browsing and downloads must never run in the stroke processing path. Avoid mandatory background services and a browser runtime in the desktop drawing shell.
 
 ## Performance acceptance

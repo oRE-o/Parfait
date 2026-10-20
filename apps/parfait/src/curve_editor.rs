@@ -66,7 +66,18 @@ pub fn edit(
     selected: &mut Option<usize>,
     options: Options<'_>,
 ) -> Rect {
-    edit_inner(ui, id, points, selected, options, None).0
+    edit_inner(ui, id, points, selected, options, None, None).0
+}
+
+pub fn edit_tone(
+    ui: &mut egui::Ui,
+    id: impl egui::AsIdSalt,
+    points: &mut Vec<[f32; 2]>,
+    selected: &mut Option<usize>,
+    histogram: &[u64; 256],
+    options: Options<'_>,
+) -> Rect {
+    edit_inner(ui, id, points, selected, options, None, Some(histogram)).0
 }
 
 pub fn edit_brush(
@@ -86,6 +97,7 @@ pub fn edit_brush(
         selected,
         options,
         Some(&mut controls),
+        None,
     );
     if edited || curve.controls.is_some() {
         curve.controls = Some(controls);
@@ -110,6 +122,7 @@ fn edit_inner(
     selected: &mut Option<usize>,
     options: Options<'_>,
     mut controls: Option<&mut Vec<[[f32; 2]; 2]>>,
+    histogram: Option<&[u64; 256]>,
 ) -> (Rect, bool) {
     let valid = (2..=options.max_points).contains(&points.len())
         && points
@@ -278,6 +291,10 @@ fn edit_inner(
         previous_points.clone_from(points);
         let painter = ui.painter();
         painter.rect_filled(r, 0., Color32::from_gray(65));
+        if let Some(bins)=histogram {
+            let max=bins.iter().copied().max().unwrap_or(1).max(1) as f64;
+            for (i,n) in bins.iter().enumerate(){let h=(*n as f64/max).sqrt() as f32*r.height();painter.rect_filled(Rect::from_min_max(egui::pos2(r.left()+i as f32/256.*r.width(),r.bottom()-h),egui::pos2(r.left()+(i+1) as f32/256.*r.width(),r.bottom())),0.,Color32::from_gray(88));}
+        }
         for i in 0..=4 {
             let t = i as f32 / 4.;
             let stroke = Stroke::new(1., Color32::from_gray(125));
@@ -410,7 +427,7 @@ fn edit_inner(
         }
         if !options.fixed_x {
             let clicked = ui
-                .add_enabled(removable, egui::Button::new("Delete selected point"))
+                .add_enabled(removable, egui::Button::new(if histogram.is_some(){"선택한 점 삭제"}else{"Delete selected point"}))
                 .clicked();
             if removable
                 && (delete || clicked)

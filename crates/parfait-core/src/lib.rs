@@ -4,8 +4,31 @@ mod edit_state;
 pub use art_digest::ArtDigestV1;
 pub use edit_state::EditStateId;
 mod brush;
+mod content;
 mod document;
+pub use content::{
+    Affine, ContentBox, ContentNode, LayerContent, MAX_CONTENT_FONT_BYTES,
+    MAX_CONTENT_PATHS, MAX_CONTENT_POINTS, TextContent, VectorContent,
+    VectorPath,
+};
 mod history;
+mod image_edit;
+pub use image_edit::{PixelClipboard, PixelEdit};
+mod tone;
+pub use tone::{
+    GradientStop, ToneAdjustment, ToneLevels, automatic_tone_range,
+    preserve_luminance,
+};
+mod transform;
+pub use transform::{RasterTransform, WarpKind, WarpPin};
+mod alignment;
+pub use alignment::Align;
+mod canvas_edit;
+mod color_assist;
+mod local_shading;
+pub use canvas_edit::CanvasEdit;
+pub use color_assist::RegionColors;
+pub use local_shading::LocalShading;
 mod layer_folders;
 mod layer_mask;
 mod layer_ops;

@@ -8,3 +8,7 @@ license.workspace = true
 serde.workspace = true
 getrandom = "0.3"
 sha2 = "0.10"
+ttf-parser = "0.25"
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
+
+delaunator = "1.1"
