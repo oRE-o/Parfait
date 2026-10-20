@@ -8,8 +8,8 @@ impl Parfait {
         &self,
         command: Command,
     ) -> Option<&'static str> {
-        if self.documents.session.editing.stroke.is_some()
-            || self.documents.session.layer_ui.list.owns_pointer()
+        if self.documents.active_session.editing.stroke.is_some()
+            || self.documents.active_session.layer_ui.list.owns_pointer()
             || self.dialog_open()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
@@ -23,7 +23,7 @@ impl Parfait {
                 | Command::LayerSelectionAdd
                 | Command::LayerSelectionSubtract
                 | Command::LayerSelectionIntersect
-        ) && self.documents.session.document.selection.is_none()
+        ) && self.documents.active_session.document.selection.is_none()
         {
             return Some("먼저 선택 범위를 만들어 주세요.");
         }
@@ -35,15 +35,15 @@ impl Parfait {
                 return Some("마스크를 만들 레이어 하나를 선택해 주세요.");
             }
             return parfait_storage::layer_mask_creation_error(
-                &self.documents.session.document,
-                self.documents.session.document.active,
+                &self.documents.active_session.document,
+                self.documents.active_session.document.active,
             );
         }
         if command == Command::Deselect {
             return None;
         }
         parfait_storage::selection_update_error(
-            &self.documents.session.document,
+            &self.documents.active_session.document,
             command != Command::SelectAll,
         )
     }
@@ -83,13 +83,13 @@ impl Parfait {
             command,
             Command::LayerMaskOutsideSelection | Command::LayerMaskSelection
         ) {
-            self.documents.session.editing.mask_target = Some(
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+            self.documents.active_session.editing.mask_target = Some(
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .id,
             );
-            self.documents.session.editing.mask_overlay = None;
-        } else if self.documents.session.document.selection.is_none()
+            self.documents.active_session.editing.mask_overlay = None;
+        } else if self.documents.active_session.document.selection.is_none()
             && command != Command::Deselect
         {
             self.notice = Some("선택 범위가 작성되지 않았습니다.".into());

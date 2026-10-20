@@ -5,34 +5,37 @@ use parfait_core::Document;
 #[test]
 fn folder_commands_preserve_selection_history_and_project_roundtrip() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.add_layer();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.add_layer();
     app.set_layer_selection(0b110, 2);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     let context = egui::Context::default();
     app.execute_command(Command::GroupLayersInFolder, &context);
-    let folder = app.documents.session.document.layers[3].id;
-    assert_eq!(app.documents.session.document.layers[1].parent, Some(folder));
+    let folder = app.documents.active_session.document.layers[3].id;
+    assert_eq!(
+        app.documents.active_session.document.layers[1].parent,
+        Some(folder)
+    );
     assert_eq!(app.selected_layer_mask(), 1 << 3);
-    assert_eq!(app.documents.session.history.rows().count(), 2);
-    let grouped = app.documents.session.document.clone();
+    assert_eq!(app.documents.active_session.history.rows().count(), 2);
+    let grouped = app.documents.active_session.document.clone();
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.document.same_edit_state(&before));
     app.redo();
-    assert!(app.documents.session.document.same_edit_state(&grouped));
+    assert!(app.documents.active_session.document.same_edit_state(&grouped));
     app.execute_command(Command::DuplicateLayer, &context);
-    assert_eq!(app.documents.session.document.layers.len(), 7);
-    assert!(app.documents.session.document.validate());
+    assert_eq!(app.documents.active_session.document.layers.len(), 7);
+    assert!(app.documents.active_session.document.validate());
     app.execute_command(Command::DeleteLayer, &context);
-    assert!(app.documents.session.document.same_edit_state(&grouped));
+    assert!(app.documents.active_session.document.same_edit_state(&grouped));
     app.execute_command(Command::UngroupLayerFolder, &context);
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.document.same_edit_state(&before));
     app.undo();
     app.execute_command(Command::NewLayerFolder, &context);
     assert_eq!(
-        app.documents.session.document.layers
-            [app.documents.session.document.active]
+        app.documents.active_session.document.layers
+            [app.documents.active_session.document.active]
             .parent,
         Some(folder)
     );
@@ -44,21 +47,21 @@ fn folder_commands_preserve_selection_history_and_project_roundtrip() {
         .unwrap()
         .unwrap()
         .document;
-    assert_eq!(loaded.layers, app.documents.session.document.layers);
+    assert_eq!(loaded.layers, app.documents.active_session.document.layers);
 }
 
 #[test]
 fn locked_folder_protects_structure_and_descendants() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
     app.documents
-        .session
+        .active_session
         .document
         .group_layers_in_folder(2, "Folder".into())
         .unwrap();
     app.select_layer(1);
-    app.documents.session.document.layers[2].locked = true;
+    app.documents.active_session.document.layers[2].locked = true;
     assert!(app.command_disabled_reason(Command::NewLayerFolder).is_some());
     assert!(
         app.command_disabled_reason(Command::GroupLayersInFolder).is_some()
@@ -69,7 +72,7 @@ fn locked_folder_protects_structure_and_descendants() {
 #[test]
 fn previous_preferences_keep_existing_keys_and_new_folder_bindings_roundtrip() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     app.keymap
         .assign(
             Command::LayerLock,
@@ -85,7 +88,7 @@ fn previous_preferences_keep_existing_keys_and_new_folder_bindings_roundtrip() {
     let path = directory.path().join("preferences.sqlite");
     parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert_eq!(app.keymap.hint(Command::LayerLock), "F6");
     for (command, key) in [
@@ -107,6 +110,6 @@ fn previous_preferences_keep_existing_keys_and_new_folder_bindings_roundtrip() {
     assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
     let keys = app.keymap.clone();
     drop(app);
-    let app = Parfait::open(directory.path().to_owned()).unwrap();
+    let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert!(app.keymap == keys);
 }

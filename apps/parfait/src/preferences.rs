@@ -111,7 +111,9 @@ impl Parfait {
         }
     }
     pub fn persist_preferences(&mut self, force: bool) {
-        if (!force && self.documents.session.editing.stroke.is_some())
+        if (!force
+            && !self.documents.is_empty()
+            && self.documents.active_session.editing.stroke.is_some())
             || self.preferences_read_failed
             || (!force && self.preferences_tick.elapsed().as_secs_f32() < 1.)
         {
@@ -161,7 +163,7 @@ mod history_migration_tests {
     fn six_palette_versions_upgrade_without_moving_existing_layouts_or_resetting_keys()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.workspace.panels[0].location = Location::Floating;
         app.workspace.panels[0].rect = [130., 90., 320., 410.];
         app.persist_preferences(true);
@@ -179,7 +181,8 @@ mod history_migration_tests {
             legacy["version"] = version.into();
             parfait_storage::save_preferences(&path, &legacy.to_string())
                 .unwrap();
-            let mut restored = Parfait::open(dir.path().to_owned()).unwrap();
+            let mut restored =
+                Parfait::open_legacy(dir.path().to_owned()).unwrap();
             assert!(!restored.preferences_read_failed);
             assert!(restored.keymap == keys);
             assert_eq!(restored.workspace.panels.len(), 7);
@@ -203,7 +206,7 @@ mod history_migration_tests {
         }
         legacy["version"] = 10.into();
         parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
-        let mut restored = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(restored.preferences_read_failed);
         restored.persist_preferences(true);
         assert_eq!(restored.saved_preferences_json(), legacy.to_string());
@@ -217,7 +220,7 @@ mod tests {
     #[test]
     fn cached_preferences_cover_persisted_fields_and_ignore_session_state() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         app.persist_preferences(true);
         let changes: [fn(&mut Parfait); 24] = [
             |app| app.brush.opacity_mode = parfait_core::OpacityMode::PerStroke,
@@ -292,7 +295,7 @@ mod tests {
     fn unchanged_preferences_skip_io_and_failed_or_invalid_edits_remain_retryable()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         app.persist_preferences(true);
         let original = app.saved_preferences_json();
         app.brush.size = f32::NAN;
@@ -315,14 +318,14 @@ mod tests {
         app.persist_preferences(true);
         assert!(app.error.is_none());
         drop(app);
-        let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         assert_eq!(restored.brush.size, 41.);
     }
 
     #[test]
     fn legacy_cache_upgrades_and_future_preferences_remain_untouched() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         app.persist_preferences(true);
         let mut json: serde_json::Value =
             serde_json::from_str(&app.saved_preferences_json()).unwrap();
@@ -346,8 +349,9 @@ mod tests {
     #[ignore = "release-only maintenance timing workload"]
     fn unchanged_material_library_poll_benchmark() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.documents.session.document = parfait_core::Document::new(16, 16);
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
+        app.documents.active_session.document =
+            parfait_core::Document::new(16, 16);
         let mask = std::sync::Arc::new(vec![128; 256 * 256]);
         app.presets = (0..64)
             .map(|index| Preset {
@@ -390,7 +394,7 @@ mod tests {
     fn display_settings_roundtrip_legacy_defaults_and_invalid_values_are_protected()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.display = crate::display::DisplaySettings {
             rulers: false,
             pixel_grid: true,
@@ -398,14 +402,14 @@ mod tests {
             background: 72,
             rotation_step: 17.,
         };
-        app.documents.session.view.flip_horizontal = true;
+        app.documents.active_session.view.flip_horizontal = true;
         app.persist_preferences(true);
         let expected = app.display;
         let json = app.saved_preferences_json();
         drop(app);
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(app.display, expected);
-        assert!(!app.documents.session.view.flip_horizontal);
+        assert!(!app.documents.active_session.view.flip_horizontal);
         let path = dir.path().join("preferences.sqlite");
         for version in 1..=6 {
             let mut legacy: serde_json::Value =
@@ -448,7 +452,7 @@ mod tests {
         use crate::shortcuts::{Chord, Command, Keymap};
         use eframe::egui;
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.keymap
             .assign(
                 Command::ToolInk,
@@ -460,7 +464,7 @@ mod tests {
         app.persist_preferences(true);
         let json = app.saved_preferences_json();
         drop(app);
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(
             app.keymap
                 .resolve(Chord::new(egui::Key::F8, false, false, false), None),

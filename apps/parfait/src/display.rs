@@ -20,8 +20,8 @@ mod tests {
     #[test]
     fn menu_actions_and_settings_footer_work_at_minimum_workspace_size() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(960., 640.));
@@ -133,7 +133,7 @@ mod tests {
         assert_eq!(app.display, Default::default());
         click(&mut app, button("Close"), false);
         assert!(!app.show_display_settings);
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 }
 
@@ -173,21 +173,18 @@ pub enum ViewCommand {
 
 impl Parfait {
     pub fn view_command(&mut self, command: ViewCommand) {
-        if self.documents.session.editing.stroke.is_some() {
+        let session = &mut *self.documents.active_session;
+        if session.editing.stroke.is_some() {
             return;
         }
         match command {
-            ViewCommand::Fit => {
-                self.documents.session.view.request_zoom(ViewZoom::Fit)
-            }
-            ViewCommand::Reset => {
-                self.documents.session.view = Default::default()
-            }
+            ViewCommand::Fit => session.view.request_zoom(ViewZoom::Fit),
+            ViewCommand::Reset => session.view = Default::default(),
             ViewCommand::ActualSize => {
-                self.documents.session.view.request_zoom(ViewZoom::Scale(1.))
+                session.view.request_zoom(ViewZoom::Scale(1.))
             }
             ViewCommand::DoubleSize => {
-                self.documents.session.view.request_zoom(ViewZoom::Scale(2.))
+                session.view.request_zoom(ViewZoom::Scale(2.))
             }
             ViewCommand::RotateLeft | ViewCommand::RotateRight => {
                 let direction = if matches!(command, ViewCommand::RotateLeft) {
@@ -195,33 +192,28 @@ impl Parfait {
                 } else {
                     1.
                 };
-                self.documents.session.view.angle =
-                    (self.documents.session.view.angle
-                        + direction * self.display.rotation_step.to_radians())
-                    .rem_euclid(std::f32::consts::TAU);
+                session.view.angle = (session.view.angle
+                    + direction * self.display.rotation_step.to_radians())
+                .rem_euclid(std::f32::consts::TAU);
             }
-            ViewCommand::ResetRotation => {
-                self.documents.session.view.angle = 0.
-            }
+            ViewCommand::ResetRotation => session.view.angle = 0.,
             ViewCommand::ResetOrientation => {
-                self.documents.session.view.angle = 0.;
-                self.documents.session.view.flip_horizontal = false;
-                self.documents.session.view.flip_vertical = false;
+                session.view.angle = 0.;
+                session.view.flip_horizontal = false;
+                session.view.flip_vertical = false;
             }
             ViewCommand::FlipHorizontal => {
-                self.documents.session.view.flip_horizontal =
-                    !self.documents.session.view.flip_horizontal
+                session.view.flip_horizontal = !session.view.flip_horizontal
             }
             ViewCommand::FlipVertical => {
-                self.documents.session.view.flip_vertical =
-                    !self.documents.session.view.flip_vertical
+                session.view.flip_vertical = !session.view.flip_vertical
             }
         }
     }
 
     pub fn display_menu(&mut self, ui: &mut egui::Ui) {
         ui.add_enabled_ui(
-            self.documents.session.editing.stroke.is_none(),
+            self.documents.active_session.editing.stroke.is_none(),
             |ui| self.expanded_view_menu(ui),
         );
     }

@@ -523,7 +523,23 @@ impl Command {
 
 impl Parfait {
     pub fn execute_command(&mut self, command: Command, ctx: &egui::Context) {
-        let target = self.documents.session.key;
+        if matches!(command, Command::NewDrawing | Command::OpenProject)
+            && (self.documents.is_empty() || self.tabs.enabled)
+        {
+            if self.dialog_open() {
+                return;
+            }
+            if command == Command::NewDrawing {
+                self.new_document();
+            } else {
+                self.open_project();
+            }
+            return;
+        }
+        if self.documents.is_empty() {
+            return;
+        }
+        let target = self.documents.active_session.key;
         self.execute_command_for(target, command, ctx);
     }
 
@@ -533,7 +549,9 @@ impl Parfait {
         command: Command,
         ctx: &egui::Context,
     ) {
-        if self.documents.session.key != target {
+        if self.documents.is_empty()
+            || self.documents.active_session.key != target
+        {
             return;
         }
         if let Some(reason) = self.command_disabled_reason(command) {
@@ -606,8 +624,10 @@ impl Parfait {
             | Command::CopyVisibleLayers
             | Command::FlattenImage
             | Command::ClearLayer => self.combine_layer_command(command),
-            Command::ZoomIn => self.documents.session.view.step_zoom(1),
-            Command::ZoomOut => self.documents.session.view.step_zoom(-1),
+            Command::ZoomIn => self.documents.active_session.view.step_zoom(1),
+            Command::ZoomOut => {
+                self.documents.active_session.view.step_zoom(-1)
+            }
             Command::ActualSize => self.view_command(ViewCommand::ActualSize),
             Command::DoubleSize => self.view_command(ViewCommand::DoubleSize),
             Command::FitCanvas => self.view_command(ViewCommand::Fit),

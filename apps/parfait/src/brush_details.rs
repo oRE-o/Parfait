@@ -467,7 +467,10 @@ impl Parfait {
             .preview
             .as_ref()
             .is_none_or(|(brush, _)| brush != &self.brush);
-        if changed && self.documents.session.editing.stroke.is_none() {
+        if changed
+            && (self.documents.is_empty()
+                || self.documents.active_session.editing.stroke.is_none())
+        {
             let image = crate::brushes::preview_image(&self.brush);
             if let Some((cached, texture)) = &mut self.brush_details.preview {
                 texture.set(image, egui::TextureOptions::LINEAR);
@@ -958,8 +961,8 @@ mod tests {
     fn detail_footer_does_not_move_with_categories_operations_or_long_help() {
         for size in [egui::vec2(960., 640.), egui::vec2(1440., 920.)] {
             let dir = tempfile::tempdir().unwrap();
-            let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-            let artwork = app.documents.session.document.clone();
+            let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+            let artwork = app.documents.active_session.document.clone();
             app.brush_details.open = true;
             let ctx = egui::Context::default();
             crate::theme::apply(&ctx);
@@ -1024,7 +1027,7 @@ mod tests {
             );
             frame(&mut app, vec![event(false)]);
             assert!(!app.brush_details.open);
-            assert_eq!(app.documents.session.document, artwork);
+            assert_eq!(app.documents.active_session.document, artwork);
         }
     }
 
@@ -1032,8 +1035,8 @@ mod tests {
     fn opacity_mode_clicks_and_blending_retains_disabled_values_without_artwork_edits()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let original = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let original = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1078,7 +1081,7 @@ mod tests {
         click(&mut app, egui::Id::new("opacity_mode_combo"));
         assert_eq!(app.brush.opacity_mode, OpacityMode::PerStroke);
         assert!(!ctx.any_popup_open());
-        assert_eq!(app.documents.session.document, original);
+        assert_eq!(app.documents.active_session.document, original);
         assert_eq!(Property::Flow.label(), "브러시 농도");
         assert!(Category::Tip.properties().contains(&Property::Flow));
         assert!(!Category::Ink.properties().contains(&Property::Flow));
@@ -1088,11 +1091,11 @@ mod tests {
     fn spacing_dynamics_button_retains_automatic_values_and_footer_is_visible()
     {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.brush.pressure_spacing = true;
         app.brush.spacing_curve = [1., 0.8, 0.5, 0.2, 0.].into();
         let original = app.brush.clone();
-        let artwork = app.documents.session.document.clone();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let screen =
@@ -1161,7 +1164,7 @@ mod tests {
         assert!(screen.contains_rect(plot));
         assert!(screen.contains_rect(close));
         assert!(app.brush == original);
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
@@ -1183,8 +1186,8 @@ mod tests {
     #[test]
     fn ink_operation_controls_and_pins_survive_preset_save_and_restart() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         app.brush_details.open = true;
         app.brush_details.category = Category::Ink;
         let ctx = egui::Context::default();
@@ -1285,10 +1288,10 @@ mod tests {
         assert_eq!(app.brush.blur_radius, 17.);
         assert!(app.brush_details.properties.visibility(Property::Stretch));
         assert!(app.brush_details.properties.visibility(Property::BlurRadius));
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
         app.persist_preferences(true);
         drop(app);
-        let restored = Parfait::open(dir.path().to_owned()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(restored.brush.operation(), BrushOperation::Blur);
         assert_eq!(restored.brush.blur_radius, 17.);
         assert!(
@@ -1300,8 +1303,8 @@ mod tests {
     fn property_actions_are_below_settings_and_detail_footer_stays_on_one_row()
     {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let mut output = ctx.run_ui(
@@ -1382,15 +1385,15 @@ mod tests {
         assert!(
             buttons.windows(2).all(|pair| pair[1].right() <= pair[0].left())
         );
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
     fn stroke_controls_and_close_are_reachable_at_minimum_window_size() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.brush_details.open_stroke_settings();
-        let artwork = app.documents.session.document.clone();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let screen =
@@ -1436,14 +1439,14 @@ mod tests {
         );
         frame(&mut app, vec![event(false)]);
         assert!(!app.brush_details.dialog_open());
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
     fn free_curve_dialog_keeps_close_visible_after_adding_a_point_at_minimum_window_size()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.brush_details.open_pressure_dynamics();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
@@ -1498,8 +1501,8 @@ mod tests {
     fn dynamics_escape_dismisses_child_before_details_and_preserves_saved_response()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         app.brush_details.open = true;
@@ -1534,7 +1537,7 @@ mod tests {
         frame(&mut app, vec![]);
         frame(&mut app, vec![escape()]);
         assert!(!app.brush_details.dialog_open());
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
         app.brush.pressure_curve = Default::default();
         app.restore_current_preset();
         assert_eq!(
@@ -1543,7 +1546,7 @@ mod tests {
         );
         app.persist_preferences(true);
         drop(app);
-        let reopened = Parfait::open(dir.path().to_owned()).unwrap();
+        let reopened = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(
             reopened.brush.pressure_curve,
             parfait_core::ResponseCurve::from([0., 0.1, 0.4, 0.8, 1.])
@@ -1554,8 +1557,8 @@ mod tests {
     fn eye_button_changes_only_layout_and_saved_presets_restore_it_after_restart()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         let brush = app.brush.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
@@ -1600,7 +1603,7 @@ mod tests {
             app.brush_details.properties.visible[Property::Spacing as usize]
         );
         assert!(app.brush == brush);
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
         assert!(app.preset_modified());
         app.save_current_preset();
         app.brush_details.properties = Default::default();
@@ -1619,7 +1622,7 @@ mod tests {
         app.persist_preferences(true);
         assert!(app.error.is_none());
         drop(app);
-        let restored = Parfait::open(dir.path().to_owned()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(
             restored.brush_details.properties.visible
                 [Property::Spacing as usize]
@@ -1639,7 +1642,7 @@ mod tests {
             &serde_json::to_string(&old).unwrap(),
         )
         .unwrap();
-        let legacy = Parfait::open(dir.path().to_owned()).unwrap();
+        let legacy = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(!legacy.preferences_read_failed);
         assert_eq!(legacy.brush_details.properties, PropertyLayout::default());
         assert_eq!(legacy.presets[0].properties, PropertyLayout::default());
@@ -1648,9 +1651,9 @@ mod tests {
     #[test]
     fn categories_preview_cache_and_escape_preserve_artwork_and_edits() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.documents.session.document = Document::new(16, 16);
-        let before = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
+        app.documents.active_session.document = Document::new(16, 16);
+        let before = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1672,7 +1675,7 @@ mod tests {
             app.brush_details.category = category;
             frame(&mut app, vec![]);
             assert!(app.brush.validate());
-            assert_eq!(app.documents.session.document, before);
+            assert_eq!(app.documents.active_session.document, before);
             assert_eq!(app.brush_details.category_targets.len(), 6);
             assert!(
                 app.brush_details
@@ -1716,6 +1719,6 @@ mod tests {
         );
         assert!(!app.brush_details.open);
         assert_eq!(app.brush.size, 42.);
-        assert_eq!(app.documents.session.document, before);
+        assert_eq!(app.documents.active_session.document, before);
     }
 }

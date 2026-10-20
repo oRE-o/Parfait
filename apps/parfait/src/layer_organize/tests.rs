@@ -3,13 +3,13 @@ use crate::shortcuts::Chord;
 use parfait_core::{Brush, Document, Point, Stroke};
 
 fn sample(directory: &std::path::Path) -> Parfait {
-    let mut app = Parfait::open(directory.to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
+    let mut app = Parfait::open_legacy(directory.to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
     for _ in 0..3 {
-        app.documents.session.document.add_layer();
+        app.documents.active_session.document.add_layer();
     }
     for (index, layer) in
-        app.documents.session.document.layers.iter_mut().enumerate()
+        app.documents.active_session.document.layers.iter_mut().enumerate()
     {
         layer.name = format!("Layer {index}");
         layer.locked = index % 2 == 0;
@@ -103,8 +103,8 @@ fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_u
         let mut app = sample(directory.path());
         app.select_layer(2);
         app.set_layer_selection(0b10101, 0);
-        app.documents.session.document.layers[3].clipped = true;
-        let before = app.documents.session.document.clone();
+        app.documents.active_session.document.layers[3].clipped = true;
+        let before = app.documents.active_session.document.clone();
         let active = before.layers[2].id;
         let mut expected: Vec<_> =
             before.layers.iter().map(|layer| layer.id).collect();
@@ -113,7 +113,7 @@ fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_u
         app.execute_command(command, &egui::Context::default());
         assert_eq!(
             app.documents
-                .session
+                .active_session
                 .document
                 .layers
                 .iter()
@@ -121,9 +121,9 @@ fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_u
                 .collect::<Vec<_>>(),
             expected
         );
-        assert_eq!(app.documents.session.document.active, destination);
-        assert_eq!(app.documents.session.history.rows().count(), 2);
-        for layer in &app.documents.session.document.layers {
+        assert_eq!(app.documents.active_session.document.active, destination);
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
+        for layer in &app.documents.active_session.document.layers {
             let original =
                 &before.layers[before.layer_index(layer.id).unwrap()];
             assert_eq!(layer, original);
@@ -131,20 +131,20 @@ fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_u
         }
         assert_eq!(app.selected_layer_mask().count_ones(), 3);
         app.undo();
-        assert!(app.documents.session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.document.same_edit_state(&before));
         app.redo();
         assert_eq!(
-            app.documents.session.document.layers
-                [app.documents.session.document.active]
+            app.documents.active_session.document.layers
+                [app.documents.active_session.document.active]
                 .id,
             active
         );
         let path = directory.path().join("ordering.parfait");
         let mut store = parfait_storage::Store::open(&path).unwrap();
-        store.save(&app.documents.session.document).unwrap();
+        store.save(&app.documents.active_session.document).unwrap();
         assert_eq!(
             store.load().unwrap().unwrap().document,
-            app.documents.session.document
+            app.documents.active_session.document
         );
     }
 }
@@ -155,18 +155,18 @@ fn selected_moves_remain_distinct_and_boundary_commands_are_true_no_ops() {
     let mut app = sample(directory.path());
     app.select_layer(2);
     app.set_layer_selection(0b00101, 0);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::MoveLayerUp, &egui::Context::default());
     assert_eq!(
-        app.documents.session.document.layers[1].id,
+        app.documents.active_session.document.layers[1].id,
         before.layers[0].id
     );
     assert_eq!(
-        app.documents.session.document.layers[3].id,
+        app.documents.active_session.document.layers[3].id,
         before.layers[2].id
     );
     app.undo();
-    assert!(app.documents.session.history.can_redo());
+    assert!(app.documents.active_session.history.can_redo());
     for (active, command) in [
         (4, Command::MoveActiveLayerToTop),
         (4, Command::MoveActiveLayerUp),
@@ -174,11 +174,11 @@ fn selected_moves_remain_distinct_and_boundary_commands_are_true_no_ops() {
         (0, Command::MoveActiveLayerDown),
     ] {
         app.select_layer(active);
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         assert!(app.command_disabled_reason(command).is_some());
         app.execute_command(command, &egui::Context::default());
-        assert_eq!(app.documents.session.document, before);
-        assert!(app.documents.session.history.can_redo());
+        assert_eq!(app.documents.active_session.document, before);
+        assert!(app.documents.active_session.history.can_redo());
     }
 }
 
@@ -189,22 +189,22 @@ fn cyclic_navigation_clears_additional_selection_without_uploads_history_or_brus
     let mut app = sample(directory.path());
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    app.documents.session.document.layers[0].locked = true;
-    app.documents.session.document.layers[0].visible = false;
+    app.documents.active_session.document.layers[0].locked = true;
+    app.documents.active_session.document.layers[0].visible = false;
     app.set_layer_selection(0b10001, 0);
     settle(&mut app, &context);
     let image = app.render_cache.texture.as_ref().unwrap().id();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     let brush = app.brush.clone();
     let output = frame(
         &mut app,
         &context,
         vec![key(egui::Key::CloseBracket, egui::Modifiers::ALT, false)],
     );
-    assert_eq!(app.documents.session.document.active, 0);
+    assert_eq!(app.documents.active_session.document.active, 0);
     assert_eq!(app.selected_layer_mask(), 1);
-    assert!(app.documents.session.document.same_edit_state(&before));
-    assert_eq!(app.documents.session.history.rows().count(), 0);
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+    assert_eq!(app.documents.active_session.history.rows().count(), 0);
     assert!(!output.textures_delta.set.iter().any(|(id, _)| *id == image));
     assert!(app.brush == brush);
     frame(
@@ -214,11 +214,11 @@ fn cyclic_navigation_clears_additional_selection_without_uploads_history_or_brus
     )
     .textures_delta
     .clear();
-    assert_eq!(app.documents.session.document.active, 4);
+    assert_eq!(app.documents.active_session.document.active, 4);
     for _ in 0..5 {
         app.execute_command(Command::SelectLayerBelow, &context);
     }
-    assert_eq!(app.documents.session.document.active, 4);
+    assert_eq!(app.documents.active_session.document.active, 4);
 }
 
 #[test]
@@ -239,38 +239,38 @@ fn organization_guards_and_one_layer_or_sixty_four_layer_boundaries() {
         app.confirm_new = blocker == 0;
         app.workspace.resizing = blocker == 1;
         if blocker == 2 {
-            app.documents.session.editing.stroke = Some(Stroke::begin(
-                &mut app.documents.session.document,
+            app.documents.active_session.editing.stroke = Some(Stroke::begin(
+                &mut app.documents.active_session.document,
                 Brush { opacity: 0., ..Default::default() },
                 Point { x: 2., y: 2., pressure: 1. },
             ));
         }
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         for command in commands {
             assert!(app.command_disabled_reason(command).is_some());
             app.execute_command(command, &egui::Context::default());
-            assert_eq!(app.documents.session.document, before);
+            assert_eq!(app.documents.active_session.document, before);
         }
-        assert!(app.documents.session.layer_ui.rename.is_none());
-        app.documents.session.editing.stroke = None;
+        assert!(app.documents.active_session.layer_ui.rename.is_none());
+        app.documents.active_session.editing.stroke = None;
     }
     app.workspace.resizing = false;
     app.confirm_new = false;
-    while app.documents.session.document.layers.len() < 64 {
-        app.documents.session.document.add_layer();
+    while app.documents.active_session.document.layers.len() < 64 {
+        app.documents.active_session.document.add_layer();
     }
     app.select_layer(63);
     app.execute_command(Command::SelectLayerAbove, &egui::Context::default());
-    assert_eq!(app.documents.session.document.active, 0);
+    assert_eq!(app.documents.active_session.document.active, 0);
     app.execute_command(Command::SelectLayerBelow, &egui::Context::default());
-    assert_eq!(app.documents.session.document.active, 63);
-    app.documents.session.document.layers.truncate(1);
-    app.documents.session.document.active = 0;
-    let before = app.documents.session.document.clone();
+    assert_eq!(app.documents.active_session.document.active, 63);
+    app.documents.active_session.document.layers.truncate(1);
+    app.documents.active_session.document.active = 0;
+    let before = app.documents.active_session.document.clone();
     for command in [Command::SelectLayerAbove, Command::SelectLayerBelow] {
         assert!(app.command_disabled_reason(command).is_some());
         app.execute_command(command, &egui::Context::default());
-        assert_eq!(app.documents.session.document, before);
+        assert_eq!(app.documents.active_session.document, before);
     }
 }
 
@@ -282,7 +282,7 @@ fn rename_confirm_is_one_durable_unicode_edit_even_with_the_palette_hidden() {
         app.hide_panels = true;
         let context = egui::Context::default();
         crate::theme::apply(&context);
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         app.execute_command(Command::RenameLayer, &context);
         settle(&mut app, &context);
         frame(
@@ -292,8 +292,8 @@ fn rename_confirm_is_one_durable_unicode_edit_even_with_the_palette_hidden() {
         )
         .textures_delta
         .clear();
-        assert_eq!(app.documents.session.document, before);
-        assert_eq!(app.documents.session.history.rows().count(), 0);
+        assert_eq!(app.documents.active_session.document, before);
+        assert_eq!(app.documents.active_session.history.rows().count(), 0);
         if enter {
             frame(
                 &mut app,
@@ -305,32 +305,32 @@ fn rename_confirm_is_one_durable_unicode_edit_even_with_the_palette_hidden() {
         } else {
             click(&mut app, &context, "rename_accept");
         }
-        assert!(app.documents.session.layer_ui.rename.is_none());
+        assert!(app.documents.active_session.layer_ui.rename.is_none());
         assert_eq!(
-            app.documents.session.document.layers[4].name,
+            app.documents.active_session.document.layers[4].name,
             "새 레이어 café"
         );
         assert!(Arc::ptr_eq(
-            &app.documents.session.document.layers[4].pixels,
+            &app.documents.active_session.document.layers[4].pixels,
             &before.layers[4].pixels
         ));
         assert_eq!(
-            app.documents.session.document.layers[4].id,
+            app.documents.active_session.document.layers[4].id,
             before.layers[4].id
         );
-        assert_eq!(app.documents.session.history.rows().count(), 2);
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
         app.undo();
         assert_eq!(
-            app.documents.session.document.layers[4].name,
+            app.documents.active_session.document.layers[4].name,
             before.layers[4].name
         );
         app.redo();
         let path = directory.path().join("renamed.parfait");
         let mut store = parfait_storage::Store::open(&path).unwrap();
-        store.save(&app.documents.session.document).unwrap();
+        store.save(&app.documents.active_session.document).unwrap();
         assert_eq!(
             store.load().unwrap().unwrap().document,
-            app.documents.session.document
+            app.documents.active_session.document
         );
     }
 }
@@ -346,7 +346,7 @@ fn rename_cancel_no_op_blank_and_backdrop_preserve_document_and_redo() {
         app.undo();
         let context = egui::Context::default();
         crate::theme::apply(&context);
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         app.execute_command(Command::RenameLayer, &context);
         settle(&mut app, &context);
         if exit != "unchanged" {
@@ -373,15 +373,15 @@ fn rename_cancel_no_op_blank_and_backdrop_preserve_document_and_redo() {
                 if exit == "unchanged" { "rename_accept" } else { exit },
             );
         }
-        assert!(app.documents.session.layer_ui.rename.is_none());
-        assert_eq!(app.documents.session.document, before);
-        assert!(app.documents.session.history.can_redo());
+        assert!(app.documents.active_session.layer_ui.rename.is_none());
+        assert_eq!(app.documents.active_session.document, before);
+        assert!(app.documents.active_session.history.can_redo());
     }
     let directory = tempfile::tempdir().unwrap();
     let mut app = sample(directory.path());
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::RenameLayer, &context);
     settle(&mut app, &context);
     frame(
@@ -396,7 +396,7 @@ fn rename_cancel_no_op_blank_and_backdrop_preserve_document_and_redo() {
     .clear();
     assert!(
         app.documents
-            .session
+            .active_session
             .layer_ui
             .rename
             .as_ref()
@@ -404,7 +404,7 @@ fn rename_cancel_no_op_blank_and_backdrop_preserve_document_and_redo() {
             .error()
             .is_some()
     );
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.active_session.document, before);
     for pressed in [true, false] {
         frame(
             &mut app,
@@ -419,9 +419,9 @@ fn rename_cancel_no_op_blank_and_backdrop_preserve_document_and_redo() {
         .textures_delta
         .clear();
     }
-    assert!(app.documents.session.layer_ui.rename.is_some());
-    assert!(app.documents.session.editing.stroke.is_none());
-    assert_eq!(app.documents.session.document, before);
+    assert!(app.documents.active_session.layer_ui.rename.is_some());
+    assert!(app.documents.active_session.editing.stroke.is_none());
+    assert_eq!(app.documents.active_session.document, before);
 }
 
 #[test]
@@ -430,11 +430,11 @@ fn rename_is_bounded_target_checked_and_ime_enter_does_not_commit_preedit() {
     let mut app = sample(directory.path());
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    app.documents.session.document.layers[4].name = "가".repeat(5000);
+    app.documents.active_session.document.layers[4].name = "가".repeat(5000);
     app.execute_command(Command::RenameLayer, &context);
     assert_eq!(
         app.documents
-            .session
+            .active_session
             .layer_ui
             .rename
             .as_ref()
@@ -445,12 +445,19 @@ fn rename_is_bounded_target_checked_and_ime_enter_does_not_commit_preedit() {
         128
     );
     assert!(
-        app.documents.session.layer_ui.rename.as_ref().unwrap().draft.len()
+        app.documents
+            .active_session
+            .layer_ui
+            .rename
+            .as_ref()
+            .unwrap()
+            .draft
+            .len()
             <= 512
     );
     assert!(
         app.documents
-            .session
+            .active_session
             .layer_ui
             .rename
             .as_ref()
@@ -472,9 +479,9 @@ fn rename_is_bounded_target_checked_and_ime_enter_does_not_commit_preedit() {
     )
     .textures_delta
     .clear();
-    assert!(app.documents.session.layer_ui.rename.is_some());
+    assert!(app.documents.active_session.layer_ui.rename.is_some());
     assert_eq!(
-        app.documents.session.document.layers[4].name.chars().count(),
+        app.documents.active_session.document.layers[4].name.chars().count(),
         5000
     );
     frame(
@@ -487,7 +494,7 @@ fn rename_is_bounded_target_checked_and_ime_enter_does_not_commit_preedit() {
     )
     .textures_delta
     .clear();
-    assert!(app.documents.session.layer_ui.rename.is_some());
+    assert!(app.documents.active_session.layer_ui.rename.is_some());
     frame(
         &mut app,
         &context,
@@ -495,14 +502,14 @@ fn rename_is_bounded_target_checked_and_ime_enter_does_not_commit_preedit() {
     )
     .textures_delta
     .clear();
-    assert!(app.documents.session.layer_ui.rename.is_none());
-    assert_eq!(app.documents.session.document.layers[4].name, "한글");
+    assert!(app.documents.active_session.layer_ui.rename.is_none());
+    assert_eq!(app.documents.active_session.document.layers[4].name, "한글");
     app.execute_command(Command::RenameLayer, &context);
-    app.documents.session.document = Document::new(8, 8);
-    let before = app.documents.session.document.clone();
+    app.documents.active_session.document = Document::new(8, 8);
+    let before = app.documents.active_session.document.clone();
     frame(&mut app, &context, vec![]).textures_delta.clear();
-    assert!(app.documents.session.layer_ui.rename.is_none());
-    assert_eq!(app.documents.session.document, before);
+    assert!(app.documents.active_session.layer_ui.rename.is_none());
+    assert_eq!(app.documents.active_session.document, before);
 }
 
 #[test]
@@ -532,11 +539,11 @@ fn rename_layout_stays_inside_minimum_window_and_rejects_stale_revision() {
             .unwrap();
         assert!(modal.contains_rect(rect));
     }
-    app.documents.session.document.touch();
-    let before = app.documents.session.document.clone();
+    app.documents.active_session.document.touch();
+    let before = app.documents.active_session.document.clone();
     frame(&mut app, &context, vec![]).textures_delta.clear();
-    assert!(app.documents.session.layer_ui.rename.is_none());
-    assert_eq!(app.documents.session.document, before);
+    assert!(app.documents.active_session.layer_ui.rename.is_none());
+    assert_eq!(app.documents.active_session.document, before);
 }
 
 #[test]
@@ -562,7 +569,7 @@ fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fif
     )
     .unwrap();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert!(app.keymap == expected.keymap);
     assert!(app.keymap.hint(Command::SelectLayerAbove).is_empty());
@@ -583,6 +590,6 @@ fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fif
         21
     );
     drop(app);
-    let app = Parfait::open(directory.path().to_owned()).unwrap();
+    let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::RenameLayer), "F6");
 }

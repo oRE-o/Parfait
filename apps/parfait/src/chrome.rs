@@ -39,13 +39,13 @@ impl Parfait {
                     ui.painter().text(
                         rect.center(),
                         egui::Align2::CENTER_CENTER,
-                        format!(
+                        if self.documents.is_empty() { "No drawing open".into() } else { format!(
                             "{}{}  —  {} × {} px",
-                            self.documents.session.document.name,
+                            self.documents.active_session.document.name,
                             if self.project_is_modified() { " *" } else { "" },
-                            self.documents.session.document.width,
-                            self.documents.session.document.height
-                        ),
+                            self.documents.active_session.document.width,
+                            self.documents.active_session.document.height
+                        ) },
                         egui::FontId::proportional(11.),
                         Color32::from_gray(170),
                     );

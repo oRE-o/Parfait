@@ -41,12 +41,12 @@ impl Parfait {
         }
         if command == Command::RenameLayer {
             self.finish_layer_edit();
-            let target = &self.documents.session.document.layers
-                [self.documents.session.document.active];
-            self.documents.session.layer_ui.rename = Some(RenameLayer {
-                owner: self.documents.session.key,
+            let target = &self.documents.active_session.document.layers
+                [self.documents.active_session.document.active];
+            self.documents.active_session.layer_ui.rename = Some(RenameLayer {
+                owner: self.documents.active_session.key,
                 target: target.id,
-                revision: self.documents.session.document.revision,
+                revision: self.documents.active_session.document.revision,
                 pixels: target.pixels.clone(),
                 draft: target.name.chars().take(128).collect(),
                 needs_edit: target.name.chars().nth(128).is_some(),
@@ -55,8 +55,8 @@ impl Parfait {
             });
             return;
         }
-        let count = self.documents.session.document.layers.len();
-        let active = self.documents.session.document.active;
+        let count = self.documents.active_session.document.layers.len();
+        let active = self.documents.active_session.document.active;
         if matches!(
             command,
             Command::SelectLayerAbove | Command::SelectLayerBelow
@@ -69,7 +69,7 @@ impl Parfait {
             self.select_layer(destination);
             return;
         }
-        if self.documents.session.document.has_non_raster_layers() {
+        if self.documents.active_session.document.has_non_raster_layers() {
             self.execute_tree_collection(command, 1 << active);
             return;
         }
@@ -88,28 +88,34 @@ impl Parfait {
     }
 
     pub(crate) fn layer_rename_ui(&mut self, ctx: &egui::Context) {
-        let Some(dialog) = &self.documents.session.layer_ui.rename else {
+        let Some(dialog) = &self.documents.active_session.layer_ui.rename
+        else {
             return;
         };
         if self.error.is_some() {
             return;
         }
-        let target = self.documents.session.document.layer_index(dialog.target);
-        if self.documents.session.key != dialog.owner
-            || self.documents.session.document.revision != dialog.revision
+        let target =
+            self.documents.active_session.document.layer_index(dialog.target);
+        if self.documents.active_session.key != dialog.owner
+            || self.documents.active_session.document.revision
+                != dialog.revision
             || target.is_none_or(|index| {
                 !Arc::ptr_eq(
                     &dialog.pixels,
-                    &self.documents.session.document.layers[index].pixels,
+                    &self.documents.active_session.document.layers[index]
+                        .pixels,
                 )
             })
         {
-            self.documents.session.layer_ui.rename = None;
+            self.documents.active_session.layer_ui.rename = None;
             self.notice =
                 Some("대상 레이어가 변경되어 이름 변경을 취소했습니다.".into());
             return;
         }
-        let dialog = self.documents.session.layer_ui.rename.as_mut().unwrap();
+        let session_key = self.documents.active_session.key;
+        let dialog =
+            self.documents.active_session.layer_ui.rename.as_mut().unwrap();
         let first_frame = dialog.focus;
         let was_composing = dialog.composing;
         let mut ime_event = false;
@@ -134,7 +140,7 @@ impl Parfait {
         let mut cancel = false;
         let modal = egui::Modal::new(egui::Id::new((
             "rename_layer_dialog",
-            self.documents.session.key,
+            session_key,
         )))
         .show(ctx, |ui| {
             ui.set_width(362.);
@@ -171,7 +177,7 @@ impl Parfait {
                             egui::TextEdit::singleline(&mut dialog.draft)
                                 .id(egui::Id::new((
                                     "rename_layer_name",
-                                    self.documents.session.key,
+                                    session_key,
                                 )))
                                 .desired_width(220.)
                                 .char_limit(128)
@@ -259,12 +265,13 @@ impl Parfait {
             }
         }
         if cancel {
-            self.documents.session.layer_ui.rename = None;
+            self.documents.active_session.layer_ui.rename = None;
         } else if confirm && dialog.error().is_none() {
-            let dialog = self.documents.session.layer_ui.rename.take().unwrap();
+            let dialog =
+                self.documents.active_session.layer_ui.rename.take().unwrap();
             let target = target.unwrap();
             if dialog.draft
-                != self.documents.session.document.layers[target].name
+                != self.documents.active_session.document.layers[target].name
             {
                 self.edit_named("Rename layer", |document| {
                     document.layers[target].name = dialog.draft

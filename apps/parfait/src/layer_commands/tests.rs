@@ -3,23 +3,23 @@ use super::*;
 #[test]
 fn folder_documents_render_safely_and_refuse_raster_only_edits() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = parfait_core::Document::new(16, 16);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = parfait_core::Document::new(16, 16);
     app.documents
-        .session
+        .active_session
         .document
         .group_layers_in_folder(2, "Folder".into())
         .unwrap();
     let context = egui::Context::default();
     crate::theme::apply(&context);
     app.update_previews(&context);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     for command in
         [Command::MoveLayerUp, Command::LayerAlphaLock, Command::ApplyLayerMask]
     {
         assert!(app.command_disabled_reason(command).is_some(), "{command:?}");
         app.execute_command(command, &context);
-        assert!(app.documents.session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.document.same_edit_state(&before));
     }
     assert!(!app.begin_canvas_stroke(parfait_core::Point {
         x: 8.,
@@ -30,21 +30,21 @@ fn folder_documents_render_safely_and_refuse_raster_only_edits() {
         app.palette(ui, crate::workspace::Palette::Layers, 400.)
     });
     output.textures_delta.clear();
-    assert!(app.documents.session.document.validate());
-    assert_eq!(app.documents.session.history.rows().count(), 0);
+    assert!(app.documents.active_session.document.validate());
+    assert_eq!(app.documents.active_session.history.rows().count(), 0);
     assert!(app.command_disabled_reason(Command::NewLayer).is_none());
     app.execute_command(Command::NewLayer, &context);
     assert_eq!(
-        app.documents.session.document.layers
-            [app.documents.session.document.active]
+        app.documents.active_session.document.layers
+            [app.documents.active_session.document.active]
             .parent,
         Some(before.layers[2].id)
     );
-    assert!(app.documents.session.document.validate());
+    assert!(app.documents.active_session.document.validate());
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&before));
-    app.documents.session.document.layers[2].locked = true;
-    app.documents.session.document.active = 1;
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+    app.documents.active_session.document.layers[2].locked = true;
+    app.documents.active_session.document.active = 1;
     assert!(app.command_disabled_reason(Command::NewLayer).is_some());
     assert!(!app.begin_canvas_stroke(parfait_core::Point {
         x: 8.,
@@ -59,7 +59,7 @@ fn folder_documents_render_safely_and_refuse_raster_only_edits() {
             .unwrap()
             .unwrap()
             .document;
-    assert_eq!(loaded.layers, app.documents.session.document.layers);
+    assert_eq!(loaded.layers, app.documents.active_session.document.layers);
 }
 use crate::shortcuts::Chord;
 use parfait_core::{Brush, Document, Point, Stroke};
@@ -69,10 +69,11 @@ use std::sync::Arc;
 fn masked_document_duplicate_undo_and_autosave_preserve_both_shared_buffers() {
     for multiple in [false, true] {
         let directory = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.documents.session.document = Document::new(8, 8);
-        app.documents.session.document.layers[0].locked = false;
-        for layer in &mut app.documents.session.document.layers {
+        let mut app =
+            Parfait::open_legacy(directory.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(8, 8);
+        app.documents.active_session.document.layers[0].locked = false;
+        for layer in &mut app.documents.active_session.document.layers {
             layer.mask = Some(parfait_core::LayerMask {
                 enabled: true,
                 coverage: parfait_core::MaskCoverage::Dense(Arc::new(vec![
@@ -81,17 +82,17 @@ fn masked_document_duplicate_undo_and_autosave_preserve_both_shared_buffers() {
                 ])),
             });
         }
-        app.documents.session.document.touch();
+        app.documents.active_session.document.touch();
         app.set_layer_selection(if multiple { 3 } else { 2 }, 1);
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         app.execute_command(Command::DuplicateLayer, &egui::Context::default());
         assert_eq!(
-            app.documents.session.document.layers.len(),
+            app.documents.active_session.document.layers.len(),
             if multiple { 4 } else { 3 }
         );
         for layer in app
             .documents
-            .session
+            .active_session
             .document
             .layers
             .iter()
@@ -122,15 +123,16 @@ fn masked_document_duplicate_undo_and_autosave_preserve_both_shared_buffers() {
             }
         }
         app.undo();
-        assert!(app.documents.session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.document.same_edit_state(&before));
         app.redo();
-        let expected = app.documents.session.document.clone();
+        let expected = app.documents.active_session.document.clone();
         app.force_save();
         drop(app);
-        let reopened = Parfait::open(directory.path().to_owned()).unwrap();
-        assert_eq!(reopened.documents.session.document, expected);
+        let reopened =
+            Parfait::open_legacy(directory.path().to_owned()).unwrap();
+        assert_eq!(reopened.documents.active_session.document, expected);
         assert_eq!(
-            reopened.documents.session.document.composite(),
+            reopened.documents.active_session.document.composite(),
             expected.composite()
         );
     }
@@ -140,12 +142,13 @@ fn masked_document_duplicate_undo_and_autosave_preserve_both_shared_buffers() {
 fn clipping_property_menu_and_key_share_undo_and_durable_state() {
     for route in 0..3 {
         let directory = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.documents.session.document = Document::new(8, 8);
-        app.documents.session.document.layers[0].visible = false;
-        app.documents.session.document.layers[1].pixels =
+        let mut app =
+            Parfait::open_legacy(directory.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(8, 8);
+        app.documents.active_session.document.layers[0].visible = false;
+        app.documents.active_session.document.layers[1].pixels =
             Arc::new([255, 20, 50, 255].repeat(64));
-        let original = app.documents.session.document.clone();
+        let original = app.documents.active_session.document.clone();
         let context = egui::Context::default();
         crate::theme::apply(&context);
         app.keymap
@@ -179,8 +182,8 @@ fn clipping_property_menu_and_key_share_undo_and_durable_state() {
                         app.top_menu_toggle(
                             ui,
                             Command::LayerClipping,
-                            app.documents.session.document.layers
-                                [app.documents.session.document.active]
+                            app.documents.active_session.document.layers
+                                [app.documents.active_session.document.active]
                                 .clipped,
                         );
                     }
@@ -215,37 +218,37 @@ fn clipping_property_menu_and_key_share_undo_and_durable_state() {
                 );
             }
         }
-        assert!(app.documents.session.document.layers[1].clipped);
-        assert_eq!(app.documents.session.history.rows().count(), 2);
+        assert!(app.documents.active_session.document.layers[1].clipped);
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
         assert!(
             app.documents
-                .session
+                .active_session
                 .document
                 .composite()
                 .iter()
                 .all(|byte| *byte == 0)
         );
         assert!(Arc::ptr_eq(
-            &app.documents.session.document.layers[1].pixels,
+            &app.documents.active_session.document.layers[1].pixels,
             &original.layers[1].pixels
         ));
         app.undo();
-        assert!(!app.documents.session.document.layers[1].clipped);
+        assert!(!app.documents.active_session.document.layers[1].clipped);
         assert_eq!(
-            app.documents.session.document.composite(),
+            app.documents.active_session.document.composite(),
             original.composite()
         );
         app.redo();
         app.persist_preferences(true);
         let path = directory.path().join("clipped.parfait");
         let mut store = parfait_storage::Store::open(&path).unwrap();
-        store.save(&app.documents.session.document).unwrap();
+        store.save(&app.documents.active_session.document).unwrap();
         assert_eq!(
             store.load().unwrap().unwrap().document,
-            app.documents.session.document
+            app.documents.active_session.document
         );
         drop(app);
-        let app = Parfait::open(directory.path().to_owned()).unwrap();
+        let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
         assert_eq!(app.keymap.hint(Command::LayerClipping), "F8");
     }
 }
@@ -253,28 +256,28 @@ fn clipping_property_menu_and_key_share_undo_and_durable_state() {
 #[test]
 fn clipping_selection_is_atomic_and_stroke_and_modal_guards_apply() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.add_layer();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.add_layer();
     let context = egui::Context::default();
     app.set_layer_selection(7, 0);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     assert!(app.command_disabled_reason(Command::LayerClipping).is_some());
     app.execute_command(Command::LayerClipping, &context);
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.active_session.document, before);
     app.set_layer_selection(6, 1);
     app.execute_command(Command::LayerClipping, &context);
-    assert!(!app.documents.session.document.layers[0].clipped);
+    assert!(!app.documents.active_session.document.layers[0].clipped);
     assert!(
-        app.documents.session.document.layers[1..]
+        app.documents.active_session.document.layers[1..]
             .iter()
             .all(|layer| layer.clipped)
     );
-    assert_eq!(app.documents.session.history.rows().count(), 2);
+    assert_eq!(app.documents.active_session.history.rows().count(), 2);
     app.undo();
     assert!(
         app.documents
-            .session
+            .active_session
             .document
             .layers
             .iter()
@@ -285,7 +288,7 @@ fn clipping_selection_is_atomic_and_stroke_and_modal_guards_apply() {
     app.execute_command(Command::LayerClipping, &context);
     assert!(
         app.documents
-            .session
+            .active_session
             .document
             .layers
             .iter()
@@ -295,17 +298,17 @@ fn clipping_selection_is_atomic_and_stroke_and_modal_guards_apply() {
         app.confirm_new = blocker == 0;
         app.workspace.resizing = blocker == 1;
         if blocker == 2 {
-            app.documents.session.editing.stroke = Some(Stroke::begin(
-                &mut app.documents.session.document,
+            app.documents.active_session.editing.stroke = Some(Stroke::begin(
+                &mut app.documents.active_session.document,
                 Brush { opacity: 0., ..Default::default() },
                 Point { x: 2., y: 2., pressure: 1. },
             ));
         }
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         assert!(app.command_disabled_reason(Command::LayerClipping).is_some());
         app.execute_command(Command::LayerClipping, &context);
-        assert_eq!(app.documents.session.document, before);
-        app.documents.session.editing.stroke = None;
+        assert_eq!(app.documents.active_session.document, before);
+        app.documents.active_session.editing.stroke = None;
     }
 }
 
@@ -333,8 +336,8 @@ fn frame(
                 app.command_toggle(
                     ui,
                     Command::LayerVisibility,
-                    app.documents.session.document.layers
-                        [app.documents.session.document.active]
+                    app.documents.active_session.document.layers
+                        [app.documents.active_session.document.active]
                         .visible,
                 );
             }
@@ -381,11 +384,12 @@ fn key(key: egui::Key, repeat: bool) -> egui::Event {
 #[test]
 fn layer_edits_share_buffers_and_survive_undo_redo_and_reopen() {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
-    Arc::make_mut(&mut app.documents.session.document.layers[1].pixels)[..4]
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
+    Arc::make_mut(&mut app.documents.active_session.document.layers[1].pixels)
+        [..4]
         .copy_from_slice(&[120, 60, 30, 255]);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     let ctx = egui::Context::default();
     for (index, command) in
         [Command::MoveLayerDown, Command::LayerLock, Command::LayerVisibility]
@@ -394,38 +398,43 @@ fn layer_edits_share_buffers_and_survive_undo_redo_and_reopen() {
     {
         app.execute_command(command, &ctx);
         assert!(Arc::ptr_eq(
-            &app.documents.session.document.layers
-                [app.documents.session.document.active]
+            &app.documents.active_session.document.layers
+                [app.documents.active_session.document.active]
                 .pixels,
             &before.layers[1].pixels
         ));
-        assert_eq!(app.documents.session.history.rows().count(), index + 2);
         assert_eq!(
-            app.documents.session.history.rows().last().unwrap().label,
+            app.documents.active_session.history.rows().count(),
+            index + 2
+        );
+        assert_eq!(
+            app.documents.active_session.history.rows().last().unwrap().label,
             command.label()
         );
-        let edited = app.documents.session.document.clone();
+        let edited = app.documents.active_session.document.clone();
         app.undo();
         app.redo();
-        assert_eq!(app.documents.session.document.layers, edited.layers);
-        assert_eq!(app.documents.session.document.active, edited.active);
-        assert!(app.documents.session.document.revision > edited.revision);
+        assert_eq!(app.documents.active_session.document.layers, edited.layers);
+        assert_eq!(app.documents.active_session.document.active, edited.active);
+        assert!(
+            app.documents.active_session.document.revision > edited.revision
+        );
     }
-    assert_eq!(app.documents.session.document.active, 0);
-    assert!(app.documents.session.document.layers[0].locked);
-    assert!(!app.documents.session.document.layers[0].visible);
+    assert_eq!(app.documents.active_session.document.active, 0);
+    assert!(app.documents.active_session.document.layers[0].locked);
+    assert!(!app.documents.active_session.document.layers[0].visible);
     app.execute_command(Command::MoveLayerUp, &ctx);
-    assert_eq!(app.documents.session.document.active, 1);
+    assert_eq!(app.documents.active_session.document.active, 1);
     app.execute_command(Command::DeleteLayer, &ctx);
-    assert_eq!(app.documents.session.document.layers.len(), 1);
-    assert_eq!(app.documents.session.document.active, 0);
+    assert_eq!(app.documents.active_session.document.layers.len(), 1);
+    assert_eq!(app.documents.active_session.document.active, 0);
     app.undo();
-    assert_eq!(app.documents.session.document.layers.len(), 2);
+    assert_eq!(app.documents.active_session.document.layers.len(), 2);
     app.redo();
     let path = dir.path().join("layers.parfait");
     parfait_storage::Store::open(&path)
         .unwrap()
-        .save(&app.documents.session.document)
+        .save(&app.documents.active_session.document)
         .unwrap();
     let loaded = parfait_storage::Store::open(&path)
         .unwrap()
@@ -433,28 +442,28 @@ fn layer_edits_share_buffers_and_survive_undo_redo_and_reopen() {
         .unwrap()
         .unwrap()
         .document;
-    assert_eq!(loaded, app.documents.session.document);
+    assert_eq!(loaded, app.documents.active_session.document);
     assert!(loaded.validate());
 }
 
 #[test]
 fn refused_layer_commands_and_input_owners_preserve_redo() {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
-    app.documents.session.document.layers.truncate(1);
-    app.documents.session.document.active = 0;
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
+    app.documents.active_session.document.layers.truncate(1);
+    app.documents.active_session.document.active = 0;
     let ctx = egui::Context::default();
     app.execute_command(Command::LayerVisibility, &ctx);
     app.undo();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     for command in
         [Command::DeleteLayer, Command::MoveLayerUp, Command::MoveLayerDown]
     {
         assert!(app.command_disabled_reason(command).is_some());
         app.execute_command(command, &ctx);
-        assert_eq!(app.documents.session.document, before);
-        assert!(app.documents.session.history.can_redo());
+        assert_eq!(app.documents.active_session.document, before);
+        assert!(app.documents.active_session.history.can_redo());
     }
     for owner in 0..4 {
         app.show_help = owner == 0;
@@ -462,8 +471,8 @@ fn refused_layer_commands_and_input_owners_preserve_redo() {
         app.workspace.dragging =
             (owner == 2).then_some(crate::workspace::Palette::Layers);
         if owner == 3 {
-            app.documents.session.editing.stroke = Some(Stroke::begin(
-                &mut app.documents.session.document,
+            app.documents.active_session.editing.stroke = Some(Stroke::begin(
+                &mut app.documents.active_session.document,
                 Brush { opacity: 0., ..Default::default() },
                 Point { x: 2., y: 2., pressure: 1. },
             ));
@@ -480,40 +489,41 @@ fn refused_layer_commands_and_input_owners_preserve_redo() {
         ] {
             assert!(app.command_disabled_reason(command).is_some());
             app.execute_command(command, &ctx);
-            assert_eq!(app.documents.session.document, before);
-            assert!(app.documents.session.history.can_redo());
+            assert_eq!(app.documents.active_session.document, before);
+            assert!(app.documents.active_session.history.can_redo());
         }
     }
-    app.documents.session.editing.stroke = None;
+    app.documents.active_session.editing.stroke = None;
     app.execute_layer_command(Command::LayerVisibility, usize::MAX);
-    assert_eq!(app.documents.session.document, before);
-    assert!(app.documents.session.history.can_redo());
+    assert_eq!(app.documents.active_session.document, before);
+    assert!(app.documents.active_session.history.can_redo());
 }
 
 #[test]
 fn inactive_row_targets_do_not_select_and_reordering_preserves_surviving_target()
  {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
     app.new_layer();
-    let selected = app.documents.session.document.layers[2].pixels.clone();
+    let selected =
+        app.documents.active_session.document.layers[2].pixels.clone();
     for command in [Command::LayerLock, Command::LayerVisibility] {
         app.execute_layer_command(command, 0);
-        assert_eq!(app.documents.session.document.active, 2);
+        assert_eq!(app.documents.active_session.document.active, 2);
     }
-    assert!(!app.documents.session.document.layers[0].locked);
-    assert!(!app.documents.session.document.layers[0].visible);
+    assert!(!app.documents.active_session.document.layers[0].locked);
+    assert!(!app.documents.active_session.document.layers[0].visible);
     app.execute_layer_command(Command::MoveLayerUp, 1);
-    assert_eq!(app.documents.session.document.active, 1);
+    assert_eq!(app.documents.active_session.document.active, 1);
     assert!(Arc::ptr_eq(
-        &app.documents.session.document.layers[1].pixels,
+        &app.documents.active_session.document.layers[1].pixels,
         &selected
     ));
     app.execute_layer_command(Command::DeleteLayer, 0);
-    assert_eq!(app.documents.session.document.active, 0);
+    assert_eq!(app.documents.active_session.document.active, 0);
     assert!(Arc::ptr_eq(
-        &app.documents.session.document.layers[0].pixels,
+        &app.documents.active_session.document.layers[0].pixels,
         &selected
     ));
 }
@@ -525,8 +535,8 @@ fn actual_menu_palette_and_keyboard_routes_produce_the_same_edit() {
     let mut expected = None;
     for route in 0..3 {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.documents.session.document = Document::new(4, 4);
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(4, 4);
         frame(&mut app, &ctx, vec![], route == 1);
         frame(&mut app, &ctx, vec![], route == 1);
         match route {
@@ -565,12 +575,12 @@ fn actual_menu_palette_and_keyboard_routes_produce_the_same_edit() {
                 frame(&mut app, &ctx, vec![key(egui::Key::F6, false)], false);
             }
         }
-        assert_eq!(app.documents.session.document.active, 0);
-        assert_eq!(app.documents.session.history.rows().count(), 2);
+        assert_eq!(app.documents.active_session.document.active, 0);
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
         if let Some(expected) = &expected {
-            assert_eq!(&app.documents.session.document, expected);
+            assert_eq!(&app.documents.active_session.document, expected);
         } else {
-            expected = Some(app.documents.session.document.clone());
+            expected = Some(app.documents.active_session.document.clone());
         }
     }
 }
@@ -578,37 +588,38 @@ fn actual_menu_palette_and_keyboard_routes_produce_the_same_edit() {
 #[test]
 fn shared_pixel_layers_with_distinct_ids_reorder_as_a_real_edit() {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
     {
-        let mut copy = app.documents.session.document.layers[1].clone();
-        copy.id = app.documents.session.document.allocate_layer_id().unwrap();
-        app.documents.session.document.layers.push(copy);
+        let mut copy = app.documents.active_session.document.layers[1].clone();
+        copy.id =
+            app.documents.active_session.document.allocate_layer_id().unwrap();
+        app.documents.active_session.document.layers.push(copy);
     }
     let ctx = egui::Context::default();
     app.execute_command(Command::LayerVisibility, &ctx);
     app.undo();
-    let revision = app.documents.session.document.revision;
-    let rows = app.documents.session.history.rows().count();
+    let revision = app.documents.active_session.document.revision;
+    let rows = app.documents.active_session.history.rows().count();
     app.execute_command(Command::MoveLayerUp, &ctx);
-    assert_eq!(app.documents.session.document.active, 2);
-    assert!(app.documents.session.document.revision > revision);
-    assert_eq!(app.documents.session.history.rows().count(), rows);
-    assert!(!app.documents.session.history.can_redo());
+    assert_eq!(app.documents.active_session.document.active, 2);
+    assert!(app.documents.active_session.document.revision > revision);
+    assert_eq!(app.documents.active_session.history.rows().count(), rows);
+    assert!(!app.documents.active_session.history.can_redo());
     assert_eq!(
-        app.documents.session.document.layers
-            [app.documents.session.document.active]
+        app.documents.active_session.document.layers
+            [app.documents.active_session.document.active]
             .id,
         parfait_core::LayerId(2)
     );
-    assert!(app.documents.session.document.validate());
+    assert!(app.documents.active_session.document.validate());
 }
 
 #[test]
 fn checkbox_rows_and_menu_toggle_share_state_without_changing_active_layer() {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], true);
@@ -624,10 +635,10 @@ fn checkbox_rows_and_menu_toggle_share_state_without_changing_active_layer() {
             })
             .unwrap();
         click(&mut app, &ctx, rect, true);
-        assert_eq!(app.documents.session.document.active, 1);
+        assert_eq!(app.documents.active_session.document.active, 1);
     }
-    assert!(!app.documents.session.document.layers[0].visible);
-    assert!(!app.documents.session.document.layers[0].locked);
+    assert!(!app.documents.active_session.document.layers[0].visible);
+    assert!(!app.documents.active_session.document.layers[0].locked);
     frame(&mut app, &ctx, vec![], false);
     let rect = ctx
         .data(|data| {
@@ -638,10 +649,10 @@ fn checkbox_rows_and_menu_toggle_share_state_without_changing_active_layer() {
         })
         .unwrap();
     click(&mut app, &ctx, rect, false);
-    assert!(!app.documents.session.document.layers[1].visible);
-    assert_eq!(app.documents.session.history.rows().count(), 4);
+    assert!(!app.documents.active_session.document.layers[1].visible);
+    assert_eq!(app.documents.active_session.history.rows().count(), 4);
     app.undo();
-    assert!(app.documents.session.document.layers[1].visible);
+    assert!(app.documents.active_session.document.layers[1].visible);
 }
 
 #[test]
@@ -655,10 +666,10 @@ fn new_commands_ignore_key_repeat_and_text_focus() {
         Command::LayerAlphaLock,
     ] {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.documents.session.document = Document::new(4, 4);
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(4, 4);
         app.new_layer();
-        app.documents.session.document.active = 1;
+        app.documents.active_session.document.active = 1;
         app.keymap
             .assign(
                 command,
@@ -669,14 +680,16 @@ fn new_commands_ignore_key_repeat_and_text_focus() {
             .unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         frame(&mut app, &ctx, vec![key(egui::Key::F6, false)], false);
-        assert!(!app.documents.session.document.same_edit_state(&before));
-        let after_first_press = app.documents.session.document.clone();
+        assert!(
+            !app.documents.active_session.document.same_edit_state(&before)
+        );
+        let after_first_press = app.documents.active_session.document.clone();
         frame(&mut app, &ctx, vec![key(egui::Key::F6, true)], false);
-        assert_eq!(app.documents.session.document, after_first_press);
+        assert_eq!(app.documents.active_session.document, after_first_press);
         app.undo();
-        let before_text = app.documents.session.document.clone();
+        let before_text = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -689,11 +702,13 @@ fn new_commands_ignore_key_repeat_and_text_focus() {
             },
         );
         output.textures_delta.clear();
-        assert_eq!(app.documents.session.document, before_text);
+        assert_eq!(app.documents.active_session.document, before_text);
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         frame(&mut app, &ctx, vec![key(egui::Key::F6, false)], false);
-        assert!(!app.documents.session.document.same_edit_state(&before));
+        assert!(
+            !app.documents.active_session.document.same_edit_state(&before)
+        );
     }
 }
 
@@ -701,8 +716,8 @@ fn new_commands_ignore_key_repeat_and_text_focus() {
 fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
     assert_eq!(Command::ALL.len(), 93);
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
     app.workspace.panels[0].height = 315.;
     app.persist_preferences(true);
     let mut legacy: serde_json::Value =
@@ -712,7 +727,7 @@ fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
     parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
     let keys = app.keymap.clone();
     drop(app);
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert_eq!(app.workspace.panels[0].height, 315.);
     assert!(app.keymap == keys);
@@ -746,7 +761,7 @@ fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
     assert_eq!(saved["version"], 21);
     drop(app);
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     assert!(app.keymap == keys);
     assert_eq!(app.workspace.panels[0].height, 315.);
     saved["keymap"]["bindings"][0]["command"] = "unknown_future_command".into();
@@ -772,11 +787,16 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
         let mut expected = None;
         for route in 0..3 {
             let dir = tempfile::tempdir().unwrap();
-            let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-            app.documents.session.document = Document::new(4, 4);
-            app.documents.session.document.add_layer();
-            for (index, layer) in
-                app.documents.session.document.layers.iter_mut().enumerate()
+            let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+            app.documents.active_session.document = Document::new(4, 4);
+            app.documents.active_session.document.add_layer();
+            for (index, layer) in app
+                .documents
+                .active_session
+                .document
+                .layers
+                .iter_mut()
+                .enumerate()
             {
                 layer.locked = false;
                 Arc::make_mut(&mut layer.pixels)[..4].copy_from_slice(&[
@@ -789,7 +809,7 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
             if command == Command::MergeSelectedLayers {
                 app.set_layer_selection(0b110, 2);
             }
-            let before = app.documents.session.document.clone();
+            let before = app.documents.active_session.document.clone();
             let ctx = egui::Context::default();
             crate::theme::apply(&ctx);
             app.keymap
@@ -860,25 +880,37 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
                 }
             }
             assert_eq!(
-                app.documents.session.history.rows().count(),
+                app.documents.active_session.history.rows().count(),
                 2,
                 "{command:?} route {route}"
             );
-            let result = app.documents.session.document.clone();
+            let result = app.documents.active_session.document.clone();
             if let Some(expected) = &expected {
                 assert_eq!(&result, expected);
             } else {
                 expected = Some(result.clone());
             }
             app.undo();
-            assert_eq!(app.documents.session.document.layers, before.layers);
-            assert_eq!(app.documents.session.document.active, before.active);
+            assert_eq!(
+                app.documents.active_session.document.layers,
+                before.layers
+            );
+            assert_eq!(
+                app.documents.active_session.document.active,
+                before.active
+            );
             app.redo();
-            assert_eq!(app.documents.session.document.layers, result.layers);
-            assert_eq!(app.documents.session.document.active, result.active);
+            assert_eq!(
+                app.documents.active_session.document.layers,
+                result.layers
+            );
+            assert_eq!(
+                app.documents.active_session.document.active,
+                result.active
+            );
             let path = dir.path().join("combined.parfait");
             let mut store = parfait_storage::Store::open(&path).unwrap();
-            store.save(&app.documents.session.document).unwrap();
+            store.save(&app.documents.active_session.document).unwrap();
             drop(store);
             assert_eq!(
                 parfait_storage::Store::open(&path)
@@ -887,7 +919,7 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
                     .unwrap()
                     .unwrap()
                     .document,
-                app.documents.session.document
+                app.documents.active_session.document
             );
         }
     }
@@ -897,12 +929,12 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
 fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixels()
  {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(4, 4);
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(4, 4);
     let ctx = egui::Context::default();
     app.new_layer();
     app.undo();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     for command in [
         Command::ClearLayer,
         Command::TransferLayerDown,
@@ -911,26 +943,31 @@ fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixe
         Command::FlattenImage,
     ] {
         app.execute_command(command, &ctx);
-        assert_eq!(app.documents.session.document, before);
-        assert!(app.documents.session.history.can_redo());
+        assert_eq!(app.documents.active_session.document, before);
+        assert!(app.documents.active_session.history.can_redo());
     }
-    app.documents.session.document.width = 4096;
-    app.documents.session.document.height = 4096;
-    while app.documents.session.document.layers.len() < 7 {
+    app.documents.active_session.document.width = 4096;
+    app.documents.active_session.document.height = 4096;
+    while app.documents.active_session.document.layers.len() < 7 {
         {
-            let mut copy = app.documents.session.document.layers[1].clone();
-            copy.id =
-                app.documents.session.document.allocate_layer_id().unwrap();
-            app.documents.session.document.layers.push(copy);
+            let mut copy =
+                app.documents.active_session.document.layers[1].clone();
+            copy.id = app
+                .documents
+                .active_session
+                .document
+                .allocate_layer_id()
+                .unwrap();
+            app.documents.active_session.document.layers.push(copy);
         }
     }
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     assert!(app.command_disabled_reason(Command::CopyVisibleLayers).is_some());
     app.execute_command(Command::CopyVisibleLayers, &ctx);
-    assert_eq!(app.documents.session.document, before);
-    assert!(app.documents.session.history.can_redo());
+    assert_eq!(app.documents.active_session.document, before);
+    assert!(app.documents.active_session.history.can_redo());
     for (layer, before) in
-        app.documents.session.document.layers.iter().zip(&before.layers)
+        app.documents.active_session.document.layers.iter().zip(&before.layers)
     {
         assert!(Arc::ptr_eq(&layer.pixels, &before.pixels));
     }
@@ -940,7 +977,7 @@ fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixe
 fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindings()
  {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     app.workspace.panels[0].height = 317.;
     app.keymap
         .assign(
@@ -962,7 +999,7 @@ fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindin
     )
     .unwrap();
     drop(app);
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert!(app.keymap == keys);
     assert!(app.workspace.same_preferences(&layout));
@@ -986,9 +1023,9 @@ fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindin
 fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
     for route in 0..3 {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.documents.session.document = Document::new(8, 8);
-        let before = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(8, 8);
+        let before = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         app.keymap
@@ -1022,8 +1059,8 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
                         app.top_menu_toggle(
                             ui,
                             Command::LayerAlphaLock,
-                            app.documents.session.document.layers
-                                [app.documents.session.document.active]
+                            app.documents.active_session.document.layers
+                                [app.documents.active_session.document.active]
                                 .alpha_locked,
                         );
                     }
@@ -1062,24 +1099,24 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
                 );
             }
         }
-        assert!(app.documents.session.document.layers[1].alpha_locked);
-        assert_eq!(app.documents.session.document.active, 1);
+        assert!(app.documents.active_session.document.layers[1].alpha_locked);
+        assert_eq!(app.documents.active_session.document.active, 1);
         assert_eq!(
-            app.documents.session.document.layers[1].id,
+            app.documents.active_session.document.layers[1].id,
             before.layers[1].id
         );
         assert!(Arc::ptr_eq(
-            &app.documents.session.document.layers[1].pixels,
+            &app.documents.active_session.document.layers[1].pixels,
             &before.layers[1].pixels
         ));
-        assert_eq!(app.documents.session.history.rows().count(), 2);
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
         app.undo();
-        assert!(!app.documents.session.document.layers[1].alpha_locked);
+        assert!(!app.documents.active_session.document.layers[1].alpha_locked);
         app.redo();
-        assert!(app.documents.session.document.layers[1].alpha_locked);
+        assert!(app.documents.active_session.document.layers[1].alpha_locked);
         let path = dir.path().join("alpha.parfait");
         let mut store = parfait_storage::Store::open(&path).unwrap();
-        store.save(&app.documents.session.document).unwrap();
+        store.save(&app.documents.active_session.document).unwrap();
         drop(store);
         assert_eq!(
             parfait_storage::Store::open(&path)
@@ -1088,7 +1125,7 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
                 .unwrap()
                 .unwrap()
                 .document,
-            app.documents.session.document
+            app.documents.active_session.document
         );
     }
 }
@@ -1097,19 +1134,19 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
 fn selected_ids_and_inline_name_target_survive_reordering_without_index_aliases()
  {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.add_layer();
-    app.documents.session.document.add_layer();
-    app.documents.session.document.active = 2;
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.add_layer();
+    app.documents.active_session.document.add_layer();
+    app.documents.active_session.document.active = 2;
     app.set_layer_selection(0b0110, 1);
-    let chosen = app.documents.session.document.layers[1].id;
-    let active = app.documents.session.document.layers[2].id;
-    app.documents.session.document.layers.swap(1, 3);
-    app.documents.session.document.touch();
+    let chosen = app.documents.active_session.document.layers[1].id;
+    let active = app.documents.active_session.document.layers[2].id;
+    app.documents.active_session.document.layers.swap(1, 3);
+    app.documents.active_session.document.touch();
     assert_eq!(
-        app.documents.session.document.layers
-            [app.documents.session.document.active]
+        app.documents.active_session.document.layers
+            [app.documents.active_session.document.active]
             .id,
         active
     );
@@ -1117,16 +1154,23 @@ fn selected_ids_and_inline_name_target_survive_reordering_without_index_aliases(
     let ctx = egui::Context::default();
     app.execute_command(Command::LayerAlphaLock, &ctx);
     assert!(
-        app.documents.session.document.layers
-            [app.documents.session.document.layer_index(chosen).unwrap()]
+        app.documents.active_session.document.layers[app
+            .documents
+            .active_session
+            .document
+            .layer_index(chosen)
+            .unwrap()]
         .alpha_locked
     );
-    assert!(app.documents.session.document.layers[2].alpha_locked);
-    assert!(!app.documents.session.document.layers[1].alpha_locked);
+    assert!(app.documents.active_session.document.layers[2].alpha_locked);
+    assert!(!app.documents.active_session.document.layers[1].alpha_locked);
     app.begin_layer_rename(3);
-    let name_id = app.documents.session.document.layers[3].id;
+    let name_id = app.documents.active_session.document.layers[3].id;
     app.reorder_layer_mask(1 << 3, 1);
-    assert_eq!(app.documents.session.document.layer_index(name_id), Some(1));
+    assert_eq!(
+        app.documents.active_session.document.layer_index(name_id),
+        Some(1)
+    );
     crate::theme::apply(&ctx);
     for events in [
         vec![],
@@ -1156,15 +1200,18 @@ fn selected_ids_and_inline_name_target_survive_reordering_without_index_aliases(
         );
         output.textures_delta.clear();
     }
-    assert_eq!(app.documents.session.document.layers[1].id, name_id);
-    assert_eq!(app.documents.session.document.layers[1].name, "Stable name");
-    assert_eq!(app.documents.session.document.layers[3].id, active);
+    assert_eq!(app.documents.active_session.document.layers[1].id, name_id);
+    assert_eq!(
+        app.documents.active_session.document.layers[1].name,
+        "Stable name"
+    );
+    assert_eq!(app.documents.active_session.document.layers[3].id, active);
 }
 
 #[test]
 fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     app.workspace.panels[0].height = 319.;
     app.persist_preferences(true);
     let keys = app.keymap.clone();
@@ -1177,7 +1224,7 @@ fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
     )
     .unwrap();
     drop(app);
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert!(app.keymap == keys);
     assert_eq!(app.workspace.panels[0].height, 319.);
@@ -1200,6 +1247,6 @@ fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
         21
     );
     drop(app);
-    let app = Parfait::open(dir.path().to_owned()).unwrap();
+    let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::LayerAlphaLock), "F7");
 }

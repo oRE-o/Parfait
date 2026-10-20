@@ -299,11 +299,11 @@ mod tests {
     #[test]
     fn apply_cancel_and_failed_save_keep_durable_keymap_and_artwork() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.persist_preferences(true);
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let artwork = app.documents.session.document.clone();
+        let artwork = app.documents.active_session.document.clone();
         let old = app.keymap.clone();
         let chord = Chord::new(Key::F8, false, false, false);
         let draft = |app: &mut Parfait| {
@@ -334,9 +334,9 @@ mod tests {
         assert!(app.error.is_none());
         assert!(app.shortcut_editor.is_none());
         assert_eq!(app.keymap.resolve(chord, None), Some(Command::Undo));
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
         drop(app);
-        let app = Parfait::open(dir.path().to_owned()).unwrap();
+        let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(app.keymap.resolve(chord, None), Some(Command::Undo));
     }
     #[test]
@@ -344,7 +344,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.open_shortcut_settings();
         let editor = app.shortcut_editor.as_mut().unwrap();
         editor.begin_capture(Some(Chord::new(Key::Z, true, false, false)));

@@ -7,7 +7,7 @@ impl Parfait {
         conversion: RasterConversion,
     ) -> Option<&'static str> {
         if self.dialog_open()
-            || self.documents.session.layer_ui.list.owns_pointer()
+            || self.documents.active_session.layer_ui.list.owns_pointer()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
         {
@@ -20,8 +20,8 @@ impl Parfait {
                 "Select the layer's content thumbnail, not its mask, to convert pixels.",
             );
         }
-        self.documents.session.document.raster_conversion_reason(
-            self.documents.session.document.active,
+        self.documents.active_session.document.raster_conversion_reason(
+            self.documents.active_session.document.active,
             conversion,
         )
     }
@@ -35,7 +35,7 @@ impl Parfait {
             self.notice = Some(reason.into());
             return;
         }
-        let layer = self.documents.session.document.active;
+        let layer = self.documents.active_session.document.active;
         self.edit_named(command.label(), |document| {
             document.convert_layer_pixels(layer, conversion);
         });

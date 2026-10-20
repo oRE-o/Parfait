@@ -12,13 +12,13 @@ impl Parfait {
         match command {
             Command::NewLayerFolder | Command::GroupLayersInFolder => {
                 parfait_storage::layer_folder_growth_error(
-                    &self.documents.session.document,
+                    &self.documents.active_session.document,
                     (command == Command::GroupLayersInFolder)
                         .then(|| self.selected_layer_mask()),
                     "폴더 ".len()
                         + self
                             .documents
-                            .session
+                            .active_session
                             .document
                             .next_layer_id
                             .max(1)
@@ -27,20 +27,22 @@ impl Parfait {
                 )
             }
             Command::UngroupLayerFolder => {
-                let target = &self.documents.session.document.layers
-                    [self.documents.session.document.active];
+                let target = &self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active];
                 if target.kind != LayerKind::Folder {
                     Some("폴더를 선택해 주세요.")
                 } else if !self
                     .documents
-                    .session
+                    .active_session
                     .document
                     .layer_ancestors_unlocked(
-                        self.documents.session.document.active,
+                        self.documents.active_session.document.active,
                     )
                 {
                     Some("폴더와 부모의 잠금을 해제해 주세요.")
-                } else if self.documents.session.document.layers.len() == 1 {
+                } else if self.documents.active_session.document.layers.len()
+                    == 1
+                {
                     Some("레이어를 하나 이상 남겨 주세요.")
                 } else {
                     None
@@ -51,7 +53,7 @@ impl Parfait {
     }
 
     fn folder_name(&self) -> String {
-        format!("폴더 {}", self.documents.session.document.next_layer_id)
+        format!("폴더 {}", self.documents.active_session.document.next_layer_id)
     }
 
     pub(crate) fn execute_folder_command(&mut self, command: Command) {
@@ -74,10 +76,10 @@ impl Parfait {
             _ => unreachable!(),
         });
         self.set_layer_selection(
-            1 << self.documents.session.document.active,
-            self.documents.session.document.active,
+            1 << self.documents.active_session.document.active,
+            self.documents.active_session.document.active,
         );
-        self.reveal_layer(self.documents.session.document.active);
+        self.reveal_layer(self.documents.active_session.document.active);
     }
 
     pub(crate) fn tree_collection_reason(
@@ -88,12 +90,12 @@ impl Parfait {
         match command {
             Command::DeleteLayer => self
                 .documents
-                .session
+                .active_session
                 .document
                 .layer_tree_delete_reason(selection),
             Command::DuplicateLayer => {
                 parfait_storage::layer_duplication_error(
-                    &self.documents.session.document,
+                    &self.documents.active_session.document,
                     selection,
                 )
             }
@@ -115,7 +117,7 @@ impl Parfait {
                         | Command::MoveActiveLayerToBottom
                 );
                 self.documents
-                    .session
+                    .active_session
                     .document
                     .layer_sibling_order(selection, upward, edge)
                     .is_none()
@@ -132,9 +134,9 @@ impl Parfait {
         command: Command,
         selection: u64,
     ) {
-        if self.documents.session.editing.stroke.is_some()
+        if self.documents.active_session.editing.stroke.is_some()
             || self.dialog_open()
-            || self.documents.session.layer_ui.list.owns_pointer()
+            || self.documents.active_session.layer_ui.list.owns_pointer()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
         {
@@ -166,7 +168,7 @@ impl Parfait {
             );
             let order = self
                 .documents
-                .session
+                .active_session
                 .document
                 .layer_sibling_order(selection, upward, edge)
                 .unwrap();
@@ -185,18 +187,20 @@ impl Parfait {
                 }
             });
             self.set_layer_selection(
-                copied.unwrap_or(1 << self.documents.session.document.active),
-                self.documents.session.document.active,
+                copied.unwrap_or(
+                    1 << self.documents.active_session.document.active,
+                ),
+                self.documents.active_session.document.active,
             );
         }
-        self.reveal_layer(self.documents.session.document.active);
+        self.reveal_layer(self.documents.active_session.document.active);
     }
 
     pub(crate) fn tree_flag_reason(
         &self,
         command: Command,
     ) -> Option<&'static str> {
-        if !self.documents.session.document.has_non_raster_layers() {
+        if !self.documents.active_session.document.has_non_raster_layers() {
             return None;
         }
         let selection = self.selected_layer_mask();
@@ -205,11 +209,17 @@ impl Parfait {
             Command::LayerClipping
                 | Command::LayerReference
                 | Command::LayerDraft
-        ) && self.documents.session.document.layers.iter().enumerate().any(
-            |(index, layer)| {
+        ) && self
+            .documents
+            .active_session
+            .document
+            .layers
+            .iter()
+            .enumerate()
+            .any(|(index, layer)| {
                 selection & (1 << index) != 0 && layer.kind.is_paper()
-            },
-        ) {
+            })
+        {
             return Some(
                 "용지는 클리핑이나 참조, 밑그림으로 설정할 수 없습니다.",
             );
@@ -223,22 +233,22 @@ impl Parfait {
             | Command::MoveActiveLayerDown
             | Command::MoveActiveLayerToTop
             | Command::MoveActiveLayerToBottom => {
-                self.tree_collection_reason(command, 1 << self.documents.session.document.active)
+                self.tree_collection_reason(command, 1 << self.documents.active_session.document.active)
             }
             Command::LayerAlphaLock
-                if self.documents.session.document.layers.iter().enumerate().any(|(index, layer)| {
+                if self.documents.active_session.document.layers.iter().enumerate().any(|(index, layer)| {
                     selection & (1 << index) != 0 && layer.kind != LayerKind::Raster
                 }) =>
             {
                 Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.")
             }
             Command::LayerClipping
-                if !self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                if !self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .clipped =>
             {
                 self.documents
-                    .session
+                    .active_session
                     .document
                     .layers
                     .iter()
@@ -247,7 +257,7 @@ impl Parfait {
                         selection & (1 << index) != 0
                             && self
                                 .documents
-                                .session
+                                .active_session
                                 .document
                                 .layer_clipping_base_below(index, selection)
                                 .is_none()
@@ -265,7 +275,7 @@ impl Parfait {
         parent: Option<LayerId>,
     ) {
         if let Some(reason) = parfait_storage::layer_reparent_error(
-            &self.documents.session.document,
+            &self.documents.active_session.document,
             selection,
             boundary,
             parent,
@@ -276,7 +286,7 @@ impl Parfait {
         let selected = self.selected_layer_mask();
         let identities: Vec<_> = self
             .documents
-            .session
+            .active_session
             .document
             .layers
             .iter()
@@ -289,7 +299,7 @@ impl Parfait {
         });
         let selected = self
             .documents
-            .session
+            .active_session
             .document
             .layers
             .iter()
@@ -298,8 +308,8 @@ impl Parfait {
             .fold(0, |mask, (index, _)| mask | (1 << index));
         self.set_layer_selection(
             selected,
-            self.documents.session.document.active,
+            self.documents.active_session.document.active,
         );
-        self.reveal_layer(self.documents.session.document.active);
+        self.reveal_layer(self.documents.active_session.document.active);
     }
 }

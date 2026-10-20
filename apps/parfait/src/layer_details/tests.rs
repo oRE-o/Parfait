@@ -2,10 +2,10 @@ use super::*;
 use parfait_core::{BlendMode, Document, LayerMask, MaskCoverage};
 
 fn fixture(directory: &std::path::Path) -> Parfait {
-    let mut app = Parfait::open(directory.to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.layers[1].opacity = 0.33333334;
-    app.documents.session.document.layers[1].mask =
+    let mut app = Parfait::open_legacy(directory.to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.layers[1].opacity = 0.33333334;
+    app.documents.active_session.document.layers[1].mask =
         Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(128) });
     app
 }
@@ -65,13 +65,14 @@ fn draft_settings_apply_once_preserve_content_and_reopen() {
     let mut app = fixture(directory.path());
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::LayerDetails, &context);
     assert!(app.dialog_open());
     for _ in 0..3 {
         frame(&mut app, &context, vec![]);
     }
-    let dialog = app.documents.session.layer_ui.details.as_mut().unwrap();
+    let dialog =
+        app.documents.active_session.layer_ui.details.as_mut().unwrap();
     dialog.draft.name = "한글 이름".into();
     dialog.draft.reference = true;
     dialog.draft.draft = true;
@@ -79,10 +80,10 @@ fn draft_settings_apply_once_preserve_content_and_reopen() {
     dialog.draft.alpha_locked = true;
     dialog.draft.opacity = 0.42;
     dialog.draft.blend_mode = BlendMode::Multiply;
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.active_session.document, before);
     click(&mut app, &context, "layer_details_accept");
     assert!(!app.dialog_open());
-    let layer = &app.documents.session.document.layers[1];
+    let layer = &app.documents.active_session.document.layers[1];
     assert_eq!(layer.name, "한글 이름");
     assert!(
         layer.reference && layer.draft && layer.locked && layer.alpha_locked
@@ -92,15 +93,15 @@ fn draft_settings_apply_once_preserve_content_and_reopen() {
     assert_eq!(layer.mask, before.layers[1].mask);
     assert!(Arc::ptr_eq(&layer.pixels, &before.layers[1].pixels));
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&before));
-    assert!(!app.documents.session.history.can_undo());
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+    assert!(!app.documents.active_session.history.can_undo());
     app.redo();
     let path = directory.path().join("settings.parfait");
     app.save_project_to(path.clone()).unwrap();
     app.open_project_from(path).unwrap();
     assert!(
-        app.documents.session.document.layers[1].reference
-            && app.documents.session.document.layers[1].draft
+        app.documents.active_session.document.layers[1].reference
+            && app.documents.active_session.document.layers[1].draft
     );
     assert!(!app.project_is_modified());
 }
@@ -113,7 +114,7 @@ fn unchanged_confirmation_and_cancel_preserve_redo_and_fractional_opacity() {
     crate::theme::apply(&context);
     app.edit(|document| document.layers[1].visible = false);
     app.undo();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     for accept in [true, false] {
         app.open_layer_details();
         for _ in 0..3 {
@@ -121,7 +122,7 @@ fn unchanged_confirmation_and_cancel_preserve_redo_and_fractional_opacity() {
         }
         if !accept {
             app.documents
-                .session
+                .active_session
                 .layer_ui
                 .details
                 .as_mut()
@@ -138,8 +139,8 @@ fn unchanged_confirmation_and_cancel_preserve_redo_and_fractional_opacity() {
                 "layer_details_cancel"
             },
         );
-        assert_eq!(app.documents.session.document, before);
-        assert!(app.documents.session.history.can_redo());
+        assert_eq!(app.documents.active_session.document, before);
+        assert!(app.documents.active_session.history.can_redo());
     }
 }
 
@@ -149,7 +150,7 @@ fn escape_ime_and_stale_target_do_not_apply_drafts() {
     let mut app = fixture(directory.path());
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.open_layer_details();
     frame(&mut app, &context, vec![]);
     frame(
@@ -163,7 +164,7 @@ fn escape_ime_and_stale_target_do_not_apply_drafts() {
             key(egui::Key::Enter),
         ],
     );
-    assert!(app.documents.session.layer_ui.details.is_some());
+    assert!(app.documents.active_session.layer_ui.details.is_some());
     frame(
         &mut app,
         &context,
@@ -172,15 +173,15 @@ fn escape_ime_and_stale_target_do_not_apply_drafts() {
             key(egui::Key::Enter),
         ],
     );
-    assert!(app.documents.session.layer_ui.details.is_some());
+    assert!(app.documents.active_session.layer_ui.details.is_some());
     frame(&mut app, &context, vec![key(egui::Key::Escape)]);
-    assert!(app.documents.session.layer_ui.details.is_none());
-    assert_eq!(app.documents.session.document, before);
+    assert!(app.documents.active_session.layer_ui.details.is_none());
+    assert_eq!(app.documents.active_session.document, before);
     app.open_layer_details();
-    app.documents.session.document.touch();
+    app.documents.active_session.document.touch();
     frame(&mut app, &context, vec![]);
-    assert!(app.documents.session.layer_ui.details.is_none());
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.layer_ui.details.is_none());
+    assert!(app.documents.active_session.document.same_edit_state(&before));
 }
 
 #[test]
@@ -191,11 +192,17 @@ fn invalid_names_and_minimum_size_keep_actions_visible() {
     crate::theme::apply(&context);
     app.open_layer_details();
     for name in ["", " \t", "invalid\nname"] {
-        app.documents.session.layer_ui.details.as_mut().unwrap().draft.name =
-            name.into();
+        app.documents
+            .active_session
+            .layer_ui
+            .details
+            .as_mut()
+            .unwrap()
+            .draft
+            .name = name.into();
         assert!(
             app.documents
-                .session
+                .active_session
                 .layer_ui
                 .details
                 .as_ref()
@@ -207,13 +214,19 @@ fn invalid_names_and_minimum_size_keep_actions_visible() {
             frame(&mut app, &context, vec![]);
         }
         click(&mut app, &context, "layer_details_accept");
-        assert!(app.documents.session.layer_ui.details.is_some());
+        assert!(app.documents.active_session.layer_ui.details.is_some());
     }
-    app.documents.session.layer_ui.details.as_mut().unwrap().draft.name =
-        "정상 이름".into();
+    app.documents
+        .active_session
+        .layer_ui
+        .details
+        .as_mut()
+        .unwrap()
+        .draft
+        .name = "정상 이름".into();
     for opacity in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
         app.documents
-            .session
+            .active_session
             .layer_ui
             .details
             .as_mut()
@@ -222,7 +235,7 @@ fn invalid_names_and_minimum_size_keep_actions_visible() {
             .opacity = opacity;
         assert!(
             app.documents
-                .session
+                .active_session
                 .layer_ui
                 .details
                 .as_ref()
@@ -231,12 +244,24 @@ fn invalid_names_and_minimum_size_keep_actions_visible() {
                 .is_some()
         );
     }
-    app.documents.session.layer_ui.details.as_mut().unwrap().draft.opacity =
-        0.5;
-    app.documents.session.layer_ui.details.as_mut().unwrap().max_name_bytes = 1;
+    app.documents
+        .active_session
+        .layer_ui
+        .details
+        .as_mut()
+        .unwrap()
+        .draft
+        .opacity = 0.5;
+    app.documents
+        .active_session
+        .layer_ui
+        .details
+        .as_mut()
+        .unwrap()
+        .max_name_bytes = 1;
     assert!(
         app.documents
-            .session
+            .active_session
             .layer_ui
             .details
             .as_ref()
@@ -264,23 +289,23 @@ fn flags_are_independent_of_locks_and_recovery_does_not_clear_file_marker() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = fixture(directory.path());
     let context = egui::Context::default();
-    app.documents.session.document.layers[1].locked = true;
+    app.documents.active_session.document.layers[1].locked = true;
     app.save_project_to(directory.path().join("flags.parfait")).unwrap();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::LayerReference, &context);
     app.execute_command(Command::LayerDraft, &context);
     assert!(
-        app.documents.session.document.layers[1].reference
-            && app.documents.session.document.layers[1].draft
+        app.documents.active_session.document.layers[1].reference
+            && app.documents.active_session.document.layers[1].draft
     );
     assert!(app.project_is_modified());
-    app.documents.session.recovery.saved =
-        app.documents.session.document.revision;
+    app.documents.active_session.recovery.saved =
+        app.documents.active_session.document.revision;
     assert!(app.project_is_modified());
     app.undo();
     app.undo();
     assert!(!app.project_is_modified());
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.document.same_edit_state(&before));
 }
 
 #[test]
@@ -288,29 +313,34 @@ fn selected_set_flags_use_active_value_and_one_undo() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = fixture(directory.path());
     let context = egui::Context::default();
-    app.documents.session.document.layers[0].draft = true;
+    app.documents.active_session.document.layers[0].draft = true;
     app.set_layer_selection(3, 1);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::LayerDraft, &context);
     assert!(
-        app.documents.session.document.layers.iter().all(|layer| layer.draft)
+        app.documents
+            .active_session
+            .document
+            .layers
+            .iter()
+            .all(|layer| layer.draft)
     );
-    assert!(app.documents.session.document.layers[0].locked);
+    assert!(app.documents.active_session.document.layers[0].locked);
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&before));
-    assert!(!app.documents.session.history.can_undo());
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+    assert!(!app.documents.active_session.history.can_undo());
     app.set_layer_selection(3, 1);
     app.execute_command(Command::LayerReference, &context);
     assert!(
         app.documents
-            .session
+            .active_session
             .document
             .layers
             .iter()
             .all(|layer| layer.reference)
     );
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.document.same_edit_state(&before));
 }
 
 #[test]
@@ -337,7 +367,7 @@ fn previous_keymap_ownership_survives_and_new_layer_keys_reopen() {
     )
     .unwrap();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert!(app.keymap == expected);
     assert_eq!(app.keymap.hint(Command::LayerLock), "F6");
@@ -354,7 +384,7 @@ fn previous_keymap_ownership_survives_and_new_layer_keys_reopen() {
     app.persist_preferences(true);
     assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
     drop(app);
-    let app = Parfait::open(directory.path().to_owned()).unwrap();
+    let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::LayerReference), "F7");
     assert_eq!(app.keymap.hint(Command::LayerDraft), "F8");
     assert_eq!(app.keymap.hint(Command::LayerDetails), "F9");

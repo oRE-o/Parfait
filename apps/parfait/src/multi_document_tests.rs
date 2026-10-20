@@ -166,34 +166,34 @@ fn multi_document_baseline_fixtures_have_independent_pixels_and_fixed_oracle() {
 #[test]
 fn multi_document_baseline_history_failure_and_noop_preserve_future() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = masked(32, 24);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = masked(32, 24);
     app.edit_named("Baseline opacity", |document| {
         document.layers[1].opacity = 0.5
     });
-    let first = app.documents.session.document.clone();
+    let first = app.documents.active_session.document.clone();
     app.edit_named("Baseline name", |document| {
         document.layers[1].name = "Second edit".into()
     });
-    let second = app.documents.session.document.clone();
+    let second = app.documents.active_session.document.clone();
     app.undo();
-    assert_artwork(&app.documents.session.document, &first);
-    let before = app.documents.session.document.clone();
-    let history = rows(&app.documents.session.history);
+    assert_artwork(&app.documents.active_session.document, &first);
+    let before = app.documents.active_session.document.clone();
+    let history = rows(&app.documents.active_session.history);
     app.edit_named("Baseline no-op", |_| {});
-    assert_eq!(rows(&app.documents.session.history), history);
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(rows(&app.documents.active_session.history), history);
+    assert_eq!(app.documents.active_session.document, before);
     assert!(
         app.save_project_to(directory.path().join("missing/output.parfait"))
             .is_err()
     );
-    assert_eq!(app.documents.session.document, before);
-    assert_eq!(rows(&app.documents.session.history), history);
-    assert!(app.documents.session.history.can_redo());
+    assert_eq!(app.documents.active_session.document, before);
+    assert_eq!(rows(&app.documents.active_session.history), history);
+    assert!(app.documents.active_session.history.can_redo());
     app.redo();
-    assert_artwork(&app.documents.session.document, &second);
+    assert_artwork(&app.documents.active_session.document, &second);
     assert!(Arc::ptr_eq(
-        &app.documents.session.document.layers[1].pixels,
+        &app.documents.active_session.document.layers[1].pixels,
         &before.layers[1].pixels
     ));
 }
@@ -201,18 +201,18 @@ fn multi_document_baseline_history_failure_and_noop_preserve_future() {
 #[test]
 fn multi_document_baseline_pointer_undo_save_and_recovery_keep_exact_artwork() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = masked(32, 24);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = masked(32, 24);
     app.brush.size = 8.;
     app.brush.pressure = false;
-    let original = app.documents.session.document.clone();
+    let original = app.documents.active_session.document.clone();
     let context = egui::Context::default();
     frame(&mut app, &context, 0., vec![]).textures_delta.clear();
     frame(&mut app, &context, 0.016, vec![]).textures_delta.clear();
     let rect = context
         .data(|data| data.get_temp::<Rect>(egui::Id::new("canvas_rect")))
         .unwrap();
-    let position = app.documents.session.view.screen(
+    let position = app.documents.active_session.view.screen(
         egui::vec2(16., 12.),
         rect,
         egui::vec2(32., 24.),
@@ -228,28 +228,37 @@ fn multi_document_baseline_pointer_undo_save_and_recovery_keep_exact_artwork() {
     frame(&mut app, &context, 0.048, vec![button(position, false)])
         .textures_delta
         .clear();
-    assert!(app.documents.session.editing.stroke.is_none());
+    assert!(app.documents.active_session.editing.stroke.is_none());
     assert_ne!(
-        app.documents.session.document.layers[1].pixels,
+        app.documents.active_session.document.layers[1].pixels,
         original.layers[1].pixels
     );
-    assert_eq!(app.documents.session.document.layers[0], original.layers[0]);
-    assert_eq!(app.documents.session.document.layers[2], original.layers[2]);
-    assert_eq!(app.documents.session.document.selection, original.selection);
+    assert_eq!(
+        app.documents.active_session.document.layers[0],
+        original.layers[0]
+    );
+    assert_eq!(
+        app.documents.active_session.document.layers[2],
+        original.layers[2]
+    );
+    assert_eq!(
+        app.documents.active_session.document.selection,
+        original.selection
+    );
     for index in (0..32 * 24).step_by(4) {
         assert_eq!(
-            &app.documents.session.document.layers[1].pixels
+            &app.documents.active_session.document.layers[1].pixels
                 [index * 4..index * 4 + 4],
             &original.layers[1].pixels[index * 4..index * 4 + 4]
         );
     }
-    let painted = app.documents.session.document.clone();
+    let painted = app.documents.active_session.document.clone();
     app.undo();
-    assert_artwork(&app.documents.session.document, &original);
+    assert_artwork(&app.documents.active_session.document, &original);
     app.redo();
-    assert_artwork(&app.documents.session.document, &painted);
+    assert_artwork(&app.documents.active_session.document, &painted);
     app.save_project_to(directory.path().join("baseline.parfait")).unwrap();
-    let saved = app.documents.session.document.clone();
+    let saved = app.documents.active_session.document.clone();
     let loaded = Store::open(&directory.path().join("baseline.parfait"))
         .unwrap()
         .load()
@@ -262,14 +271,14 @@ fn multi_document_baseline_pointer_undo_save_and_recovery_keep_exact_artwork() {
     assert_eq!(checksum(&recovered_pixels), 972_926_990);
     app.autosave.finish(saved.clone());
     drop(app);
-    let reopened = Parfait::open(directory.path().to_owned()).unwrap();
-    assert_artwork(&reopened.documents.session.document, &saved);
+    let reopened = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    assert_artwork(&reopened.documents.active_session.document, &saved);
     assert_eq!(
-        reopened.documents.session.document.composite(),
+        reopened.documents.active_session.document.composite(),
         recovered_pixels
     );
-    assert!(reopened.documents.session.project.is_none());
-    assert_eq!(reopened.documents.session.history.rows().count(), 0);
+    assert!(reopened.documents.active_session.project.is_none());
+    assert_eq!(reopened.documents.active_session.history.rows().count(), 0);
     println!(
         "multi_document_baseline fixture=painted raw={} composite={}",
         checksum(&saved.layers[1].pixels),
@@ -291,7 +300,7 @@ fn multi_document_baseline_release_workload() {
         Store::open(&directory.path().join("recovery.parfait")).unwrap();
     store.save(&document).unwrap();
     drop(store);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     app.brush.size = 32.;
     app.brush.pressure = false;
     let context = egui::Context::default();
@@ -305,7 +314,7 @@ fn multi_document_baseline_release_workload() {
         .unwrap();
     let mut samples = Vec::new();
     for index in 0..256 {
-        let position = app.documents.session.view.screen(
+        let position = app.documents.active_session.view.screen(
             egui::vec2(32. + index as f32 * 1.5, 180.),
             rect,
             egui::vec2(512., 384.),
@@ -324,9 +333,10 @@ fn multi_document_baseline_release_workload() {
     frame(&mut app, &context, 5., vec![button(position, false)])
         .textures_delta
         .clear();
-    assert!(app.documents.session.editing.stroke.is_none());
-    let final_pixels = app.documents.session.document.layers[1].pixels.clone();
-    let final_composite = app.documents.session.document.composite();
+    assert!(app.documents.active_session.editing.stroke.is_none());
+    let final_pixels =
+        app.documents.active_session.document.layers[1].pixels.clone();
+    let final_composite = app.documents.active_session.document.composite();
     let mut save_samples = Vec::new();
     for _ in 0..9 {
         let start = Instant::now();
@@ -338,10 +348,16 @@ fn multi_document_baseline_release_workload() {
             .unwrap()
             .unwrap()
             .document;
-        assert_artwork(&loaded, &app.documents.session.document);
+        assert_artwork(&loaded, &app.documents.active_session.document);
     }
-    assert_eq!(app.documents.session.document.layers[1].pixels, final_pixels);
-    assert_eq!(app.documents.session.document.composite(), final_composite);
+    assert_eq!(
+        app.documents.active_session.document.layers[1].pixels,
+        final_pixels
+    );
+    assert_eq!(
+        app.documents.active_session.document.composite(),
+        final_composite
+    );
     samples.sort_by(f64::total_cmp);
     save_samples.sort_by(f64::total_cmp);
     let percentile = |values: &[f64], percent: usize| {
@@ -357,9 +373,9 @@ fn multi_document_baseline_release_workload() {
         percentile(&save_samples, 95),
         checksum(&final_pixels),
         checksum(&final_composite),
-        app.documents.session.document.logical_pixel_bytes()
+        app.documents.active_session.document.logical_pixel_bytes()
     );
-    app.autosave.finish(app.documents.session.document.clone());
+    app.autosave.finish(app.documents.active_session.document.clone());
 }
 
 #[test]
@@ -398,19 +414,19 @@ fn multi_document_session_move_and_replacement_preserve_owned_buffers_and_settin
     assert!(Arc::ptr_eq(mask, original_mask));
 
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     app.brush.color = [18, 37, 91];
     app.brush.size = 19.;
     app.display.background = 45;
     let brush = app.brush.clone();
     let keys = app.keymap.clone();
-    let key = app.documents.session.key;
-    app.documents.session = session;
-    assert_ne!(app.documents.session.key, key);
+    let key = app.documents.active_session.key;
+    app.documents.active_session.replace(session);
+    assert_ne!(app.documents.active_session.key, key);
     assert!(app.brush == brush);
     assert!(app.keymap == keys);
     assert_eq!(app.display.background, 45);
-    assert!(app.documents.session.history.rows().next().is_none());
+    assert!(app.documents.active_session.history.rows().next().is_none());
 }
 
 #[test]
@@ -418,11 +434,13 @@ fn multi_document_session_key_invalidates_cache_and_stale_commands_and_dialogs()
 {
     use crate::{document_session::DocumentSession, shortcuts::Command};
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session = DocumentSession::new(masked(32, 24)).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents
+        .active_session
+        .replace(DocumentSession::new(masked(32, 24)).unwrap());
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    let key = app.documents.session.key;
+    let key = app.documents.active_session.key;
     frame(&mut app, &context, 0., vec![]).textures_delta.clear();
     app.update_previews(&context);
     assert_eq!(app.render_cache.key, Some(key));
@@ -437,30 +455,31 @@ fn multi_document_session_key_invalidates_cache_and_stale_commands_and_dialogs()
             data.get_temp::<egui::Id>(egui::Id::new("rename_field_id"))
         })
         .unwrap();
-    let stale_rename = app.documents.session.layer_ui.rename.take();
+    let stale_rename = app.documents.active_session.layer_ui.rename.take();
     app.open_layer_details();
-    let stale_details = app.documents.session.layer_ui.details.take();
+    let stale_details = app.documents.active_session.layer_ui.details.take();
     let mut replacement =
-        DocumentSession::new(app.documents.session.document.clone()).unwrap();
+        DocumentSession::new(app.documents.active_session.document.clone())
+            .unwrap();
     // Same document ID and revision; only the memory session has changed.
     replacement.key.document_id = key.document_id;
     let replacement_key = replacement.key;
     assert_ne!(key.epoch, replacement_key.epoch);
-    app.documents.session = replacement;
-    let before = app.documents.session.document.clone();
+    app.documents.active_session.replace(replacement);
+    let before = app.documents.active_session.document.clone();
     app.execute_command_for(key, Command::NewLayer, &context);
-    assert_eq!(app.documents.session.document, before);
-    assert!(app.documents.session.history.rows().next().is_none());
-    app.documents.session.layer_ui.rename = stale_rename;
-    app.documents.session.layer_ui.details = stale_details;
+    assert_eq!(app.documents.active_session.document, before);
+    assert!(app.documents.active_session.history.rows().next().is_none());
+    app.documents.active_session.layer_ui.rename = stale_rename;
+    app.documents.active_session.layer_ui.details = stale_details;
     let mut output = context.run_ui(Default::default(), |ui| {
         app.layer_rename_ui(ui.ctx());
         app.layer_details_ui(ui.ctx());
     });
     output.textures_delta.clear();
-    assert!(app.documents.session.layer_ui.rename.is_none());
-    assert!(app.documents.session.layer_ui.details.is_none());
-    assert_eq!(app.documents.session.document, before);
+    assert!(app.documents.active_session.layer_ui.rename.is_none());
+    assert!(app.documents.active_session.layer_ui.details.is_none());
+    assert_eq!(app.documents.active_session.document, before);
     frame(&mut app, &context, 0.1, vec![]).textures_delta.clear();
     assert_eq!(app.render_cache.key, Some(replacement_key));
     assert_ne!(app.render_cache.texture.as_ref().unwrap().id(), texture);
@@ -481,51 +500,54 @@ fn multi_document_session_key_invalidates_cache_and_stale_commands_and_dialogs()
 #[test]
 fn multi_document_new_and_open_replace_identity_only_on_success() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = masked(32, 24);
-    let first = app.documents.session.key;
-    let original = app.documents.session.document.clone();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = masked(32, 24);
+    let first = app.documents.active_session.key;
+    let original = app.documents.active_session.document.clone();
     let path = directory.path().join("baseline.parfait");
     app.save_project_to(path.clone()).unwrap();
-    assert_eq!(app.documents.session.key, first);
+    assert_eq!(app.documents.active_session.key, first);
     let corrupt = directory.path().join("corrupt.parfait");
     std::fs::write(&corrupt, b"not a database").unwrap();
     assert!(app.open_project_from(corrupt).is_err());
-    assert_eq!(app.documents.session.key, first);
+    assert_eq!(app.documents.active_session.key, first);
     app.open_project_from(path).unwrap();
-    assert_ne!(app.documents.session.key.document_id, first.document_id);
-    assert_ne!(app.documents.session.key.epoch, first.epoch);
-    assert_eq!(app.documents.session.document.layers, original.layers);
-    let opened = app.documents.session.key;
+    assert_ne!(app.documents.active_session.key.document_id, first.document_id);
+    assert_ne!(app.documents.active_session.key.epoch, first.epoch);
+    assert_eq!(app.documents.active_session.document.layers, original.layers);
+    let opened = app.documents.active_session.key;
     app.new_document();
     assert!(app.error.is_none());
-    assert_ne!(app.documents.session.key.document_id, opened.document_id);
-    assert_ne!(app.documents.session.key.epoch, opened.epoch);
+    assert_ne!(
+        app.documents.active_session.key.document_id,
+        opened.document_id
+    );
+    assert_ne!(app.documents.active_session.key.epoch, opened.epoch);
 }
 
 #[test]
 fn multi_document_stale_input_owner_cannot_edit_a_replacement_session() {
     use crate::{document_session::DocumentSession, editing::LayerEditKind};
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = masked(32, 24);
-    let owner = app.documents.session.key;
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = masked(32, 24);
+    let owner = app.documents.active_session.key;
     assert!(app.begin_canvas_stroke(parfait_core::Point {
         x: 16.,
         y: 12.,
         pressure: 1.
     }));
-    let stroke = app.documents.session.editing.stroke.take();
-    app.documents.session.editing.stroke_owner = None;
+    let stroke = app.documents.active_session.editing.stroke.take();
+    app.documents.active_session.editing.stroke_owner = None;
     app.finish_layer_edit();
     app.begin_layer_edit(LayerEditKind::Opacity, 1, true);
-    let layer_edit = app.documents.session.editing.layer_edit.take();
+    let layer_edit = app.documents.active_session.editing.layer_edit.take();
     let replacement = DocumentSession::new(pattern(32, 24, 17)).unwrap();
     let before = replacement.document.clone();
-    app.documents.session = replacement;
-    app.documents.session.editing.stroke = stroke;
-    app.documents.session.editing.stroke_owner = Some(owner);
-    app.documents.session.editing.layer_edit = layer_edit;
+    app.documents.active_session.replace(replacement);
+    app.documents.active_session.editing.stroke = stroke;
+    app.documents.active_session.editing.stroke_owner = Some(owner);
+    app.documents.active_session.editing.layer_edit = layer_edit;
     let context = egui::Context::default();
     frame(
         &mut app,
@@ -536,34 +558,120 @@ fn multi_document_stale_input_owner_cannot_edit_a_replacement_session() {
     .textures_delta
     .clear();
     app.finish_layer_edit();
-    assert!(app.documents.session.editing.stroke.is_none());
-    assert!(app.documents.session.editing.stroke_owner.is_none());
-    assert!(app.documents.session.editing.layer_edit.is_none());
-    assert_eq!(app.documents.session.document, before);
-    assert!(app.documents.session.history.rows().next().is_none());
+    assert!(app.documents.active_session.editing.stroke.is_none());
+    assert!(app.documents.active_session.editing.stroke_owner.is_none());
+    assert!(app.documents.active_session.editing.layer_edit.is_none());
+    assert_eq!(app.documents.active_session.document, before);
+    assert!(app.documents.active_session.history.rows().next().is_none());
 }
 
 #[test]
 fn multi_document_edit_id_and_save_as_keep_history_and_filename_independent() {
     let dir = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
     app.edit_named("First", |d| d.layers[1].opacity = 0.5);
     app.save_project_to(dir.path().join("first.parfait")).unwrap();
-    let saved = app.documents.session.history.state_id();
+    let saved = app.documents.active_session.history.state_id();
     app.edit_named("Second", |d| d.layers[1].opacity = 0.25);
-    let second = app.documents.session.history.state_id();
+    let second = app.documents.active_session.history.state_id();
     assert_ne!(second, saved);
     app.undo();
-    assert_eq!(app.documents.session.history.state_id(), saved);
+    assert_eq!(app.documents.active_session.history.state_id(), saved);
     assert!(!app.project_is_modified());
     app.save_project_to(dir.path().join("renamed.parfait")).unwrap();
-    assert_eq!(app.documents.session.history.state_id(), saved);
-    assert!(app.documents.session.history.can_redo());
+    assert_eq!(app.documents.active_session.history.state_id(), saved);
+    assert!(app.documents.active_session.history.can_redo());
     app.redo();
-    assert_eq!(app.documents.session.history.state_id(), second);
+    assert_eq!(app.documents.active_session.history.state_id(), second);
     assert!(app.project_is_modified());
-    assert_eq!(app.documents.session.document.name, "renamed");
+    assert_eq!(app.documents.active_session.document.name, "renamed");
     app.undo();
     assert!(!app.project_is_modified());
-    assert_eq!(app.documents.session.document.name, "renamed");
+    assert_eq!(app.documents.active_session.document.name, "renamed");
+}
+
+#[test]
+#[ignore = "release-only default-app drawing during asynchronous original save"]
+fn multi_document_async_save_release_workload() {
+    if cfg!(debug_assertions) {
+        panic!("Run with --release");
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    app.edit_named("Fixture", |d| *d = masked(512, 384));
+    app.brush.size = 32.;
+    app.brush.pressure = false;
+    let context = egui::Context::default();
+    for index in 0..3 {
+        frame(&mut app, &context, index as f64 / 60., vec![])
+            .textures_delta
+            .clear();
+    }
+    let rect = context
+        .data(|data| data.get_temp::<Rect>(egui::Id::new("canvas_rect")))
+        .unwrap();
+    let initial = app.documents.active_session.document.clone();
+    let saved_state = app.documents.active_session.history.state_id();
+    let key = app.documents.active_key().unwrap();
+    let path = directory.path().join("original.parfait");
+    let start_save = Instant::now();
+    app.save_project_to_for(key, path.clone()).unwrap();
+    let mut completed_ms = None;
+    let mut samples = Vec::new();
+    for index in 0..256 {
+        let position = app.documents.active_session.view.screen(
+            egui::vec2(32. + index as f32 * 1.5, 180.),
+            rect,
+            egui::vec2(512., 384.),
+        );
+        let mut events = vec![Event::PointerMoved(position)];
+        if index == 0 {
+            events.push(button(position, true));
+        }
+        let start = Instant::now();
+        app.maintain_document_recovery();
+        let mut output =
+            frame(&mut app, &context, (index + 3) as f64 / 60., events);
+        samples.push(start.elapsed().as_secs_f64() * 1000.);
+        output.textures_delta.clear();
+        if completed_ms.is_none()
+            && !app.source_saves.pending.contains_key(&key.document_id)
+        {
+            completed_ms = Some(start_save.elapsed().as_secs_f64() * 1000.);
+        }
+    }
+    let position = context.input(|i| i.pointer.latest_pos()).unwrap();
+    frame(&mut app, &context, 5., vec![button(position, false)])
+        .textures_delta
+        .clear();
+    app.flush_document_recovery(false).unwrap();
+    let save_ms = completed_ms
+        .unwrap_or_else(|| start_save.elapsed().as_secs_f64() * 1000.);
+    let original =
+        Store::open_read_only(&path).unwrap().load().unwrap().unwrap().document;
+    let mut expected_original = initial.clone();
+    expected_original.name = "original".into();
+    expected_original.revision = original.revision;
+    assert_eq!(original, expected_original);
+    assert_eq!(original.art_digest_v1(), initial.art_digest_v1());
+    assert_eq!(
+        app.documents.active_session.saved_edit_state,
+        Some(saved_state)
+    );
+    assert!(app.documents.active_session.modified());
+    let raw = checksum(&app.documents.active_session.document.layers[1].pixels);
+    let composite =
+        checksum(&app.documents.active_session.document.composite());
+    assert_eq!(raw, 32465291941967);
+    assert_eq!(composite, 63671080545421);
+    samples.sort_by(f64::total_cmp);
+    let p =
+        |percent: usize| samples[(samples.len() * percent).div_ceil(100) - 1];
+    println!(
+        "async_original frames=256 scope=headless_canvas_plus_storage_poll p50_ms={:.6} p95_ms={:.6} p99_ms={:.6} max_ms={:.6} original_commit_observed_ms={save_ms:.6} raw={raw} composite={composite}",
+        p(50),
+        p(95),
+        p(99),
+        p(100)
+    );
 }

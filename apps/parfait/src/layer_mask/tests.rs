@@ -70,32 +70,32 @@ fn key(key: egui::Key) -> egui::Event {
 #[test]
 fn mask_commands_are_active_only_undoable_and_durably_reopened() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(32, 32);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(32, 32);
     app.set_layer_selection(3, 1);
     let context = egui::Context::default();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::LayerMaskHideAll, &context);
     assert!(app.editing_layer_mask());
-    assert!(app.documents.session.document.layers[0].mask.is_none());
+    assert!(app.documents.active_session.document.layers[0].mask.is_none());
     assert_eq!(
-        app.documents.session.document.layers[1]
+        app.documents.active_session.document.layers[1]
             .mask
             .as_ref()
             .unwrap()
             .coverage,
         MaskCoverage::Uniform(0)
     );
-    assert_eq!(app.documents.session.history.rows().count(), 2);
+    assert_eq!(app.documents.active_session.history.rows().count(), 2);
     assert_eq!(app.selected_layer_mask(), 3);
     app.brush = Brush { size: 12., pressure: false, ..Default::default() };
     assert!(app.begin_canvas_stroke(Point { x: 16., y: 16., pressure: 1. }));
     app.finish_stroke();
-    let painted = app.documents.session.document.clone();
+    let painted = app.documents.active_session.document.clone();
     assert!(Arc::ptr_eq(&painted.layers[1].pixels, &before.layers[1].pixels));
     app.undo();
     assert_eq!(
-        app.documents.session.document.layers[1]
+        app.documents.active_session.document.layers[1]
             .mask
             .as_ref()
             .unwrap()
@@ -103,10 +103,10 @@ fn mask_commands_are_active_only_undoable_and_durably_reopened() {
         MaskCoverage::Uniform(0)
     );
     app.redo();
-    assert!(app.documents.session.document.same_edit_state(&painted));
+    assert!(app.documents.active_session.document.same_edit_state(&painted));
     app.execute_command(Command::LayerMaskEnabled, &context);
     assert!(
-        !app.documents.session.document.layers[1]
+        !app.documents.active_session.document.layers[1]
             .mask
             .as_ref()
             .unwrap()
@@ -115,22 +115,22 @@ fn mask_commands_are_active_only_undoable_and_durably_reopened() {
     assert!(!app.begin_canvas_stroke(Point { x: 16., y: 16., pressure: 1. }));
     app.execute_command(Command::LayerMaskEnabled, &context);
     app.force_save();
-    let expected = app.documents.session.document.clone();
+    let expected = app.documents.active_session.document.clone();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    assert_eq!(app.documents.session.document, expected);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    assert_eq!(app.documents.active_session.document, expected);
     assert!(!app.editing_layer_mask());
-    let reopened = app.documents.session.document.clone();
-    let pixels = app.documents.session.document.composite();
+    let reopened = app.documents.active_session.document.clone();
+    let pixels = app.documents.active_session.document.composite();
     app.execute_command(Command::ApplyLayerMask, &context);
-    assert!(app.documents.session.document.layers[1].mask.is_none());
-    assert_eq!(app.documents.session.document.composite(), pixels);
+    assert!(app.documents.active_session.document.layers[1].mask.is_none());
+    assert_eq!(app.documents.active_session.document.composite(), pixels);
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&reopened));
+    assert!(app.documents.active_session.document.same_edit_state(&reopened));
     app.execute_command(Command::DeleteLayerMask, &context);
-    assert!(app.documents.session.document.layers[1].mask.is_none());
+    assert!(app.documents.active_session.document.layers[1].mask.is_none());
     assert!(Arc::ptr_eq(
-        &app.documents.session.document.layers[1].pixels,
+        &app.documents.active_session.document.layers[1].pixels,
         &reopened.layers[1].pixels
     ));
 }
@@ -138,11 +138,11 @@ fn mask_commands_are_active_only_undoable_and_durably_reopened() {
 #[test]
 fn actual_thumbnail_clicks_route_canvas_input_and_keep_layout_disjoint() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(32, 32);
-    app.documents.session.document.layers[1].pixels =
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(32, 32);
+    app.documents.active_session.document.layers[1].pixels =
         Arc::new([200, 50, 90, 255].repeat(1024));
-    app.documents.session.document.create_layer_mask(1, 255);
+    app.documents.active_session.document.create_layer_mask(1, 255);
     app.brush =
         Brush { erase: true, size: 12., pressure: false, ..Default::default() };
     let context = egui::Context::default();
@@ -157,32 +157,32 @@ fn actual_thumbnail_clicks_route_canvas_input_and_keep_layout_disjoint() {
     assert!(content.right() < mask.left());
     assert!(mask.right() < name.left());
     assert!(name.width() > 0.);
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     click(&mut app, &context, mask.center());
     assert!(app.editing_layer_mask());
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.active_session.document, before);
     let canvas: egui::Rect = context
         .data(|data| data.get_temp(egui::Id::new("canvas_rect")))
         .unwrap();
     click(&mut app, &context, canvas.center());
     assert_ne!(
-        app.documents.session.document.layers[1].mask,
+        app.documents.active_session.document.layers[1].mask,
         before.layers[1].mask
     );
     assert!(Arc::ptr_eq(
-        &app.documents.session.document.layers[1].pixels,
+        &app.documents.active_session.document.layers[1].pixels,
         &before.layers[1].pixels
     ));
-    let masked = app.documents.session.document.clone();
+    let masked = app.documents.active_session.document.clone();
     click(&mut app, &context, content.center());
     assert!(!app.editing_layer_mask());
     click(&mut app, &context, canvas.center());
     assert!(!Arc::ptr_eq(
-        &app.documents.session.document.layers[1].pixels,
+        &app.documents.active_session.document.layers[1].pixels,
         &masked.layers[1].pixels
     ));
     assert_eq!(
-        app.documents.session.document.layers[1].mask,
+        app.documents.active_session.document.layers[1].mask,
         masked.layers[1].mask
     );
 }
@@ -190,13 +190,13 @@ fn actual_thumbnail_clicks_route_canvas_input_and_keep_layout_disjoint() {
 #[test]
 fn mask_stroke_escape_and_noop_preserve_redo_and_never_fall_back_to_content() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(32, 32);
-    app.documents.session.document.create_layer_mask(1, 127);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(32, 32);
+    app.documents.active_session.document.create_layer_mask(1, 127);
     app.select_layer_target(1, true);
     app.edit_named("Opacity", |document| document.layers[1].opacity = 0.6);
     app.undo();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     let context = egui::Context::default();
     crate::theme::apply(&context);
     app.brush = Brush { size: 12., pressure: false, ..Default::default() };
@@ -217,11 +217,11 @@ fn mask_stroke_escape_and_noop_preserve_redo_and_never_fall_back_to_content() {
             },
         ],
     );
-    assert!(app.documents.session.editing.stroke.is_some());
+    assert!(app.documents.active_session.editing.stroke.is_some());
     frame(&mut app, &context, vec![key(egui::Key::Escape)]);
-    assert!(app.documents.session.editing.stroke.is_none());
-    assert!(app.documents.session.document.same_edit_state(&before));
-    assert!(app.documents.session.history.can_redo());
+    assert!(app.documents.active_session.editing.stroke.is_none());
+    assert!(app.documents.active_session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.history.can_redo());
     frame(
         &mut app,
         &context,
@@ -234,7 +234,7 @@ fn mask_stroke_escape_and_noop_preserve_redo_and_never_fall_back_to_content() {
     );
     app.brush.opacity = 0.;
     click(&mut app, &context, canvas.center());
-    assert!(app.documents.session.history.can_redo());
+    assert!(app.documents.active_session.history.can_redo());
     for operation in
         [BrushOperation::Blend, BrushOperation::Blur, BrushOperation::Smudge]
     {
@@ -244,16 +244,16 @@ fn mask_stroke_escape_and_noop_preserve_redo_and_never_fall_back_to_content() {
             y: 16.,
             pressure: 1.
         }));
-        assert!(app.documents.session.document.same_edit_state(&before));
-        assert!(app.documents.session.history.can_redo());
+        assert!(app.documents.active_session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.history.can_redo());
     }
 }
 
 #[test]
 fn mask_menu_keys_and_preferences_version_keep_existing_bindings() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(32, 32);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(32, 32);
     let context = egui::Context::default();
     crate::theme::apply(&context);
     app.keymap
@@ -267,7 +267,7 @@ fn mask_menu_keys_and_preferences_version_keep_existing_bindings() {
     frame(&mut app, &context, vec![key(egui::Key::F8)]);
     assert!(app.editing_layer_mask());
     assert_eq!(
-        app.documents.session.document.layers[1]
+        app.documents.active_session.document.layers[1]
             .mask
             .as_ref()
             .unwrap()
@@ -289,7 +289,7 @@ fn mask_menu_keys_and_preferences_version_keep_existing_bindings() {
     )
     .unwrap();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert!(app.keymap.hint(Command::LayerMaskHideAll).is_empty());
     assert!(!app.keymap.hint(Command::Undo).is_empty());
@@ -303,34 +303,34 @@ fn mask_menu_keys_and_preferences_version_keep_existing_bindings() {
         .unwrap();
     app.persist_preferences(true);
     drop(app);
-    let app = Parfait::open(directory.path().to_owned()).unwrap();
+    let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::LayerMaskEnabled), "F7");
 }
 
 #[test]
 fn mask_command_guards_and_target_changes_preserve_atomic_state() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(32, 32);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(32, 32);
     let context = egui::Context::default();
     for blocker in 0..3 {
         app.confirm_new = blocker == 0;
         app.workspace.resizing = blocker == 1;
-        app.documents.session.document.layers[1].locked = blocker == 2;
-        let before = app.documents.session.document.clone();
+        app.documents.active_session.document.layers[1].locked = blocker == 2;
+        let before = app.documents.active_session.document.clone();
         app.execute_command(Command::LayerMaskRevealAll, &context);
-        assert_eq!(app.documents.session.document, before);
+        assert_eq!(app.documents.active_session.document, before);
     }
-    app.documents.session.document.layers[1].locked = false;
+    app.documents.active_session.document.layers[1].locked = false;
     app.execute_command(Command::LayerMaskRevealAll, &context);
-    app.documents.session.document.layers[1].alpha_locked = true;
+    app.documents.active_session.document.layers[1].alpha_locked = true;
     assert!(app.command_disabled_reason(Command::ApplyLayerMask).is_some());
     assert!(app.begin_canvas_stroke(Point { x: 16., y: 16., pressure: 1. }));
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.select_layer_target(1, false);
     assert!(app.editing_layer_mask());
     app.execute_command(Command::DeleteLayerMask, &context);
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.active_session.document, before);
     app.finish_stroke();
     app.select_layer(0);
     assert!(!app.editing_layer_mask());

@@ -46,21 +46,22 @@ impl Parfait {
             return;
         }
         self.finish_layer_edit();
-        let mut draft = self.documents.session.document.layers
-            [self.documents.session.document.active]
+        let mut draft = self.documents.active_session.document.layers
+            [self.documents.active_session.document.active]
             .clone();
-        let metadata_bytes =
-            parfait_storage::snapshot_size(&self.documents.session.document)
-                .and_then(|bytes| bytes.checked_sub(draft.name.len() as u64))
-                .unwrap_or(u64::MAX);
+        let metadata_bytes = parfait_storage::snapshot_size(
+            &self.documents.active_session.document,
+        )
+        .and_then(|bytes| bytes.checked_sub(draft.name.len() as u64))
+        .unwrap_or(u64::MAX);
         let max_name_bytes =
             (512 * 1024 * 1024u64).saturating_sub(metadata_bytes) as usize;
         let needs_edit = draft.name.chars().nth(128).is_some();
         draft.name = draft.name.chars().take(128).collect();
-        self.documents.session.layer_ui.details = Some(LayerDetails {
-            owner: self.documents.session.key,
+        self.documents.active_session.layer_ui.details = Some(LayerDetails {
+            owner: self.documents.active_session.key,
             draft,
-            revision: self.documents.session.document.revision,
+            revision: self.documents.active_session.document.revision,
             focus: true,
             composing: false,
             needs_edit,
@@ -72,35 +73,40 @@ impl Parfait {
         if self.error.is_some() {
             return;
         }
-        let Some(dialog) = &self.documents.session.layer_ui.details else {
+        let Some(dialog) = &self.documents.active_session.layer_ui.details
+        else {
             return;
         };
         let target =
-            self.documents.session.document.layer_index(dialog.draft.id);
-        if self.documents.session.key != dialog.owner
-            || self.documents.session.document.revision != dialog.revision
+            self.documents.active_session.document.layer_index(dialog.draft.id);
+        if self.documents.active_session.key != dialog.owner
+            || self.documents.active_session.document.revision
+                != dialog.revision
             || target.is_none_or(|index| {
                 !Arc::ptr_eq(
                     &dialog.draft.pixels,
-                    &self.documents.session.document.layers[index].pixels,
+                    &self.documents.active_session.document.layers[index]
+                        .pixels,
                 )
             })
         {
-            self.documents.session.layer_ui.details = None;
+            self.documents.active_session.layer_ui.details = None;
             self.notice =
                 Some("대상 레이어가 변경되어 설정을 취소했습니다.".into());
             return;
         }
         let target = target.unwrap();
-        let clipping_allowed = self.documents.session.document.layers[target]
-            .clipped
-            || self
-                .documents
-                .session
-                .document
-                .layer_clipping_base_below(target, 0)
-                .is_some();
-        let dialog = self.documents.session.layer_ui.details.as_mut().unwrap();
+        let clipping_allowed =
+            self.documents.active_session.document.layers[target].clipped
+                || self
+                    .documents
+                    .active_session
+                    .document
+                    .layer_clipping_base_below(target, 0)
+                    .is_some();
+        let session_key = self.documents.active_session.key;
+        let dialog =
+            self.documents.active_session.layer_ui.details.as_mut().unwrap();
         let first_frame = dialog.focus;
         let was_composing = dialog.composing;
         let mut ime_event = false;
@@ -123,7 +129,7 @@ impl Parfait {
         });
         let mut confirm = false;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::new(("layer_details_modal", self.documents.session.key))).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::new(("layer_details_modal", session_key))).show(ctx, |ui| {
             ui.set_width(380.);
             ui.horizontal(|ui| {
                 ui.strong("레이어 기본 설정");
@@ -210,13 +216,13 @@ impl Parfait {
             }
         }
         if cancel {
-            self.documents.session.layer_ui.details = None;
+            self.documents.active_session.layer_ui.details = None;
         } else if confirm
             && dialog.error().is_none()
             && (!dialog.draft.clipped || clipping_allowed)
         {
             let dialog =
-                self.documents.session.layer_ui.details.take().unwrap();
+                self.documents.active_session.layer_ui.details.take().unwrap();
             self.edit_named("Layer details", |document| {
                 let target = &mut document.layers[target];
                 target.name = dialog.draft.name;

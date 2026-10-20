@@ -33,11 +33,11 @@ fn frame(
 #[test]
 fn conversions_are_active_only_undoable_and_durable_with_masks() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.layers[1].pixels =
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.layers[1].pixels =
         Arc::new([128, 128, 128, 128].repeat(64));
-    app.documents.session.document.layers[1].mask = Some(LayerMask {
+    app.documents.active_session.document.layers[1].mask = Some(LayerMask {
         enabled: false,
         coverage: MaskCoverage::Dense(Arc::new(vec![100; 64])),
     });
@@ -46,39 +46,42 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
     app.brush.opacity = 0.;
     app.brush.erase = true;
     let context = egui::Context::default();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::BrightnessToOpacity, &context);
     assert_eq!(
-        app.documents.session.document.layers[1].pixels.as_slice(),
+        app.documents.active_session.document.layers[1].pixels.as_slice(),
         [0, 0, 0, 64].repeat(64)
     );
-    assert_eq!(app.documents.session.document.layers[0], before.layers[0]);
     assert_eq!(
-        app.documents.session.document.layers[1].mask,
+        app.documents.active_session.document.layers[0],
+        before.layers[0]
+    );
+    assert_eq!(
+        app.documents.active_session.document.layers[1].mask,
         before.layers[1].mask
     );
     assert_eq!(app.selected_layer_mask(), 3);
-    assert_eq!(app.documents.session.history.rows().count(), 2);
-    let extracted = app.documents.session.document.clone();
+    assert_eq!(app.documents.active_session.history.rows().count(), 2);
+    let extracted = app.documents.active_session.document.clone();
     app.undo();
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.document.same_edit_state(&before));
     app.redo();
-    assert!(app.documents.session.document.same_edit_state(&extracted));
-    app.documents.session.document.layers[1].alpha_locked = true;
+    assert!(app.documents.active_session.document.same_edit_state(&extracted));
+    app.documents.active_session.document.layers[1].alpha_locked = true;
     app.execute_command(Command::ConvertToDrawingColor, &context);
     assert_eq!(
-        app.documents.session.document.layers[1].pixels.as_slice(),
+        app.documents.active_session.document.layers[1].pixels.as_slice(),
         [35, 180, 90, 64].repeat(64)
     );
     assert_eq!(
-        app.documents.session.document.layers[1].mask,
+        app.documents.active_session.document.layers[1].mask,
         before.layers[1].mask
     );
-    let converted = app.documents.session.document.clone();
+    let converted = app.documents.active_session.document.clone();
     app.force_save();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    assert_eq!(app.documents.session.document, converted);
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    assert_eq!(app.documents.active_session.document, converted);
     assert!(
         app.command_disabled_reason(Command::BrightnessToOpacity).is_some()
     );
@@ -86,7 +89,7 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
         app.command_disabled_reason(Command::ConvertToDrawingColor).is_none()
     );
     app.execute_command(Command::ConvertToDrawingColor, &context);
-    assert!(app.documents.session.document.layers[1].alpha_locked);
+    assert!(app.documents.active_session.document.layers[1].alpha_locked);
 }
 
 #[test]
@@ -96,14 +99,16 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
     {
         for blocker in 0..6 {
             let directory = tempfile::tempdir().unwrap();
-            let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-            app.documents.session.document = Document::new(32, 32);
-            app.documents.session.document.layers[1].pixels =
+            let mut app =
+                Parfait::open_legacy(directory.path().to_owned()).unwrap();
+            app.documents.active_session.document = Document::new(32, 32);
+            app.documents.active_session.document.layers[1].pixels =
                 Arc::new([160, 120, 80, 255].repeat(1024));
-            app.documents.session.document.create_layer_mask(1, 127);
+            app.documents.active_session.document.create_layer_mask(1, 127);
             app.confirm_new = blocker == 0;
             app.workspace.resizing = blocker == 1;
-            app.documents.session.document.layers[1].locked = blocker == 2;
+            app.documents.active_session.document.layers[1].locked =
+                blocker == 2;
             if blocker == 3 {
                 app.select_layer_target(1, true);
             }
@@ -117,22 +122,25 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
                 }));
             }
             if blocker == 5 {
-                app.documents.session.document.layers[1].alpha_locked =
+                app.documents.active_session.document.layers[1].alpha_locked =
                     command == Command::BrightnessToOpacity;
-                app.documents.session.document.layers[1].locked =
+                app.documents.active_session.document.layers[1].locked =
                     command == Command::ConvertToDrawingColor;
             }
-            let before = app.documents.session.document.clone();
-            let rows = app.documents.session.history.rows().count();
+            let before = app.documents.active_session.document.clone();
+            let rows = app.documents.active_session.history.rows().count();
             let context = egui::Context::default();
             assert!(app.command_disabled_reason(command).is_some());
             app.execute_command(command, &context);
-            assert_eq!(app.documents.session.document, before);
+            assert_eq!(app.documents.active_session.document, before);
             assert!(Arc::ptr_eq(
-                &app.documents.session.document.layers[1].pixels,
+                &app.documents.active_session.document.layers[1].pixels,
                 &before.layers[1].pixels
             ));
-            assert_eq!(app.documents.session.history.rows().count(), rows);
+            assert_eq!(
+                app.documents.active_session.history.rows().count(),
+                rows
+            );
         }
     }
 }
@@ -140,9 +148,9 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
 #[test]
 fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.layers[1].pixels =
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.layers[1].pixels =
         Arc::new([60, 50, 40, 200].repeat(64));
     app.keymap
         .assign(
@@ -153,9 +161,9 @@ fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
         )
         .unwrap();
     let context = egui::Context::default();
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     frame(&mut app, &context, vec![key(true, false)], true);
-    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.active_session.document, before);
     frame(&mut app, &context, vec![key(false, false)], false);
     context.memory_mut(|memory| {
         if let Some(focus) = memory.focused() {
@@ -163,21 +171,21 @@ fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
         }
     });
     frame(&mut app, &context, vec![key(true, false)], false);
-    let after = app.documents.session.document.clone();
+    let after = app.documents.active_session.document.clone();
     assert!(!after.same_edit_state(&before));
     app.brush.color = [200, 180, 20];
     frame(&mut app, &context, vec![key(true, true)], false);
-    assert_eq!(app.documents.session.document, after);
+    assert_eq!(app.documents.active_session.document, after);
     frame(&mut app, &context, vec![key(false, false)], false);
     app.undo();
-    assert!(app.documents.session.history.can_redo());
+    assert!(app.documents.active_session.history.can_redo());
     app.brush.color = [60, 50, 40];
-    let unchanged = app.documents.session.document.clone();
+    let unchanged = app.documents.active_session.document.clone();
     frame(&mut app, &context, vec![key(true, false)], false);
-    assert!(app.documents.session.history.can_redo());
-    assert_eq!(app.documents.session.document, unchanged);
+    assert!(app.documents.active_session.history.can_redo());
+    assert_eq!(app.documents.active_session.document, unchanged);
     assert!(Arc::ptr_eq(
-        &app.documents.session.document.layers[1].pixels,
+        &app.documents.active_session.document.layers[1].pixels,
         &unchanged.layers[1].pixels
     ));
 }
@@ -185,7 +193,7 @@ fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
 #[test]
 fn version_seventeen_keys_upgrade_and_new_conversion_binding_reopens() {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     app.keymap
         .assign(
             Command::LayerVisibility,
@@ -205,7 +213,7 @@ fn version_seventeen_keys_upgrade_and_new_conversion_binding_reopens() {
     )
     .unwrap();
     drop(app);
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
     assert_eq!(
         app.keymap
@@ -224,7 +232,7 @@ fn version_seventeen_keys_upgrade_and_new_conversion_binding_reopens() {
         .unwrap();
     app.persist_preferences(true);
     drop(app);
-    let app = Parfait::open(directory.path().to_owned()).unwrap();
+    let app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
     assert_eq!(app.keymap.hint(Command::BrightnessToOpacity), "F7");
     assert_eq!(app.preferences_saved.as_ref().unwrap().version, 21);
 }

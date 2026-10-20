@@ -51,7 +51,14 @@ impl Parfait {
                 for menu in TopMenu::ALL {
                     let response = ui.menu_button(menu.label(), |ui| {
                         ui.set_min_width(188.);
-                        self.top_menu_contents(ui, menu);
+                        if self.documents.is_empty() {
+                            for &command in Command::ALL.iter().filter(|command| command.category() == match menu {
+                                TopMenu::File => crate::shortcuts::Category::File,
+                                TopMenu::Edit => crate::shortcuts::Category::Edit,
+                                TopMenu::Layer => crate::shortcuts::Category::Layer,
+                                _ => crate::shortcuts::Category::View,
+                            }) { self.command_menu_item(ui, command); }
+                        } else { self.top_menu_contents(ui, menu); }
                     });
                     #[cfg(test)]
                     ui.data_mut(|data| {
@@ -63,9 +70,9 @@ impl Parfait {
                     let _ = response;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let color = if self.documents.session.recovery.failed {
+                    let color = if self.documents.is_empty() || self.tabs.enabled { Color32::from_gray(184) } else if self.documents.active_session.recovery.failed {
                         Color32::LIGHT_RED
-                    } else if self.documents.session.recovery.saved >= self.documents.session.document.revision {
+                    } else if self.documents.active_session.recovery.saved >= self.documents.active_session.document.revision {
                         Color32::from_gray(184)
                     } else {
                         ACCENT
@@ -197,47 +204,51 @@ impl Parfait {
     fn menu_selected(&self, command: Command) -> bool {
         match command {
             Command::LayerVisibility => {
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .visible
             }
             Command::LayerLock => {
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .locked
             }
             Command::LayerAlphaLock => {
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .alpha_locked
             }
             Command::LayerClipping => {
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .clipped
             }
             Command::LayerReference => {
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .reference
             }
             Command::LayerDraft => {
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .draft
             }
-            Command::LayerMaskEnabled => self.documents.session.document.layers
-                [self.documents.session.document.active]
-                .mask
-                .as_ref()
-                .is_some_and(|mask| mask.enabled),
+            Command::LayerMaskEnabled => {
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
+                    .mask
+                    .as_ref()
+                    .is_some_and(|mask| mask.enabled)
+            }
             Command::ShowMaskArea => self.active_mask_overlay().is_some(),
             Command::RulerBar => self.display.rulers,
             Command::PixelGrid => self.display.pixel_grid,
             Command::FlipHorizontal => {
-                self.documents.session.view.flip_horizontal
+                self.documents.active_session.view.flip_horizontal
             }
-            Command::FlipVertical => self.documents.session.view.flip_vertical,
+            Command::FlipVertical => {
+                self.documents.active_session.view.flip_vertical
+            }
             Command::HidePalettes => self.hide_panels,
             _ => self.workspace.panels.iter().any(|placement| {
                 Some(placement.palette) == command.palette()

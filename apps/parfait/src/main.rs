@@ -11,6 +11,7 @@ mod curve_editor;
 mod diagnostics;
 mod display;
 mod document_session;
+mod document_tabs;
 mod documents;
 mod editing;
 mod folder_ui;
@@ -22,16 +23,23 @@ mod layer_mask;
 mod layer_organize;
 mod layers;
 mod mask_area;
+mod memory_budget;
 mod menus;
 #[cfg(test)]
 mod multi_document_tests;
 mod panels;
 mod pixel_selection;
 mod preferences;
+mod project_loader;
+mod project_paths;
 mod project_state;
 mod raster_conversion;
+mod recovery_runtime;
 mod rulers;
+#[cfg(test)]
+mod session_target_tests;
 mod shortcuts;
+mod source_saves;
 mod theme;
 mod widgets;
 mod window_render_cache;
@@ -50,7 +58,7 @@ fn main() {
 }
 fn run() -> anyhow::Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    let dir = args
+    let mut dir = args
         .windows(2)
         .find(|p| p[0] == "--data-dir")
         .map(|p| PathBuf::from(&p[1]))
@@ -64,7 +72,26 @@ fn run() -> anyhow::Result<()> {
                 })
                 .join("Parfait")
         });
-    let mut app = app::Parfait::open(dir)?;
+    let mut app = loop {
+        match app::Parfait::open(dir.clone()) {
+            Ok(app) => break app,
+            Err(error) => {
+                let retry=rfd::MessageDialog::new().set_title("Recovery folder unavailable")
+                    .set_description(format!("{error:#}\n\nThe existing files are preserved. Choose another recovery folder to open originals manually?"))
+                    .set_buttons(rfd::MessageButtons::YesNo).set_level(rfd::MessageLevel::Error).show();
+                if retry != rfd::MessageDialogResult::Yes {
+                    return Err(error);
+                }
+                let Some(next) = rfd::FileDialog::new()
+                    .set_title("Choose a different recovery folder")
+                    .pick_folder()
+                else {
+                    return Err(error);
+                };
+                dir = next;
+            }
+        }
+    };
     app.capture = args
         .windows(2)
         .find(|p| p[0] == "--screenshot")

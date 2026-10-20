@@ -590,7 +590,7 @@ impl Parfait {
                     egui::Sense::hover(),
                 );
                 if ui.is_rect_visible(rect)
-                    && self.documents.session.editing.stroke.is_none()
+                    && self.documents.active_session.editing.stroke.is_none()
                 {
                     let changed =
                         self.brush_library.previews[index].as_ref().is_none_or(
@@ -935,8 +935,8 @@ mod tests {
     #[test]
     fn smudge_preset_drafts_portable_v6_and_restart_keep_spatial_operation() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         app.select_brush_group(BrushGroup::Blend);
@@ -976,7 +976,7 @@ mod tests {
             preview_image(&app.brush).pixels,
             preview_image(&changed).pixels
         );
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
         app.persist_preferences(true);
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(
@@ -986,7 +986,7 @@ mod tests {
             21
         );
         drop(app);
-        let app = Parfait::open(dir.path().to_owned()).unwrap();
+        let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(app.brush.operation(), BrushOperation::Smudge);
         assert_eq!(app.brush.color_stretch, 0.91);
         for version in 1..=5 {
@@ -999,7 +999,7 @@ mod tests {
     #[test]
     fn blend_group_restores_drafts_and_exchange_preserves_operations() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.presets.retain(|preset| {
             BrushGroup::of(&preset.brush) != BrushGroup::Blend
         });
@@ -1045,7 +1045,7 @@ mod tests {
         assert_ne!(sample.pixels, preview_image(&recolored).pixels);
         app.persist_preferences(true);
         drop(app);
-        let restored = Parfait::open(dir.path().to_owned()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(restored.brush.operation(), BrushOperation::Blur);
         assert!(!restored.brush.blur_automatic);
         assert_eq!(restored.brush.blur_radius, 13.);
@@ -1139,10 +1139,10 @@ mod tests {
     #[test]
     fn compact_library_header_and_rows_fit_narrow_palettes() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let artwork = app.documents.session.document.clone();
+        let artwork = app.documents.active_session.document.clone();
         for width in [190., 210., 246., 360.] {
             library_frame(&mut app, &ctx, width, vec![]);
             let header: Vec<_> = [
@@ -1180,17 +1180,17 @@ mod tests {
                     .any(|(name, _)| name == "Search input")
             );
         }
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
     fn compact_library_favorites_search_and_preset_targets_remain_independent()
     {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let artwork = app.documents.session.document.clone();
+        let artwork = app.documents.active_session.document.clone();
         let original = app.brush.clone();
         library_frame(&mut app, &ctx, 210., vec![]);
         library_click(&mut app, &ctx, "Favorite Dotted pen");
@@ -1245,17 +1245,17 @@ mod tests {
                 .any(|(name, _)| name == "Search input")
         );
         assert!(app.brush == dotted);
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
     fn family_dropdown_only_filters_and_manage_menu_keeps_its_actions() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let brush = app.brush.clone();
-        let artwork = app.documents.session.document.clone();
+        let artwork = app.documents.active_session.document.clone();
         library_frame(&mut app, &ctx, 210., vec![]);
         library_click(&mut app, &ctx, "Family filter");
         library_click(&mut app, &ctx, "Filter Eraser");
@@ -1287,7 +1287,7 @@ mod tests {
                 "{label}"
             );
         }
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
@@ -1320,7 +1320,7 @@ mod tests {
     #[test]
     fn library_preview_updates_remain_bounded_and_pause_during_drawing() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         library_frame(&mut app, &ctx, 210., vec![]);
@@ -1334,8 +1334,8 @@ mod tests {
             app.brush_library.previews[0].as_ref().unwrap().1.id(),
             original_texture
         );
-        app.documents.session.editing.stroke = Some(Stroke::begin(
-            &mut app.documents.session.document,
+        app.documents.active_session.editing.stroke = Some(Stroke::begin(
+            &mut app.documents.active_session.document,
             app.brush.clone(),
             Point { x: 20., y: 20., pressure: 1. },
         ));
@@ -1343,7 +1343,7 @@ mod tests {
             library_frame(&mut app, &ctx, 210., vec![]);
             assert_eq!(app.brush_library.previews.iter().flatten().count(), 1);
         }
-        app.documents.session.editing.stroke = None;
+        app.documents.active_session.editing.stroke = None;
         library_frame(&mut app, &ctx, 210., vec![]);
         assert_eq!(app.brush_library.previews.iter().flatten().count(), 2);
     }
@@ -1352,7 +1352,7 @@ mod tests {
     fn legacy_samples_migrate_and_arbitrary_curve_coordinates_survive_every_preset_path()
      {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.persist_preferences(true);
         let mut legacy: serde_json::Value =
             serde_json::from_str(&app.saved_preferences_json()).unwrap();
@@ -1367,13 +1367,13 @@ mod tests {
             &legacy.to_string(),
         )
         .unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(!app.preferences_read_failed);
         assert_eq!(
             app.brush.pressure_curve.points,
             vec![[0., 0.], [0.25, 0.1], [0.5, 0.4], [0.75, 0.8], [1., 1.]]
         );
-        let original = app.documents.session.document.clone();
+        let original = app.documents.active_session.document.clone();
         let curve = parfait_core::ResponseCurve {
             points: vec![
                 [0., 0.15],
@@ -1403,7 +1403,7 @@ mod tests {
         app.brush.continuous_spray = false;
         app.restore_current_preset();
         assert_eq!(app.brush.pressure_curve, curve);
-        assert_eq!(app.documents.session.document, original);
+        assert_eq!(app.documents.active_session.document, original);
         let portable = BrushFile { version: 4, preset: app.presets[0].clone() };
         let encoded = serde_json::to_vec(&portable).unwrap();
         let decoded: BrushFile = serde_json::from_slice(&encoded).unwrap();
@@ -1443,7 +1443,7 @@ mod tests {
             serde_json::from_str(&app.saved_preferences_json()).unwrap();
         assert_eq!(saved["version"], 21);
         drop(app);
-        let restored = Parfait::open(dir.path().to_owned()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(restored.brush.pressure_curve, curve);
         assert_eq!(restored.presets[0].brush.pressure_curve, curve);
         assert_eq!(restored.brush.gap_mode, parfait_core::GapMode::Narrow);
@@ -1456,7 +1456,7 @@ mod tests {
      {
         for version in 1..=3 {
             let dir = tempfile::tempdir().unwrap();
-            let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+            let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
             app.brush.spacing = 0.67;
             app.persist_preferences(true);
             let mut encoded: serde_json::Value =
@@ -1474,7 +1474,7 @@ mod tests {
                 &encoded.to_string(),
             )
             .unwrap();
-            let restored = Parfait::open(dir.path().to_owned()).unwrap();
+            let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
             assert!(!restored.preferences_read_failed);
             assert_eq!(restored.brush.gap_mode, parfait_core::GapMode::Fixed);
             assert_eq!(restored.brush.spacing, 0.67);
@@ -1486,8 +1486,8 @@ mod tests {
     #[test]
     fn tool_switch_restores_unsaved_settings_and_preserves_color_and_artwork() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         app.brush.size = 23.;
         app.brush.color = [12, 80, 165];
         app.select_brush_group(BrushGroup::Eraser);
@@ -1511,13 +1511,13 @@ mod tests {
         app.select_preset(pencil);
         assert!(!app.brush.erase);
         assert_eq!(BrushGroup::of(&app.brush), BrushGroup::Sketch);
-        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
     fn favorites_filters_and_old_preferences_survive_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.presets[0].favorite = true;
         app.brush_library.group = None;
         app.brush_library.favorites_only = true;
@@ -1540,7 +1540,7 @@ mod tests {
         app.persist_preferences(true);
         assert!(app.error.is_none());
         drop(app);
-        let restored = Parfait::open(dir.path().to_owned()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(restored.presets[0].favorite);
         assert!(restored.brush_library.favorites_only);
         assert_eq!(restored.brush.size, 41.);
@@ -1557,7 +1557,7 @@ mod tests {
             &serde_json::to_string(&old).unwrap(),
         )
         .unwrap();
-        let legacy = Parfait::open(dir.path().to_owned()).unwrap();
+        let legacy = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(!legacy.preferences_read_failed);
         assert_eq!(legacy.brush.size, 41.);
         assert!(legacy.presets.iter().all(|preset| !preset.favorite));
@@ -1571,7 +1571,7 @@ mod tests {
         assert!(!file.preset.favorite);
         assert_eq!(BrushGroup::of(&file.preset.brush), BrushGroup::Sketch);
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.presets.retain(|preset| !preset.brush.erase);
         app.select_brush_group(BrushGroup::Eraser);
         assert!(app.brush.erase);
@@ -1590,7 +1590,7 @@ mod pressure_spacing_tests {
      {
         use parfait_core::OpacityMode;
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let marker = app
             .presets
             .iter()
@@ -1625,7 +1625,7 @@ mod pressure_spacing_tests {
             21
         );
         drop(app);
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert_eq!(app.brush.opacity_mode, OpacityMode::PerStroke);
         let path = dir.path().join("preferences.sqlite");
         for version in 1..=8 {
@@ -1655,7 +1655,7 @@ mod pressure_spacing_tests {
     #[test]
     fn pressure_spacing_exchange_restart_and_old_file_defaults() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         app.brush.pressure_spacing = true;
         app.brush.minimum_spacing = 0.32;
         app.brush.spacing_curve = [1., 0.9, 0.3, 0.1, 0.].into();
@@ -1676,7 +1676,7 @@ mod pressure_spacing_tests {
         assert!(decoded.preset.brush == expected);
         app.persist_preferences(true);
         drop(app);
-        let app = Parfait::open(dir.path().to_owned()).unwrap();
+        let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         assert!(app.brush == expected);
         for version in 1..=6 {
             let mut legacy = encoded.clone();

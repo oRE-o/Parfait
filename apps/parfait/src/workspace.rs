@@ -1021,8 +1021,8 @@ mod tests {
     #[test]
     fn solid_dock_scrollbars_do_not_clip_single_column_palette_actions() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        let artwork = app.documents.session.document.clone();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
+        let artwork = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         for width in [196., 210., 260., 360.] {
@@ -1062,14 +1062,14 @@ mod tests {
                 })
                 .unwrap();
             assert!(details.right() <= viewport.right());
-            assert_eq!(app.documents.session.document, artwork);
+            assert_eq!(app.documents.active_session.document, artwork);
         }
     }
 
     #[test]
     fn header_context_menu_opens_a_separate_window() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1144,7 +1144,7 @@ mod tests {
     fn side_docking_preview_matches_rendered_slot_and_window_state_roundtrips()
     {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1240,7 +1240,7 @@ mod tests {
         item.window_rect = Some([100., 120., 260., 300.]);
         app.persist_preferences(true);
         drop(app);
-        let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         let item = restored
             .workspace
             .panels
@@ -1263,7 +1263,7 @@ mod tests {
     #[test]
     fn escape_restores_original_dock_order_and_geometry() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         let original = app.workspace.panels[0].clone();
         app.workspace.drag_origin = Some((0, original.clone()));
         app.workspace.dragging = Some(original.palette);
@@ -1302,7 +1302,7 @@ mod tests {
     #[test]
     fn shared_header_collapses_hides_and_persists_without_losing_size() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1363,7 +1363,7 @@ mod tests {
         }
         app.persist_preferences(true);
         drop(app);
-        let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         assert!(restored.workspace.panels[0].collapsed);
         assert!(!restored.workspace.panels[0].visible);
         assert_eq!(
@@ -1382,7 +1382,7 @@ mod tests {
     #[test]
     fn drag_detaches_and_preferences_restore_workspace_and_brushes() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1525,7 +1525,7 @@ mod tests {
         app.persist_preferences(true);
         assert!(app.error.is_none(), "{:?}", app.error);
         drop(app);
-        let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
+        let restored = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
         assert_eq!(
             restored
                 .workspace

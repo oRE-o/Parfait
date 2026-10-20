@@ -28,64 +28,109 @@ struct LayerDrag {
     collapse: Option<usize>,
 }
 impl LayerList {
+    pub(crate) fn has_name_editor(&self) -> bool {
+        self.rename.is_some()
+    }
+    pub(crate) fn cancel_pointer(&mut self) {
+        self.drag = None;
+        self.owned = false;
+        self.rename = None;
+        self.rename_focus = false;
+    }
     pub(crate) fn owns_pointer(&self) -> bool {
         self.owned || self.drag.is_some()
     }
 }
 
-impl Parfait {
+impl crate::document_session::DocumentSession {
+    pub(crate) fn selected_layer_mask(&self) -> u64 {
+        let active = 1 << self.document.active;
+        if self.layer_ui.list.active
+            != self.document.layers[self.document.active].id
+        {
+            return active;
+        }
+        if self.layer_ui.list.ids.iter().copied().eq(self
+            .document
+            .layers
+            .iter()
+            .map(|layer| layer.id))
+        {
+            return self.layer_ui.list.mask | active;
+        }
+        self.document.layers.iter().enumerate().fold(
+            active,
+            |mask, (index, layer)| {
+                if self.layer_ui.list.ids.iter().enumerate().any(
+                    |(previous, id)| {
+                        *id == layer.id
+                            && self.layer_ui.list.mask & (1 << previous) != 0
+                    },
+                ) {
+                    mask | (1 << index)
+                } else {
+                    mask
+                }
+            },
+        )
+    }
+}
+
+impl crate::document_session::DocumentSession {
     pub(crate) fn reset_layer_selection_view(&mut self) {
-        let collapsed =
-            std::mem::take(&mut self.documents.session.layer_ui.list.collapsed);
-        self.documents.session.layer_ui.list =
-            LayerList { collapsed, ..Default::default() };
+        let collapsed = std::mem::take(&mut self.layer_ui.list.collapsed);
+        self.layer_ui.list = LayerList { collapsed, ..Default::default() };
     }
 
     pub(crate) fn reveal_layer(&mut self, index: usize) {
-        let mut parent = self
-            .documents
-            .session
-            .document
-            .layers
-            .get(index)
-            .and_then(|layer| layer.parent);
+        let mut parent =
+            self.document.layers.get(index).and_then(|layer| layer.parent);
         while let Some(id) = parent {
-            self.documents
-                .session
-                .layer_ui
-                .list
-                .collapsed
-                .retain(|collapsed| *collapsed != id);
-            parent = self.documents.session.document.layer_index(id).and_then(
-                |index| self.documents.session.document.layers[index].parent,
-            );
+            self.layer_ui.list.collapsed.retain(|collapsed| *collapsed != id);
+            parent = self
+                .document
+                .layer_index(id)
+                .and_then(|index| self.document.layers[index].parent);
         }
+    }
+}
+
+impl Parfait {
+    pub(crate) fn reveal_layer(&mut self, index: usize) {
+        let session = &mut *self.documents.active_session;
+        session.reveal_layer(index);
     }
 
     fn layer_depth_and_hidden(&self, index: usize) -> (usize, bool) {
-        let mut parent = self.documents.session.document.layers[index].parent;
+        let session = &*self.documents.active_session;
+        let mut parent = session.document.layers[index].parent;
         let mut depth = 0;
         let mut hidden = false;
         while let Some(id) = parent {
             depth += 1;
-            hidden |=
-                self.documents.session.layer_ui.list.collapsed.contains(&id);
-            parent = self.documents.session.document.layer_index(id).and_then(
-                |index| self.documents.session.document.layers[index].parent,
-            );
+            hidden |= session.layer_ui.list.collapsed.contains(&id);
+            parent = session
+                .document
+                .layer_index(id)
+                .and_then(|index| session.document.layers[index].parent);
         }
         (depth, hidden)
     }
 
     fn toggle_folder_view(&mut self, index: usize, modifiers: egui::Modifiers) {
-        let id = self.documents.session.document.layers[index].id;
-        let close =
-            !self.documents.session.layer_ui.list.collapsed.contains(&id);
+        let id = self.documents.active_session.document.layers[index].id;
+        let close = !self
+            .documents
+            .active_session
+            .layer_ui
+            .list
+            .collapsed
+            .contains(&id);
         let mut folders = 1 << index;
         if modifiers.command || modifiers.ctrl {
             folders = self
                 .documents
-                .session
+                .active_session
                 .document
                 .layers
                 .iter()
@@ -93,7 +138,8 @@ impl Parfait {
                 .filter(|(_, layer)| {
                     layer.kind == parfait_core::LayerKind::Folder
                         && layer.parent
-                            == self.documents.session.document.layers[index]
+                            == self.documents.active_session.document.layers
+                                [index]
                                 .parent
                 })
                 .fold(0, |mask, (index, _)| mask | (1 << index));
@@ -101,59 +147,61 @@ impl Parfait {
         if modifiers.alt {
             folders = self
                 .documents
-                .session
+                .active_session
                 .document
                 .layer_selection_subtrees(folders)
                 .unwrap_or(folders);
         }
-        for (index, layer) in
-            self.documents.session.document.layers.iter().enumerate()
-        {
+        let session = &mut *self.documents.active_session;
+        for (index, layer) in session.document.layers.iter().enumerate() {
             if folders & (1 << index) != 0
                 && layer.kind == parfait_core::LayerKind::Folder
             {
-                self.documents
-                    .session
-                    .layer_ui
-                    .list
-                    .collapsed
-                    .retain(|id| *id != layer.id);
+                session.layer_ui.list.collapsed.retain(|id| *id != layer.id);
                 if close {
-                    self.documents
-                        .session
-                        .layer_ui
-                        .list
-                        .collapsed
-                        .push(layer.id);
+                    session.layer_ui.list.collapsed.push(layer.id);
                 }
             }
         }
         let mut parent = Some(
-            self.documents.session.document.layers
-                [self.documents.session.document.active]
+            self.documents.active_session.document.layers
+                [self.documents.active_session.document.active]
                 .id,
         );
-        let mut fallback = self.documents.session.document.active;
+        let mut fallback = self.documents.active_session.document.active;
         while let Some(id) = parent {
-            let Some(index) = self.documents.session.document.layer_index(id)
+            let Some(index) =
+                self.documents.active_session.document.layer_index(id)
             else {
                 break;
             };
-            if self.documents.session.layer_ui.list.collapsed.contains(&id) {
+            if self
+                .documents
+                .active_session
+                .layer_ui
+                .list
+                .collapsed
+                .contains(&id)
+            {
                 fallback = index;
             }
-            parent = self.documents.session.document.layers[index].parent;
+            parent =
+                self.documents.active_session.document.layers[index].parent;
         }
-        if self.layer_depth_and_hidden(self.documents.session.document.active).1
+        if self
+            .layer_depth_and_hidden(
+                self.documents.active_session.document.active,
+            )
+            .1
         {
             self.layer_click(fallback, Default::default(), false);
         }
-        self.documents.session.layer_ui.list.owned = true;
+        self.documents.active_session.layer_ui.list.owned = true;
     }
 
     pub(crate) fn execute_selected_layer_command(&mut self, command: Command) {
         let mask = self.selected_layer_mask();
-        if self.documents.session.document.has_non_raster_layers()
+        if self.documents.active_session.document.has_non_raster_layers()
             && matches!(
                 command,
                 Command::DeleteLayer
@@ -167,7 +215,7 @@ impl Parfait {
         if mask.count_ones() == 1 {
             self.execute_layer_command(
                 command,
-                self.documents.session.document.active,
+                self.documents.active_session.document.active,
             );
             return;
         }
@@ -177,7 +225,8 @@ impl Parfait {
         match command {
             Command::MoveLayerUp | Command::MoveLayerDown => {
                 let mut order: Vec<_> =
-                    (0..self.documents.session.document.layers.len()).collect();
+                    (0..self.documents.active_session.document.layers.len())
+                        .collect();
                 let chosen = |index: usize| mask & (1u64 << index) != 0;
                 if command == Command::MoveLayerUp {
                     for index in (0..order.len() - 1).rev() {
@@ -195,7 +244,7 @@ impl Parfait {
                 self.apply_layer_order(order, mask);
             }
             Command::DeleteLayer => {
-                let active = self.documents.session.document.active;
+                let active = self.documents.active_session.document.active;
                 self.edit_named("Delete layers", |document| {
                     let mut index = 0;
                     document.layers.retain(|_| {
@@ -208,7 +257,8 @@ impl Parfait {
                         .count()
                         .min(document.layers.len() - 1);
                 });
-                self.documents.session.layer_ui.list = Default::default();
+                self.documents.active_session.layer_ui.list =
+                    Default::default();
             }
             Command::LayerVisibility
             | Command::LayerLock
@@ -217,28 +267,28 @@ impl Parfait {
             | Command::LayerDraft
             | Command::LayerClipping => {
                 let value = if command == Command::LayerLock {
-                    !self.documents.session.document.layers
-                        [self.documents.session.document.active]
+                    !self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
                         .locked
                 } else if command == Command::LayerAlphaLock {
-                    !self.documents.session.document.layers
-                        [self.documents.session.document.active]
+                    !self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
                         .alpha_locked
                 } else if command == Command::LayerClipping {
-                    !self.documents.session.document.layers
-                        [self.documents.session.document.active]
+                    !self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
                         .clipped
                 } else if command == Command::LayerReference {
-                    !self.documents.session.document.layers
-                        [self.documents.session.document.active]
+                    !self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
                         .reference
                 } else if command == Command::LayerDraft {
-                    !self.documents.session.document.layers
-                        [self.documents.session.document.active]
+                    !self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
                         .draft
                 } else {
-                    !self.documents.session.document.layers
-                        [self.documents.session.document.active]
+                    !self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
                         .visible
                 };
                 self.edit_named(command.label(), |document| {
@@ -261,13 +311,13 @@ impl Parfait {
                         }
                     }
                 });
-                self.documents.session.layer_ui.list.solo = None;
+                self.documents.active_session.layer_ui.list.solo = None;
             }
             _ => {}
         }
     }
     pub(crate) fn duplicate_selected_layers(&mut self) {
-        if self.documents.session.document.has_non_raster_layers() {
+        if self.documents.active_session.document.has_non_raster_layers() {
             self.execute_tree_collection(
                 Command::DuplicateLayer,
                 self.selected_layer_mask(),
@@ -310,71 +360,30 @@ impl Parfait {
         });
         self.set_layer_selection(
             selected,
-            self.documents.session.document.active,
+            self.documents.active_session.document.active,
         );
-        self.documents.session.layer_ui.list.solo = None;
+        self.documents.active_session.layer_ui.list.solo = None;
     }
     pub(crate) fn selected_layer_mask(&self) -> u64 {
-        let active = 1 << self.documents.session.document.active;
-        if self.documents.session.layer_ui.list.active
-            != self.documents.session.document.layers
-                [self.documents.session.document.active]
-                .id
-        {
-            return active;
-        }
-        if self.documents.session.layer_ui.list.ids.iter().copied().eq(self
-            .documents
-            .session
-            .document
-            .layers
-            .iter()
-            .map(|layer| layer.id))
-        {
-            return self.documents.session.layer_ui.list.mask | active;
-        }
-        self.documents.session.document.layers.iter().enumerate().fold(
-            active,
-            |mask, (index, layer)| {
-                if self
-                    .documents
-                    .session
-                    .layer_ui
-                    .list
-                    .ids
-                    .iter()
-                    .enumerate()
-                    .any(|(previous, id)| {
-                        *id == layer.id
-                            && self.documents.session.layer_ui.list.mask
-                                & (1 << previous)
-                                != 0
-                    })
-                {
-                    mask | (1 << index)
-                } else {
-                    mask
-                }
-            },
-        )
+        let session = &*self.documents.active_session;
+        session.selected_layer_mask()
     }
     pub(crate) fn set_layer_selection(&mut self, mask: u64, anchor: usize) {
-        self.documents.session.layer_ui.list.mask = (mask
-            & (u64::MAX
-                >> (64 - self.documents.session.document.layers.len())))
-            | (1 << self.documents.session.document.active);
-        self.documents.session.layer_ui.list.active =
-            self.documents.session.document.layers
-                [self.documents.session.document.active]
-                .id;
-        self.documents.session.layer_ui.list.ids.clear();
-        self.documents.session.layer_ui.list.ids.extend(
-            self.documents.session.document.layers.iter().map(|layer| layer.id),
-        );
-        self.documents.session.layer_ui.list.anchor =
-            self.documents.session.document.layers
-                [anchor.min(self.documents.session.document.layers.len() - 1)]
-            .id;
+        let session = &mut *self.documents.active_session;
+        session.layer_ui.list.mask = (mask
+            & (u64::MAX >> (64 - session.document.layers.len())))
+            | (1 << session.document.active);
+        session.layer_ui.list.active =
+            session.document.layers[session.document.active].id;
+        session.layer_ui.list.ids.clear();
+        session
+            .layer_ui
+            .list
+            .ids
+            .extend(session.document.layers.iter().map(|layer| layer.id));
+        session.layer_ui.list.anchor = session.document.layers
+            [anchor.min(session.document.layers.len() - 1)]
+        .id;
     }
     pub(crate) fn layer_click(
         &mut self,
@@ -382,16 +391,16 @@ impl Parfait {
         modifiers: egui::Modifiers,
         check: bool,
     ) {
-        if layer >= self.documents.session.document.layers.len() {
+        if layer >= self.documents.active_session.document.layers.len() {
             return;
         }
         let mut mask = self.selected_layer_mask();
         let anchor = self
             .documents
-            .session
+            .active_session
             .document
-            .layer_index(self.documents.session.layer_ui.list.anchor)
-            .unwrap_or(self.documents.session.document.active);
+            .layer_index(self.documents.active_session.layer_ui.list.anchor)
+            .unwrap_or(self.documents.active_session.document.active);
         let mut active = layer;
         if modifiers.shift && !check {
             mask = (anchor.min(layer)..=anchor.max(layer))
@@ -401,12 +410,14 @@ impl Parfait {
             if mask == 0 {
                 mask = 1 << layer;
             }
-            active =
-                if mask & (1 << self.documents.session.document.active) != 0 {
-                    self.documents.session.document.active
-                } else {
-                    mask.trailing_zeros() as usize
-                };
+            active = if mask
+                & (1 << self.documents.active_session.document.active)
+                != 0
+            {
+                self.documents.active_session.document.active
+            } else {
+                mask.trailing_zeros() as usize
+            };
         } else {
             mask = 1 << layer;
         }
@@ -417,56 +428,66 @@ impl Parfait {
         );
     }
     pub(crate) fn prepare_layer_list(&mut self, ctx: &egui::Context) {
-        self.documents.session.layer_ui.list.owned =
-            self.documents.session.layer_ui.list.drag.is_some();
+        self.documents.active_session.layer_ui.list.owned =
+            self.documents.active_session.layer_ui.list.drag.is_some();
         let shown = self.workspace.panels.iter().any(|panel| {
             panel.palette == crate::workspace::Palette::Layers
                 && panel.visible
                 && !panel.collapsed
         });
-        if self.documents.session.layer_ui.list.rename.is_some()
+        if self.documents.active_session.layer_ui.list.rename.is_some()
             && (!ctx.input(|input| input.focused)
                 || self.dialog_open()
                 || !shown
                 || self.hide_panels
-                || self.documents.session.layer_ui.list.rename.is_some_and(
-                    |id| {
+                || self
+                    .documents
+                    .active_session
+                    .layer_ui
+                    .list
+                    .rename
+                    .is_some_and(|id| {
                         self.documents
-                            .session
+                            .active_session
                             .document
                             .layer_index(id)
                             .is_none()
-                    },
-                ))
+                    }))
         {
             self.finish_layer_edit();
-            self.documents.session.layer_ui.list.rename = None;
-            self.documents.session.layer_ui.list.rename_focus = false;
+            self.documents.active_session.layer_ui.list.rename = None;
+            self.documents.active_session.layer_ui.list.rename_focus = false;
         }
         if !ctx.input(|input| input.focused)
             || ctx.input(|input| input.key_pressed(egui::Key::Escape))
             || self.dialog_open()
             || !shown
             || self.hide_panels
-            || self.documents.session.layer_ui.list.drag.as_ref().is_some_and(
-                |drag| {
-                    drag.revision != self.documents.session.document.revision
-                },
-            )
+            || self
+                .documents
+                .active_session
+                .layer_ui
+                .list
+                .drag
+                .as_ref()
+                .is_some_and(|drag| {
+                    drag.revision
+                        != self.documents.active_session.document.revision
+                })
         {
-            self.documents.session.layer_ui.list.drag = None;
+            self.documents.active_session.layer_ui.list.drag = None;
         }
     }
     pub(crate) fn begin_layer_rename(&mut self, layer: usize) {
-        if layer >= self.documents.session.document.layers.len() {
+        if layer >= self.documents.active_session.document.layers.len() {
             return;
         }
         self.finish_layer_edit();
         self.select_layer(layer);
-        self.documents.session.layer_ui.list.rename =
-            Some(self.documents.session.document.layers[layer].id);
-        self.documents.session.layer_ui.list.rename_focus = true;
-        self.documents.session.layer_ui.list.drag = None;
+        self.documents.active_session.layer_ui.list.rename =
+            Some(self.documents.active_session.document.layers[layer].id);
+        self.documents.active_session.layer_ui.list.rename_focus = true;
+        self.documents.active_session.layer_ui.list.drag = None;
     }
     fn layer_name_editor(
         &mut self,
@@ -475,13 +496,13 @@ impl Parfait {
         rect: Rect,
     ) {
         let mut name =
-            self.documents.session.document.layers[layer].name.clone();
+            self.documents.active_session.document.layers[layer].name.clone();
         let response = ui.put(
             rect,
             egui::TextEdit::singleline(&mut name)
                 .id(ui.id().with((
                     "layer_name",
-                    self.documents.session.document.layers[layer].id,
+                    self.documents.active_session.document.layers[layer].id,
                 )))
                 .char_limit(128),
         );
@@ -489,7 +510,7 @@ impl Parfait {
         ui.data_mut(|data| {
             data.insert_temp(egui::Id::new("layer_name"), response.rect)
         });
-        if self.documents.session.layer_ui.list.rename_focus {
+        if self.documents.active_session.layer_ui.list.rename_focus {
             response.request_focus();
             if let Some(mut state) =
                 egui::TextEdit::load_state(ui.ctx(), response.id)
@@ -502,14 +523,14 @@ impl Parfait {
                 ));
                 state.store(ui.ctx(), response.id);
             }
-            self.documents.session.layer_ui.list.rename_focus = false;
+            self.documents.active_session.layer_ui.list.rename_focus = false;
         }
         if response.changed()
-            && name != self.documents.session.document.layers[layer].name
+            && name != self.documents.active_session.document.layers[layer].name
             && self.begin_layer_edit(LayerEditKind::Name, layer, false)
         {
-            self.documents.session.document.layers[layer].name = name;
-            self.documents.session.document.touch();
+            self.documents.active_session.document.layers[layer].name = name;
+            self.documents.active_session.document.touch();
         }
         self.layer_edit_response(LayerEditKind::Name, &response);
         if response.lost_focus()
@@ -519,7 +540,7 @@ impl Parfait {
             })
         {
             self.finish_layer_edit();
-            self.documents.session.layer_ui.list.rename = None;
+            self.documents.active_session.layer_ui.list.rename = None;
         }
     }
     fn layer_eye(&mut self, ui: &mut egui::Ui, layer: usize, rect: Rect) {
@@ -527,7 +548,7 @@ impl Parfait {
             rect,
             ui.id().with((
                 "eye",
-                self.documents.session.document.layers[layer].id,
+                self.documents.active_session.document.layers[layer].id,
             )),
             Sense::click(),
         );
@@ -535,7 +556,7 @@ impl Parfait {
             egui::WidgetInfo::selected(
                 egui::WidgetType::Checkbox,
                 ui.is_enabled(),
-                self.documents.session.document.layers[layer].visible,
+                self.documents.active_session.document.layers[layer].visible,
                 "Layer visible",
             )
         });
@@ -550,7 +571,7 @@ impl Parfait {
                 rect,
             )
         });
-        if self.documents.session.document.layers[layer].visible {
+        if self.documents.active_session.document.layers[layer].visible {
             paint_icon(ui, rect, Icon::Eye, Color32::from_gray(202));
         } else if response.hovered() {
             paint_icon(ui, rect, Icon::EyeSlash, Color32::from_gray(118));
@@ -559,7 +580,7 @@ impl Parfait {
             if ui.input(|input| input.modifiers.alt) {
                 self.solo_layer(layer);
             } else {
-                self.documents.session.layer_ui.list.solo = None;
+                self.documents.active_session.layer_ui.list.solo = None;
                 self.execute_layer_command(Command::LayerVisibility, layer);
             }
         }
@@ -567,16 +588,19 @@ impl Parfait {
     }
     fn solo_layer(&mut self, layer: usize) {
         let previous =
-            self.documents.session.layer_ui.list.solo.take().filter(|flags| {
-                flags.len() == self.documents.session.document.layers.len()
-                    && flags.iter().all(|(id, _)| {
-                        self.documents
-                            .session
-                            .document
-                            .layer_index(*id)
-                            .is_some()
-                    })
-            });
+            self.documents.active_session.layer_ui.list.solo.take().filter(
+                |flags| {
+                    flags.len()
+                        == self.documents.active_session.document.layers.len()
+                        && flags.iter().all(|(id, _)| {
+                            self.documents
+                                .active_session
+                                .document
+                                .layer_index(*id)
+                                .is_some()
+                        })
+                },
+            );
         if let Some(flags) = previous {
             self.edit_named("Restore layer visibility", |document| {
                 for target in &mut document.layers {
@@ -590,7 +614,7 @@ impl Parfait {
         } else {
             let flags = self
                 .documents
-                .session
+                .active_session
                 .document
                 .layers
                 .iter()
@@ -610,7 +634,7 @@ impl Parfait {
                     target.visible = visible & (1 << index) != 0;
                 }
             });
-            self.documents.session.layer_ui.list.solo = Some(flags);
+            self.documents.active_session.layer_ui.list.solo = Some(flags);
         }
     }
     pub(crate) fn layer_rows(
@@ -618,7 +642,7 @@ impl Parfait {
         ui: &mut egui::Ui,
         available_height: f32,
     ) {
-        let key = self.documents.session.key;
+        let key = self.documents.active_session.key;
         ui.push_id(key, |ui| self.layer_rows_contents(ui, available_height));
     }
 
@@ -627,26 +651,26 @@ impl Parfait {
         ui: &mut egui::Ui,
         available_height: f32,
     ) {
-        self.documents.session.layer_ui.list.collapsed.retain(|id| {
-            self.documents.session.document.layer_index(*id).is_some_and(
-                |index| {
-                    self.documents.session.document.layers[index].kind
-                        == parfait_core::LayerKind::Folder
-                },
-            )
+        let session = &mut *self.documents.active_session;
+        session.layer_ui.list.collapsed.retain(|id| {
+            session.document.layer_index(*id).is_some_and(|index| {
+                session.document.layers[index].kind
+                    == parfait_core::LayerKind::Folder
+            })
         });
-        self.documents.session.layer_ui.list.owned =
-            self.documents.session.layer_ui.list.drag.is_some();
+        self.documents.active_session.layer_ui.list.owned =
+            self.documents.active_session.layer_ui.list.drag.is_some();
         let selected = self.selected_layer_mask();
         let anchor = self
             .documents
-            .session
+            .active_session
             .document
-            .layer_index(self.documents.session.layer_ui.list.anchor)
-            .unwrap_or(self.documents.session.document.active);
+            .layer_index(self.documents.active_session.layer_ui.list.anchor)
+            .unwrap_or(self.documents.active_session.document.active);
         self.set_layer_selection(selected, anchor);
-        let mut targets =
-            Vec::with_capacity(self.documents.session.document.layers.len());
+        let mut targets = Vec::with_capacity(
+            self.documents.active_session.document.layers.len(),
+        );
         let scroll = egui::ScrollArea::vertical()
             .id_salt("layer_list")
             .max_height(available_height.max(42.))
@@ -654,7 +678,8 @@ impl Parfait {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.;
                 for layer in
-                    (0..self.documents.session.document.layers.len()).rev()
+                    (0..self.documents.active_session.document.layers.len())
+                        .rev()
                 {
                     let (depth, hidden) = self.layer_depth_and_hidden(layer);
                     if hidden {
@@ -688,7 +713,9 @@ impl Parfait {
                         status,
                         ui.id().with((
                             "layer_check",
-                            self.documents.session.document.layers[layer].id,
+                            self.documents.active_session.document.layers
+                                [layer]
+                                .id,
                         )),
                         Sense::click(),
                     );
@@ -700,7 +727,7 @@ impl Parfait {
                             "Select additional layer",
                         )
                     });
-                    if layer == self.documents.session.document.active {
+                    if layer == self.documents.active_session.document.active {
                         paint_icon(
                             ui,
                             status,
@@ -734,10 +761,10 @@ impl Parfait {
                         ui.ctx().request_repaint();
                     }
                     check.on_hover_text("Add / remove layer selection");
-                    let has_mask = self.documents.session.document.layers
-                        [layer]
-                        .mask
-                        .is_some();
+                    let has_mask =
+                        self.documents.active_session.document.layers[layer]
+                            .mask
+                            .is_some();
                     let compact = rect.width() < 210.;
                     let thumbnail_size = if compact { 24. } else { 36. };
                     let controls_width = if compact { 22. } else { 44. };
@@ -762,7 +789,8 @@ impl Parfait {
                             ),
                         egui::Vec2::splat(thumbnail_size),
                     );
-                    let folder = self.documents.session.document.layers[layer]
+                    let folder = self.documents.active_session.document.layers
+                        [layer]
                         .kind
                         == parfait_core::LayerKind::Folder;
                     if folder {
@@ -774,19 +802,21 @@ impl Parfait {
                             arrow,
                             ui.id().with((
                                 "folder_fold",
-                                self.documents.session.document.layers[layer]
+                                self.documents.active_session.document.layers
+                                    [layer]
                                     .id,
                             )),
                             Sense::click(),
                         );
                         let closed = self
                             .documents
-                            .session
+                            .active_session
                             .layer_ui
                             .list
                             .collapsed
                             .contains(
-                                &self.documents.session.document.layers[layer]
+                                &self.documents.active_session.document.layers
+                                    [layer]
                                     .id,
                             );
                         response.widget_info(|| {
@@ -820,8 +850,10 @@ impl Parfait {
                             data.insert_temp(
                                 egui::Id::new((
                                     "folder_fold",
-                                    self.documents.session.document.layers
-                                        [layer]
+                                    self.documents
+                                        .active_session
+                                        .document
+                                        .layers[layer]
                                         .id,
                                 )),
                                 arrow,
@@ -848,7 +880,8 @@ impl Parfait {
                             icon,
                             ui.id().with((
                                 "folder_select",
-                                self.documents.session.document.layers[layer]
+                                self.documents.active_session.document.layers
+                                    [layer]
                                     .id,
                             )),
                             Sense::click(),
@@ -857,7 +890,8 @@ impl Parfait {
                             egui::WidgetInfo::selected(
                                 egui::WidgetType::Button,
                                 ui.is_enabled(),
-                                self.documents.session.document.active == layer
+                                self.documents.active_session.document.active
+                                    == layer
                                     && !self.editing_layer_mask(),
                                 "폴더 선택",
                             )
@@ -887,7 +921,9 @@ impl Parfait {
                             ui, layer, thumbnail, false,
                         );
                     }
-                    if self.documents.session.document.layers[layer].draft {
+                    if self.documents.active_session.document.layers[layer]
+                        .draft
+                    {
                         ui.painter().rect_filled(
                             Rect::from_min_max(
                                 thumbnail.left_top() - egui::vec2(7., 0.),
@@ -897,7 +933,9 @@ impl Parfait {
                             Color32::from_rgb(122, 170, 226),
                         );
                     }
-                    if self.documents.session.document.layers[layer].reference {
+                    if self.documents.active_session.document.layers[layer]
+                        .reference
+                    {
                         let badge = Rect::from_min_size(
                             thumbnail.right_top() - egui::vec2(18., 0.),
                             egui::Vec2::splat(18.),
@@ -925,7 +963,9 @@ impl Parfait {
                         );
                     }
                     let text_left = 47. + indent + content_width;
-                    if self.documents.session.document.layers[layer].clipped {
+                    if self.documents.active_session.document.layers[layer]
+                        .clipped
+                    {
                         let indicator = Rect::from_min_max(
                             thumbnail.left_top() - egui::vec2(4., 0.),
                             thumbnail.left_bottom() - egui::vec2(2., 0.),
@@ -935,7 +975,7 @@ impl Parfait {
                             1.,
                             if self
                                 .documents
-                                .session
+                                .active_session
                                 .document
                                 .clipping_base(layer)
                                 .is_some()
@@ -954,7 +994,9 @@ impl Parfait {
                         info,
                         ui.id().with((
                             "layer_row",
-                            self.documents.session.document.layers[layer].id,
+                            self.documents.active_session.document.layers
+                                [layer]
+                                .id,
                         )),
                         Sense::click_and_drag(),
                     );
@@ -963,7 +1005,9 @@ impl Parfait {
                             egui::WidgetType::SelectableLabel,
                             ui.is_enabled(),
                             chosen,
-                            &self.documents.session.document.layers[layer].name,
+                            &self.documents.active_session.document.layers
+                                [layer]
+                                .name,
                         )
                     });
                     let name = Rect::from_min_max(
@@ -972,20 +1016,24 @@ impl Parfait {
                     );
                     let text = format!(
                         "{:.0}%  {}{}{}",
-                        self.documents.session.document.layers[layer].opacity
+                        self.documents.active_session.document.layers[layer]
+                            .opacity
                             * 100.,
                         crate::layer_controls::blend_label(
-                            self.documents.session.document.layers[layer]
+                            self.documents.active_session.document.layers
+                                [layer]
                                 .blend_mode
                         ),
-                        if self.documents.session.document.layers[layer]
+                        if self.documents.active_session.document.layers[layer]
                             .reference
                         {
                             "  참조"
                         } else {
                             ""
                         },
-                        if self.documents.session.document.layers[layer].draft {
+                        if self.documents.active_session.document.layers[layer]
+                            .draft
+                        {
                             "  밑그림"
                         } else {
                             ""
@@ -997,10 +1045,11 @@ impl Parfait {
                         &text,
                         11.,
                         name.right() - name.left(),
-                        if self.documents.session.document.layers[layer]
+                        if self.documents.active_session.document.layers[layer]
                             .blend_mode
                             == parfait_core::BlendMode::Through
-                            && self.documents.session.document.layers[layer]
+                            && self.documents.active_session.document.layers
+                                [layer]
                                 .clipped
                         {
                             crate::layer_controls::SUPPRESSED_BLEND
@@ -1008,9 +1057,11 @@ impl Parfait {
                             ui.visuals().text_color()
                         },
                     );
-                    if self.documents.session.layer_ui.list.rename
+                    if self.documents.active_session.layer_ui.list.rename
                         == Some(
-                            self.documents.session.document.layers[layer].id,
+                            self.documents.active_session.document.layers
+                                [layer]
+                                .id,
                         )
                     {
                         self.layer_name_editor(ui, layer, name);
@@ -1018,7 +1069,9 @@ impl Parfait {
                         clipped_text(
                             ui,
                             name.min,
-                            &self.documents.session.document.layers[layer].name,
+                            &self.documents.active_session.document.layers
+                                [layer]
+                                .name,
                             12.,
                             name.width(),
                             ui.visuals().text_color(),
@@ -1032,7 +1085,9 @@ impl Parfait {
                         lock,
                         ui.id().with((
                             "layer_lock",
-                            self.documents.session.document.layers[layer].id,
+                            self.documents.active_session.document.layers
+                                [layer]
+                                .id,
                         )),
                         Sense::click(),
                     );
@@ -1040,12 +1095,15 @@ impl Parfait {
                         egui::WidgetInfo::selected(
                             egui::WidgetType::Checkbox,
                             ui.is_enabled(),
-                            self.documents.session.document.layers[layer]
+                            self.documents.active_session.document.layers
+                                [layer]
                                 .locked,
                             "Layer locked",
                         )
                     });
-                    if self.documents.session.document.layers[layer].locked {
+                    if self.documents.active_session.document.layers[layer]
+                        .locked
+                    {
                         paint_icon(
                             ui,
                             lock,
@@ -1072,13 +1130,16 @@ impl Parfait {
                         lock.translate(egui::vec2(-22., 0.))
                     };
                     let alpha_enabled = !compact
-                        && self.documents.session.document.layers[layer].kind
+                        && self.documents.active_session.document.layers[layer]
+                            .kind
                             == parfait_core::LayerKind::Raster;
                     let alpha = ui.interact(
                         alpha_rect,
                         ui.id().with((
                             "layer_alpha_lock",
-                            self.documents.session.document.layers[layer].id,
+                            self.documents.active_session.document.layers
+                                [layer]
+                                .id,
                         )),
                         if alpha_enabled {
                             Sense::click()
@@ -1090,20 +1151,23 @@ impl Parfait {
                         egui::WidgetInfo::selected(
                             egui::WidgetType::Checkbox,
                             ui.is_enabled() && alpha_enabled,
-                            self.documents.session.document.layers[layer]
+                            self.documents.active_session.document.layers
+                                [layer]
                                 .alpha_locked,
                             "Lock transparent pixels",
                         )
                     });
                     if alpha_enabled
-                        && (self.documents.session.document.layers[layer]
+                        && (self.documents.active_session.document.layers
+                            [layer]
                             .alpha_locked
                             || alpha.hovered())
                     {
                         widgets_alpha_icon(
                             ui,
                             alpha_rect,
-                            self.documents.session.document.layers[layer]
+                            self.documents.active_session.document.layers
+                                [layer]
                                 .alpha_locked,
                         );
                     }
@@ -1149,7 +1213,13 @@ impl Parfait {
                         );
                     });
                     if response.double_clicked()
-                        && self.documents.session.layer_ui.list.rename.is_none()
+                        && self
+                            .documents
+                            .active_session
+                            .layer_ui
+                            .list
+                            .rename
+                            .is_none()
                     {
                         self.begin_layer_rename(layer);
                         ui.ctx().request_repaint();
@@ -1183,43 +1253,43 @@ impl Parfait {
                         self.command_toggle(
                             ui,
                             Command::LayerVisibility,
-                            self.documents.session.document.layers
-                                [self.documents.session.document.active]
+                            self.documents.active_session.document.layers
+                                [self.documents.active_session.document.active]
                                 .visible,
                         );
                         self.command_toggle(
                             ui,
                             Command::LayerLock,
-                            self.documents.session.document.layers
-                                [self.documents.session.document.active]
+                            self.documents.active_session.document.layers
+                                [self.documents.active_session.document.active]
                                 .locked,
                         );
                         self.command_toggle(
                             ui,
                             Command::LayerAlphaLock,
-                            self.documents.session.document.layers
-                                [self.documents.session.document.active]
+                            self.documents.active_session.document.layers
+                                [self.documents.active_session.document.active]
                                 .alpha_locked,
                         );
                         self.command_toggle(
                             ui,
                             Command::LayerClipping,
-                            self.documents.session.document.layers
-                                [self.documents.session.document.active]
+                            self.documents.active_session.document.layers
+                                [self.documents.active_session.document.active]
                                 .clipped,
                         );
                         self.command_toggle(
                             ui,
                             Command::LayerReference,
-                            self.documents.session.document.layers
-                                [self.documents.session.document.active]
+                            self.documents.active_session.document.layers
+                                [self.documents.active_session.document.active]
                                 .reference,
                         );
                         self.command_toggle(
                             ui,
                             Command::LayerDraft,
-                            self.documents.session.document.layers
-                                [self.documents.session.document.active]
+                            self.documents.active_session.document.layers
+                                [self.documents.active_session.document.active]
                                 .draft,
                         );
                         self.command_menu_item(ui, Command::LayerDetails);
@@ -1235,62 +1305,69 @@ impl Parfait {
             data.insert_temp(egui::Id::new("layer_list_viewport"), viewport)
         });
         self.layer_drag_events(ui, &targets, viewport);
-        if let Some(drag) = &self.documents.session.layer_ui.list.drag
+        if let Some(drag) = &self.documents.active_session.layer_ui.list.drag
             && drag.moved
             && let Some(pointer) =
                 ui.input(|input| input.pointer.interact_pos())
         {
-            if let Some((boundary, y)) =
-                if self.documents.session.document.has_non_raster_layers() {
-                    self.tree_drop_target(&targets, viewport, pointer).map(
-                        |(boundary, parent, y, inside)| {
-                            let valid = parfait_storage::layer_reparent_error(
-                                &self.documents.session.document,
-                                drag.mask,
-                                boundary,
-                                parent,
-                            )
-                            .is_none();
-                            if inside {
-                                ui.painter().rect_stroke(
-                                    Rect::from_min_max(
-                                        egui::pos2(viewport.left(), y - 20.),
-                                        egui::pos2(viewport.right(), y + 20.),
-                                    ),
-                                    0.,
-                                    egui::Stroke::new(
-                                        1.5,
-                                        if valid {
-                                            crate::theme::ACCENT
-                                        } else {
-                                            Color32::RED
-                                        },
-                                    ),
-                                    egui::StrokeKind::Inside,
-                                );
-                            }
-                            (
-                                if valid {
-                                    boundary
-                                } else {
-                                    self.documents.session.document.layers.len()
-                                        + 1
-                                },
-                                y,
-                            )
-                        },
-                    )
-                } else {
-                    drop_boundary(
-                        &targets,
-                        viewport,
-                        pointer,
-                        self.documents.session.document.layers.len(),
-                    )
-                }
+            if let Some((boundary, y)) = if self
+                .documents
+                .active_session
+                .document
+                .has_non_raster_layers()
             {
+                self.tree_drop_target(&targets, viewport, pointer).map(
+                    |(boundary, parent, y, inside)| {
+                        let valid = parfait_storage::layer_reparent_error(
+                            &self.documents.active_session.document,
+                            drag.mask,
+                            boundary,
+                            parent,
+                        )
+                        .is_none();
+                        if inside {
+                            ui.painter().rect_stroke(
+                                Rect::from_min_max(
+                                    egui::pos2(viewport.left(), y - 20.),
+                                    egui::pos2(viewport.right(), y + 20.),
+                                ),
+                                0.,
+                                egui::Stroke::new(
+                                    1.5,
+                                    if valid {
+                                        crate::theme::ACCENT
+                                    } else {
+                                        Color32::RED
+                                    },
+                                ),
+                                egui::StrokeKind::Inside,
+                            );
+                        }
+                        (
+                            if valid {
+                                boundary
+                            } else {
+                                self.documents
+                                    .active_session
+                                    .document
+                                    .layers
+                                    .len()
+                                    + 1
+                            },
+                            y,
+                        )
+                    },
+                )
+            } else {
+                drop_boundary(
+                    &targets,
+                    viewport,
+                    pointer,
+                    self.documents.active_session.document.layers.len(),
+                )
+            } {
                 let color = if boundary
-                    <= self.documents.session.document.layers.len()
+                    <= self.documents.active_session.document.layers.len()
                 {
                     crate::theme::ACCENT
                 } else {
@@ -1335,7 +1412,8 @@ impl Parfait {
         }
         for (index, rect, _) in targets {
             if pointer.y <= rect.bottom() {
-                let layer = &self.documents.session.document.layers[*index];
+                let layer =
+                    &self.documents.active_session.document.layers[*index];
                 if layer.kind == parfait_core::LayerKind::Folder
                     && pointer.y > rect.top() + 10.
                     && pointer.y < rect.bottom() - 10.
@@ -1352,7 +1430,7 @@ impl Parfait {
                 }
                 let subtree = self
                     .documents
-                    .session
+                    .active_session
                     .document
                     .layer_subtree_mask(*index)?;
                 return Some((
@@ -1366,11 +1444,11 @@ impl Parfait {
         let (index, rect, _) = targets.last()?;
         Some((
             self.documents
-                .session
+                .active_session
                 .document
                 .layer_subtree_mask(*index)?
                 .trailing_zeros() as usize,
-            self.documents.session.document.layers[*index].parent,
+            self.documents.active_session.document.layers[*index].parent,
             rect.bottom(),
             false,
         ))
@@ -1384,14 +1462,23 @@ impl Parfait {
     ) {
         let events = ui.input(|input| input.events.clone());
         let selection_before = self.selected_layer_mask();
-        let revision_before = self.documents.session.document.revision;
-        if self.documents.session.layer_ui.list.drag.as_ref().is_some_and(
-            |drag| drag.revision != self.documents.session.document.revision,
-        ) || ui.input(|input| {
-            !input.focused || input.key_pressed(egui::Key::Escape)
-        }) || !ui.is_enabled()
+        let revision_before = self.documents.active_session.document.revision;
+        if self
+            .documents
+            .active_session
+            .layer_ui
+            .list
+            .drag
+            .as_ref()
+            .is_some_and(|drag| {
+                drag.revision != self.documents.active_session.document.revision
+            })
+            || ui.input(|input| {
+                !input.focused || input.key_pressed(egui::Key::Escape)
+            })
+            || !ui.is_enabled()
         {
-            self.documents.session.layer_ui.list.drag = None;
+            self.documents.active_session.layer_ui.list.drag = None;
             return;
         }
         for event in events {
@@ -1401,8 +1488,19 @@ impl Parfait {
                     button: egui::PointerButton::Primary,
                     pressed: true,
                     modifiers,
-                } if self.documents.session.layer_ui.list.rename.is_none()
-                    && self.documents.session.editing.stroke.is_none()
+                } if self
+                    .documents
+                    .active_session
+                    .layer_ui
+                    .list
+                    .rename
+                    .is_none()
+                    && self
+                        .documents
+                        .active_session
+                        .editing
+                        .stroke
+                        .is_none()
                     && !self.dialog_open()
                     && ui.ctx().layer_id_at(pos) == Some(ui.layer_id()) =>
                 {
@@ -1419,24 +1517,25 @@ impl Parfait {
                         if collapse.is_none() {
                             self.layer_click(*layer, modifiers, false);
                         }
-                        self.documents.session.layer_ui.list.drag =
+                        self.documents.active_session.layer_ui.list.drag =
                             Some(LayerDrag {
                                 mask: self.selected_layer_mask(),
                                 revision: self
                                     .documents
-                                    .session
+                                    .active_session
                                     .document
                                     .revision,
                                 origin: pos,
                                 moved: false,
                                 collapse,
                             });
-                        self.documents.session.layer_ui.list.owned = true;
+                        self.documents.active_session.layer_ui.list.owned =
+                            true;
                     }
                 }
                 egui::Event::PointerMoved(pos) => {
                     if let Some(drag) =
-                        &mut self.documents.session.layer_ui.list.drag
+                        &mut self.documents.active_session.layer_ui.list.drag
                     {
                         drag.moved |= drag.origin.distance(pos) > 4.;
                     }
@@ -1448,13 +1547,13 @@ impl Parfait {
                     ..
                 } => {
                     if let Some(mut drag) =
-                        self.documents.session.layer_ui.list.drag.take()
+                        self.documents.active_session.layer_ui.list.drag.take()
                     {
                         drag.moved |= drag.origin.distance(pos) > 4.;
                         if drag.moved {
                             if self
                                 .documents
-                                .session
+                                .active_session
                                 .document
                                 .has_non_raster_layers()
                             {
@@ -1469,7 +1568,11 @@ impl Parfait {
                                 targets,
                                 viewport,
                                 pos,
-                                self.documents.session.document.layers.len(),
+                                self.documents
+                                    .active_session
+                                    .document
+                                    .layers
+                                    .len(),
                             ) {
                                 self.reorder_layer_mask(drag.mask, boundary);
                             }
@@ -1480,32 +1583,33 @@ impl Parfait {
                 }
                 egui::Event::PointerGone
                 | egui::Event::WindowFocused(false) => {
-                    self.documents.session.layer_ui.list.drag = None;
+                    self.documents.active_session.layer_ui.list.drag = None;
                 }
                 _ => {}
             }
         }
         if selection_before != self.selected_layer_mask()
-            || revision_before != self.documents.session.document.revision
+            || revision_before
+                != self.documents.active_session.document.revision
         {
             ui.ctx().request_repaint();
         }
     }
     pub(crate) fn reorder_layer_mask(&mut self, mask: u64, boundary: usize) {
-        if self.documents.session.document.has_non_raster_layers() {
+        if self.documents.active_session.document.has_non_raster_layers() {
             self.move_tree_selection(
                 mask,
                 boundary,
-                self.documents.session.document.layers
-                    [self.documents.session.document.active]
+                self.documents.active_session.document.layers
+                    [self.documents.active_session.document.active]
                     .parent,
             );
             return;
         }
-        let count = self.documents.session.document.layers.len();
+        let count = self.documents.active_session.document.layers.len();
         if boundary > count
             || mask == 0
-            || self.documents.session.editing.stroke.is_some()
+            || self.documents.active_session.editing.stroke.is_some()
             || self.dialog_open()
         {
             return;
@@ -1531,7 +1635,7 @@ impl Parfait {
     ) {
         if order.iter().copied().eq(0..self
             .documents
-            .session
+            .active_session
             .document
             .layers
             .len())
@@ -1540,7 +1644,9 @@ impl Parfait {
         }
         let active = order
             .iter()
-            .position(|index| *index == self.documents.session.document.active)
+            .position(|index| {
+                *index == self.documents.active_session.document.active
+            })
             .unwrap();
         let selected = order
             .iter()
@@ -1560,7 +1666,7 @@ impl Parfait {
             document.touch();
         });
         self.set_layer_selection(selected, active);
-        self.documents.session.layer_ui.list.solo = None;
+        self.documents.active_session.layer_ui.list.solo = None;
     }
 }
 

@@ -5,12 +5,13 @@ use parfait_core::{BrushOperation, Point, Stroke};
 impl Parfait {
     pub(crate) fn active_mask_overlay(&self) -> Option<parfait_core::LayerId> {
         self.documents
-            .session
+            .active_session
             .document
             .layers
-            .get(self.documents.session.document.active)
+            .get(self.documents.active_session.document.active)
             .filter(|layer| {
-                self.documents.session.editing.mask_overlay == Some(layer.id)
+                self.documents.active_session.editing.mask_overlay
+                    == Some(layer.id)
                     && layer.mask.is_some()
             })
             .map(|layer| layer.id)
@@ -23,7 +24,7 @@ impl Parfait {
         rect: egui::Rect,
         mask: bool,
     ) {
-        let selected = layer == self.documents.session.document.active
+        let selected = layer == self.documents.active_session.document.active
             && self.editing_layer_mask() == mask;
         if mask {
             if let Some(Some(texture)) =
@@ -45,7 +46,7 @@ impl Parfait {
                     egui::Color32::from_gray(115),
                 );
             }
-            if self.documents.session.document.layers[layer]
+            if self.documents.active_session.document.layers[layer]
                 .mask
                 .as_ref()
                 .is_some_and(|mask| !mask.enabled)
@@ -80,7 +81,7 @@ impl Parfait {
             rect,
             ui.id().with((
                 "layer_target",
-                self.documents.session.document.layers[layer].id,
+                self.documents.active_session.document.layers[layer].id,
                 mask,
             )),
             egui::Sense::click(),
@@ -110,32 +111,35 @@ impl Parfait {
 
     pub(crate) fn editing_layer_mask(&self) -> bool {
         self.documents
-            .session
+            .active_session
             .document
             .layers
-            .get(self.documents.session.document.active)
+            .get(self.documents.active_session.document.active)
             .is_some_and(|layer| {
-                self.documents.session.editing.mask_target == Some(layer.id)
+                self.documents.active_session.editing.mask_target
+                    == Some(layer.id)
                     && layer.mask.is_some()
             })
     }
 
     pub(crate) fn select_layer_target(&mut self, layer: usize, mask: bool) {
-        if self.documents.session.editing.stroke.is_some()
+        if self.documents.active_session.editing.stroke.is_some()
             || self.dialog_open()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
-            || self.documents.session.layer_ui.list.owns_pointer()
-            || layer >= self.documents.session.document.layers.len()
+            || self.documents.active_session.layer_ui.list.owns_pointer()
+            || layer >= self.documents.active_session.document.layers.len()
             || (mask
-                && self.documents.session.document.layers[layer].mask.is_none())
+                && self.documents.active_session.document.layers[layer]
+                    .mask
+                    .is_none())
         {
             return;
         }
         self.select_layer(layer);
         self.set_layer_selection(1 << layer, layer);
-        self.documents.session.editing.mask_target =
-            mask.then_some(self.documents.session.document.layers[layer].id);
+        self.documents.active_session.editing.mask_target = mask
+            .then_some(self.documents.active_session.document.layers[layer].id);
     }
 
     pub(crate) fn mask_command_disabled_reason(
@@ -143,13 +147,14 @@ impl Parfait {
         command: Command,
         layer: usize,
     ) -> Option<&'static str> {
-        let target = self.documents.session.document.layers.get(layer)?;
+        let target =
+            self.documents.active_session.document.layers.get(layer)?;
         if matches!(
             command,
             Command::LayerMaskRevealAll | Command::LayerMaskHideAll
         ) {
             return parfait_storage::layer_mask_creation_error(
-                &self.documents.session.document,
+                &self.documents.active_session.document,
                 layer,
             );
         }
@@ -157,16 +162,20 @@ impl Parfait {
             return Some("This layer has no mask.");
         }
         if command == Command::ClearLayerMask
-            && self.documents.session.document.selection.is_some()
+            && self.documents.active_session.document.selection.is_some()
             && let Some(reason) = parfait_storage::mask_edit_error(
-                &self.documents.session.document,
+                &self.documents.active_session.document,
                 layer,
             )
         {
             return Some(reason);
         }
         if !matches!(command, Command::LayerMaskEnabled | Command::ShowMaskArea)
-            && !self.documents.session.document.layer_ancestors_unlocked(layer)
+            && !self
+                .documents
+                .active_session
+                .document
+                .layer_ancestors_unlocked(layer)
         {
             return Some("Unlock the layer before changing its mask.");
         }
@@ -201,14 +210,16 @@ impl Parfait {
             self.notice = Some(reason.into());
             return;
         }
-        let layer = self.documents.session.document.active;
+        let layer = self.documents.active_session.document.active;
         if command == Command::ShowMaskArea {
-            self.documents.session.editing.mask_overlay =
-                if self.active_mask_overlay().is_some() {
-                    None
-                } else {
-                    Some(self.documents.session.document.layers[layer].id)
-                };
+            self.documents.active_session.editing.mask_overlay = if self
+                .active_mask_overlay()
+                .is_some()
+            {
+                None
+            } else {
+                Some(self.documents.active_session.document.layers[layer].id)
+            };
             return;
         }
         self.edit_named(command.label(), |document| match command {
@@ -242,26 +253,26 @@ impl Parfait {
             command,
             Command::LayerMaskRevealAll | Command::LayerMaskHideAll
         ) {
-            self.documents.session.editing.mask_target =
-                Some(self.documents.session.document.layers[layer].id);
+            self.documents.active_session.editing.mask_target =
+                Some(self.documents.active_session.document.layers[layer].id);
         } else if matches!(
             command,
             Command::DeleteLayerMask | Command::ApplyLayerMask
         ) {
-            self.documents.session.editing.mask_target = None;
-            self.documents.session.editing.mask_overlay = None;
+            self.documents.active_session.editing.mask_target = None;
+            self.documents.active_session.editing.mask_overlay = None;
         }
     }
 
     pub(crate) fn mask_brush_disabled_reason(&self) -> Option<&'static str> {
         if let Some(reason) = parfait_storage::mask_edit_error(
-            &self.documents.session.document,
-            self.documents.session.document.active,
+            &self.documents.active_session.document,
+            self.documents.active_session.document.active,
         ) {
             return Some(reason);
         }
-        let target = &self.documents.session.document.layers
-            [self.documents.session.document.active];
+        let target = &self.documents.active_session.document.layers
+            [self.documents.active_session.document.active];
         if target.mask.as_ref().is_none_or(|mask| !mask.enabled) {
             return Some("Enable the layer mask before drawing on it.");
         }
@@ -277,16 +288,18 @@ impl Parfait {
     }
 
     pub(crate) fn begin_canvas_stroke(&mut self, point: Point) -> bool {
-        if self.documents.session.editing.stroke.is_some()
+        let Some(target) = self.documents.active_key() else {
+            return false;
+        };
+        let session = self.documents.get_by_key(target).unwrap();
+        if session.editing.stroke.is_some()
             || self.dialog_open()
-            || (self.documents.session.document.layers
-                [self.documents.session.document.active]
-                .kind
+            || (session.document.layers[session.document.active].kind
                 != parfait_core::LayerKind::Raster
                 && !self.editing_layer_mask())
-            || !self.documents.session.document.layer_ancestors_allow_edit(
-                self.documents.session.document.active,
-            )
+            || !session
+                .document
+                .layer_ancestors_allow_edit(session.document.active)
         {
             return false;
         }
@@ -295,41 +308,30 @@ impl Parfait {
             self.notice = Some(reason.into());
             return false;
         }
-        self.finish_layer_edit();
-        if !self.begin_history(&format!(
-            "{}: {}",
-            if mask { "Mask brush" } else { "Brush" },
-            self.tip_name
-        )) {
+        self.finish_layer_edit_for(target);
+        if !self.begin_history_for(
+            target,
+            &format!(
+                "{}: {}",
+                if mask { "Mask brush" } else { "Brush" },
+                self.tip_name
+            ),
+        ) {
             return false;
         }
-        self.documents.session.editing.stroke = if mask {
-            Stroke::begin_mask(
-                &mut self.documents.session.document,
-                self.brush.clone(),
-                point,
-            )
+        let brush = self.brush.clone();
+        let session = self.documents.get_by_key_mut(target).unwrap();
+        session.editing.stroke = if mask {
+            Stroke::begin_mask(&mut session.document, brush, point)
         } else {
-            Some(Stroke::begin(
-                &mut self.documents.session.document,
-                self.brush.clone(),
-                point,
-            ))
+            Some(Stroke::begin(&mut session.document, brush, point))
         };
-        self.documents.session.editing.stroke_owner = self
-            .documents
-            .session
-            .editing
-            .stroke
-            .as_ref()
-            .map(|_| self.documents.session.key);
-        if self.documents.session.editing.stroke.is_none() {
-            self.documents
-                .session
-                .history
-                .commit(&self.documents.session.document);
+        session.editing.stroke_owner =
+            session.editing.stroke.as_ref().map(|_| target);
+        if session.editing.stroke.is_none() {
+            session.commit_edit();
         }
-        self.documents.session.editing.stroke.is_some()
+        session.editing.stroke.is_some()
     }
 
     pub(crate) fn layer_mask_menu(&mut self, ui: &mut egui::Ui) {
@@ -345,8 +347,8 @@ impl Parfait {
         ] {
             self.command_menu_item(ui, command);
         }
-        let enabled = self.documents.session.document.layers
-            [self.documents.session.document.active]
+        let enabled = self.documents.active_session.document.layers
+            [self.documents.active_session.document.active]
             .mask
             .as_ref()
             .is_some_and(|mask| mask.enabled);

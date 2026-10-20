@@ -71,16 +71,17 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
  {
     for folder in [false, true] {
         let directory = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.documents.session.document = Document::new(8, 8);
+        let mut app =
+            Parfait::open_legacy(directory.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(8, 8);
         if folder {
             app.documents
-                .session
+                .active_session
                 .document
                 .group_layers_in_folder(2, "Pass".into())
                 .unwrap();
         }
-        let before = app.documents.session.document.clone();
+        let before = app.documents.active_session.document.clone();
         let context = egui::Context::default();
         crate::theme::apply(&context);
         let mut time = 0.;
@@ -96,16 +97,18 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
         let option = rect(&context, "blend_choice_through");
         if !folder {
             assert!(option.is_none());
-            assert!(app.documents.session.document.same_edit_state(&before));
+            assert!(
+                app.documents.active_session.document.same_edit_state(&before)
+            );
             continue;
         }
         click(&mut app, &context, &mut time, option.unwrap());
         assert_eq!(
-            app.documents.session.document.layers[2].blend_mode,
+            app.documents.active_session.document.layers[2].blend_mode,
             BlendMode::Through
         );
-        assert_eq!(app.documents.session.history.rows().count(), 2);
-        assert!(app.documents.session.document.validate());
+        assert_eq!(app.documents.active_session.history.rows().count(), 2);
+        assert!(app.documents.active_session.document.validate());
         let path = directory.path().join("pass.parfait");
         app.save_project_to(path.clone()).unwrap();
         assert_eq!(
@@ -116,11 +119,11 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
                 .unwrap()
                 .document
                 .layers,
-            app.documents.session.document.layers
+            app.documents.active_session.document.layers
         );
         app.undo();
-        assert!(app.documents.session.document.same_edit_state(&before));
-        assert!(app.documents.session.history.can_redo());
+        assert!(app.documents.active_session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.history.can_redo());
         app.open_layer_details();
         for _ in 0..2 {
             frame(&mut app, &context, &mut time, vec![]);
@@ -139,7 +142,7 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
         );
         assert_eq!(
             app.documents
-                .session
+                .active_session
                 .layer_ui
                 .details
                 .as_ref()
@@ -148,16 +151,16 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
                 .blend_mode,
             BlendMode::Through
         );
-        assert!(app.documents.session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.document.same_edit_state(&before));
         click(
             &mut app,
             &context,
             &mut time,
             rect(&context, "layer_details_cancel").unwrap(),
         );
-        assert!(app.documents.session.layer_ui.details.is_none());
-        assert!(app.documents.session.history.can_redo());
-        assert!(app.documents.session.document.same_edit_state(&before));
+        assert!(app.documents.active_session.layer_ui.details.is_none());
+        assert!(app.documents.active_session.history.can_redo());
+        assert!(app.documents.active_session.document.same_edit_state(&before));
     }
 }
 
@@ -165,41 +168,42 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
 fn through_clipping_guards_keep_suppressed_settings_reversible_and_orphans_unlinkable()
  {
     let directory = tempfile::tempdir().unwrap();
-    let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.documents.session.document = Document::new(8, 8);
-    app.documents.session.document.add_layer();
+    let mut app = Parfait::open_legacy(directory.path().to_owned()).unwrap();
+    app.documents.active_session.document = Document::new(8, 8);
+    app.documents.active_session.document.add_layer();
     app.documents
-        .session
+        .active_session
         .document
         .group_layers_in_folder(2, "Pass".into())
         .unwrap();
-    app.documents.session.document.layers[2].blend_mode = BlendMode::Through;
+    app.documents.active_session.document.layers[2].blend_mode =
+        BlendMode::Through;
     app.select_layer(3);
     let context = egui::Context::default();
     assert!(app.command_disabled_reason(Command::LayerClipping).is_some());
-    let before = app.documents.session.document.clone();
+    let before = app.documents.active_session.document.clone();
     app.execute_command(Command::LayerClipping, &context);
-    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.active_session.document.same_edit_state(&before));
     app.select_layer(2);
     assert!(app.command_disabled_reason(Command::LayerClipping).is_none());
     app.execute_command(Command::LayerClipping, &context);
-    assert!(app.documents.session.document.layers[2].clipped);
+    assert!(app.documents.active_session.document.layers[2].clipped);
     assert_eq!(
-        app.documents.session.document.layers[2].blend_mode,
+        app.documents.active_session.document.layers[2].blend_mode,
         BlendMode::Through
     );
-    assert!(app.documents.session.document.validate());
+    assert!(app.documents.active_session.document.validate());
     app.undo();
-    assert!(!app.documents.session.document.layers[2].clipped);
+    assert!(!app.documents.active_session.document.layers[2].clipped);
     assert_eq!(
-        app.documents.session.document.layers[2].blend_mode,
+        app.documents.active_session.document.layers[2].blend_mode,
         BlendMode::Through
     );
     app.select_layer(3);
-    app.documents.session.document.layers[3].clipped = true;
-    app.documents.session.document.touch();
+    app.documents.active_session.document.layers[3].clipped = true;
+    app.documents.active_session.document.touch();
     assert!(app.command_disabled_reason(Command::LayerClipping).is_none());
     app.execute_command(Command::LayerClipping, &context);
-    assert!(!app.documents.session.document.layers[3].clipped);
-    assert!(app.documents.session.document.validate());
+    assert!(!app.documents.active_session.document.layers[3].clipped);
+    assert!(app.documents.active_session.document.validate());
 }
