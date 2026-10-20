@@ -1,5 +1,89 @@
 # Testing
 
+## Multi-document Stages 3–4: default durable workflow
+
+2026-10-20, macOS 26.4.1 arm64 / Rust 1.99.1, current uncommitted working tree. Ordinary launch now uses tabs, per-document recovery and asynchronous original saves; there is **no activation flag**. Stage 2's development-only behavior below is historical, not the current launch contract.
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo test -p parfait stage3_
+cargo test -p parfait stage4_
+cargo test -p parfait-storage
+cargo test --release -p parfait multi_document_ -- --ignored --nocapture --test-threads=1
+```
+
+The full workspace suite passes **444 tests, zero failures, nine opt-in workloads ignored** after the recovery-revision fix below; formatting and warnings-denied all-target Clippy pass. The new lifecycle tests use `stage3_` / `stage4_`, while the performance fixtures retain `multi_document_`. Existing v1–v10 artwork compatibility and killed-process recovery tests remain in the suite. Artwork serialization stays v10; optional recovery metadata and the session registry have independent versions.
+
+| Area | Observed evidence |
+| --- | --- |
+| Recovery identity and metadata | Selected physical generation is preserved even when fallback advances memory revision. Damaged metadata, wrong document ID, oversized/invalid paths and unsupported metadata versions cannot replace valid recovered pixels. Native non-UTF8 paths round-trip on Unix. Session corruption/future versions are rejected without rewriting the database. |
+| Worker and ownership | One storage worker coalesces bounded per-owner recovery requests, routes immutable results by document/session/request, limits consecutive original selections, and releases barriers on job/terminal failures. Tests cover stale sessions, independent owners, digest-cache reuse and worker restart. |
+| Actual process interruption | `session_recovery_probe` / `session_crash_recovery` kill a separate owned process at ten boundaries: registration, snapshot, hint, open transaction, migration prepared/snapshot/committed, closed, cleanup and clean marker. Reopening verifies valid artwork, source preservation, stable migration identity and no resurrection after committed close. These are process-crash checks, not power-loss guarantees. |
+| Restoration | Independent tabs retain IDs/order/active tab and committed artwork state, not Undo history. Invalid/over-limit items remain visible and retryable rather than being deleted. Legacy recovery migration is reentrant and leaves its source untouched. Untouched empty tabs are not registered; unsaved edited tabs survive normal shutdown. |
+| Original saves | Tests queue a save, edit further and switch tabs before handling completion. Only the captured owner's binding/baseline changes; newer pixels remain dirty and Undo to the saved state clears the marker. Failed writes preserve name/binding/redo and future-version sources. External changes require approval and are checked again inside the write transaction. Physical generation advancement and committed-success/checkpoint-warning separation are tested. |
+| Source validation and closing | Normal saved restart reads the original; abnormal or unsaved restart retains recovered pixels. Missing originals leave recovery unbound; duplicate source hints cannot replace the second recovered picture. Unsaved close is blocked, final recovery precedes clean shutdown, and cleanup failure retains closed tombstones with a 32-directory backlog limit. Recovery-inode aliases are refused on Unix. |
+
+Historical single-document regression fixtures explicitly call the test-only `open_legacy`; they retain their old assertions instead of accidentally testing a different recovery policy. New stage-3/4 tests and the save-during-input workload use the production default constructor. No production legacy/development toggle remains.
+
+Earlier startup-only native smoke: the release executable was launched twice against an owned temporary registry containing two recovery drawings, with only `--data-dir` and framebuffer capture arguments. Both real macOS windows rendered two restored tabs; the registry still contained both open records after termination/relaunch. Both owned processes were stopped before timing. That smoke verified startup/render/restart, not native editing or file dialogs. It is separate from the later computer-use validation below. Save/discard/cancel close-choice UI is deliberately deferred; external-original overwrite confirmation is implemented.
+
+Release workload results, exact pixels and the observed tab-frame timing increase are recorded in [performance](performance.md#multi-document-stages-34-default-durable-workflow). Functional completion is not a claim of latency acceptance or cross-platform certification.
+
+### Reopened-original recovery revision regression
+
+2026-10-20: replacing a saved original with a lower-revision backup could make subsequent recovery writes lose to older, higher-revision snapshots, despite reporting recovery complete. Reopening now advances the in-memory revision beyond both the original and recovered revisions before changing the session; revision exhaustion leaves the recovered session intact. The original file and its conflict-detection head remain unchanged.
+
+`cargo test -p parfait reopened_original_revision -- --nocapture` passes three tests. The two restart tests failed before the fix and now cover 24 combinations: lower/equal/higher source revisions, changed artwork/header-only changes, further edits/no edits, and clean/unclean shutdown markers. They inspect the latest stored recovery and reopen it, checking artwork, headers, saved-state identity, dirty status, source head and unchanged source bytes. The boundary test checks SQLite-generation and `u64` exhaustion without session mutation. These are in-process restart checks, not new process-kill or power-loss evidence.
+
+After the fix, `cargo test --workspace --quiet`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo fmt --all -- --check` pass. Rendering is unchanged; native UI, release timing and other-platform checks were not rerun for this fix.
+
+### 실제 macOS computer use 검증
+
+같은 날 release 앱을 실제 마우스·키·메뉴·macOS 파일 대화상자로 검사했다. [상세 결과와 증거](validation/multi-document-native-2026-10-20.md)에 22개 경로, 실패 재현, 실행 파일 식별과 검증 한계를 기록했다. 주요 확인 범위:
+
+- A/B 그림·Undo/Redo·확대 격리와 공통 브러시, M 폴더·마스크·전체 선택의 탭 전환/복원.
+- 원본 저장·다른 이름 저장·중복 원본 열기, 손상 파일 열기 실패 후 기존 그림/redo 유지.
+- 실제 원본 쓰기 잠금 중 저장→추가 획→다른 탭 전환. 완료 뒤 추가 획은 미저장, 그 획 Undo 시 저장 상태 복귀.
+- 정상 창 닫기와 미저장 탭 복원, 미편집 빈 탭 제외, 실제 QA 프로세스 SIGKILL 뒤 복구와 닫힌 탭 비복원.
+- 외부 원본 변경 확인·취소·승인, 원본 누락과 실제 OS 권한 거부 뒤 복구 유지/새 저장 대화상자.
+- 8탭 상한, 미저장 닫기 차단, 활성/비활성/마지막 탭 닫기와 빈 화면의 새 문서 생성.
+
+**전체 통과는 아니다.** 파일 메뉴의 `닫기`·`Parfait 종료`가 비활성이고, 외부 변경 저장 취소 후 진행 문구가 남는다. 기존 NFD 한글 파일명 글리프 문제도 재현됐다. 기본 탭 X·창 X 동작과 후속 닫기 확인 UI는 구분한다.
+
+이 실행은 제품 코드를 바꾸지 않았으며 기존 441개 자동 검사 수에 포함하지 않는다. 화면 확인을 raw pixel 전체 일치, 물리 펜 성능, 다른 OS, 전원 손실 검증으로 취급하지 않는다. 실행 도구가 종료 후 앱 조회 시 인자 없이 자동 재실행한 한 차례의 격리 주의점과 고정 QA 실행 래퍼 조치도 상세 기록에 남겼다.
+
+
+## Historical multi-document 2A–2C: development-only tabs
+
+2026-10-20. Implementation units: 2A (manager/input), 2B (source reader/path reservations), 2C (retained/work budgets). Implementation commit: current working tree; no commit hashes assigned. These extend, rather than replace, the historical 1A/1B evidence below.
+
+Naming clarification: the manager field is `active_session` (formerly `session`). All active-document UI, commands and tests use the explicit name; inactive sessions remain in `parked`. This is an identifier-only refactor, not a tab lifecycle, serialization or recovery behavior change.
+
+The final check commands are:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo test --release --workspace multi_document_ -- --ignored --nocapture --test-threads=1
+```
+
+The workspace suite passes **399 tests, with eight opt-in workloads ignored**. This includes existing exact-version fixtures and killed-process SQLite recovery checks. The release-only tab, near-budget and single-document workloads are also run separately; measurements and sampling limitations are in [performance](performance.md#multi-document-2a2c-development-workloads). All new functional checks use the `multi_document_` prefix. Tests use temporary data directories, not the user's app data.
+
+| Unit | Functional, effect and failure evidence |
+| --- | --- |
+| 2A | `document_tabs::tests::multi_document_tabs_isolate_pixels_history_view_and_cache`: equal LayerIds/revisions but different raster/mask/selection patterns keep independent bytes, History IDs and view; switching finishes only A's stroke, B receives no remaining pointer-up/move edits, and the single active cache is discarded. `multi_document_real_tab_click_commits_opacity_and_blocks_modal` uses actual egui tab clicks and checks one opacity transaction/Undo and blocked modal switching. `layers::tests::multi_document_layer_drag_cancels_before_switch_and_inline_name_blocks_switch` uses layer pointer down/move, switches mid-preview, then releases in B without either layer order changing. Admission is checked at exact logical capacity and one byte over, tab-count refusal retains A, modified close is blocked, neighbor/last-tab removal is deterministic and the full empty `draw_ui` path does not recreate a document or panic. |
+| 2B | `multi_document_real_reader_is_off_ui_and_failures_do_not_replace_redo` observes the worker thread ID, validates a real Unicode-path SQLite file and checks missing-file failure against raw existing document/History/ID/redo. No missing file or parent is created. `multi_document_reversed_cancelled_and_duplicate_loads_preserve_order_and_focus` feeds controlled reverse/duplicate/cancelled results through the production completion handler; tab order remains request order and an explicit user selection is not stolen. Cancellation retains the in-flight pixel reservation until consumption. Real reopen, pending-source reservation and Save As conflicts are checked. Unix symlink/hard-link aliases and internal DB/SQLite sidecar/recovery-directory targets are exercised. Storage `read_only_tests` compares source database bytes, verifies unchanged schema on failed reads, rejects future versions and retains older-generation recovery. |
+| 2C | Core `multi_document_unique_pixel_mask_selection_capacity_and_history` fixes the expected allocation byte count independently, including spare Vec capacity, shared raster/mask/selection Arcs and one detached COW buffer. App `multi_document_pixel_reservation_boundary_preserves_redo_and_state` checks exact headroom/one-byte shortage before a brush copy; rejection and cancellation retain artwork, ID and redo and release reservations. `multi_document_reclaims_inactive_old_history_but_protects_before_and_redo` checks old inactive History reclamation, atomic refusal and pending-before protection. `multi_document_save_pin_is_shared_counted_and_released_on_failure` proves a shared save pin costs no duplicate bytes, a detached protected buffer prevents over-budget admission and a failed real source write releases its pin without changing the drawing. Storage tests check exact/one-byte-over workspace reservation, encoder exclusion/release, capped writer refusal and bounded decompression capacity. `multi_document_decoded_pixel_capacity_matches_non_power_of_two_payload` verifies exact retained capacity after decoding 513×257 raster/mask/selection data; deserialize-only byte visitors avoid geometric Vec slack without changing existing wire bytes. |
+
+Deliberate behavior changes: the development option opens new tabs, blocks unsaved close/exit and disables automatic recovery rather than writing different drawings into the legacy recovery DB. The old worker is drained/stopped before tabs are enabled. A cancelled running reader may finish its I/O, but its document is discarded. Original saves remain synchronous; the shared source baseline and filename behavior remain unchanged. The process-local storage buffer gate serializes encoding/decoding, so a synchronous original save may wait behind a reader; asynchronous original saving remains 4A.
+
+At that historical checkpoint tabs required a disposable-data development option. That option has since been removed; do not use the old invocation. At stage 2, single-document New/Open and recovery were still the ordinary path. Startup restoration of a tab list, per-document recovery, durable close/exit, original-save job keys and save/discard/cancel prompts are **not implemented**. No new session-DB crash milestones exist in stage 2; the existing real SQLite process-kill tests remain regression coverage, not evidence for multi-tab crash recovery. Native multi-tab windows/file dialogs, physical pens, Windows/Linux path/locking behavior and power loss are unverified. Unix hard-link identity is exercised on macOS; Windows currently uses canonical-path matching only, and external path-replacement races are outside the protection boundary.
+
+## Historical solid-layer checkpoint
+
 The solid-layer engine/storage foundation passes 367 workspace tests with five opt-in workloads ignored, formatting and warnings-denied all-target Clippy. Six new core checks compare procedural sampling with independently materialized raster pixels across all 196 base/clip blend pairs, masks, partial regions, picking, nested Through scopes and draft export. They also check parameter History, no-op identity, fractional selection sharing, mask strokes, content-paint refusal, explicit rasterization, paper invariants, parent locks, 64 nodes and the actual one-MiB row-capacity ceiling. Four storage checks independently encode v7/v8/v9 field/kind layouts, retain old raster backgrounds, verify exact v10 bytes, reject mislabeled newer kinds and recover invalid paper heads. Shared large-buffer fixtures cover real versus worst-case payload growth without writing a half-gigabyte snapshot. An actual palette pointer regression keeps paper opacity and incompatible commands from modifying the document.
 
 The malformed-tree recovery test now labels its deliberately invalid current document with the current header, so it exercises tree validation rather than accidentally passing through rejection of a trailing newer selection field under a legacy header. The separate exact legacy fixtures remain required. These engine checks do not complete type-creation menus or the color editor; the roadmap count remains unchanged until the actual end-user workflow is connected and verified.
@@ -8,7 +92,7 @@ A signed native macOS fixture matches all 14 file-backed sections of the release
 
 ## Multi-document 1B: logical state identity and digest
 
-The retained scope is 1B only; manager/tab/input-switch implementation (2A) was withdrawn after scope clarification. The final retained working tree passes 383 workspace tests with six opt-in workloads ignored, formatting and warnings-denied all-target Clippy, on macOS arm64 / Rust 1.99.1. The format remains v10; exact v1–v10 compatibility, malformed-head fallback and real killed-process recovery tests remain required. These are process-crash checks, not power-loss guarantees.
+Historical 1B checkpoint: manager/tab/input-switch implementation (2A) was withdrawn at that checkpoint after scope clarification; the new 2A–2C evidence above supersedes that scope limit. The final retained working tree passes 383 workspace tests with six opt-in workloads ignored, formatting and warnings-denied all-target Clippy, on macOS arm64 / Rust 1.99.1. The format remains v10; exact v1–v10 compatibility, malformed-head fallback and real killed-process recovery tests remain required. These are process-crash checks, not power-loss guarantees.
 
 - History: random-state generation failure, changed/no-op/cancel/Undo/Redo ID transitions and filename synchronization without losing redo. App construction and all production transaction starts use fallible initialization before document mutation. Save As keeps the current state ID, filename metadata survives Undo/Redo and layer names still form part of artwork.
 - Digest: individual artwork fields including parent-only changes, zero normalization, invalid floats, Dense/Uniform equivalence, absent versus zero selection/mask, solid colors, and metadata exclusions. An independently encoded 135-byte 1×1 vector fixes SHA-256 to `cb58d5ab406860a74314555583ef93c13eef3c5202dc78fc872e9f50d83b857d`.

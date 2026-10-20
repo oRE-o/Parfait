@@ -1,5 +1,65 @@
 # Stroke performance
 
+## Multi-document Stages 3–4: default durable workflow
+
+2026-10-20, macOS 26.4.1 arm64 / Rust 1.99.1, workspace release profile. The processor model is not established, so this is not the named modest-reference-machine acceptance run. The current uncommitted tree defaults to tabs/recovery/asynchronous original saving, with no activation option. [Raw observations and executable SHA-256 values](validation/multi-document-3-4-release.json) retain all stdout and per-child peak RSS.
+
+The before binary contains the start-of-work stage-2C tree; the after binary contains stages 3–4. Each comparison has three sequential alternating pairs (second pair reversed), with no concurrent builds or native QA processes. Before source/binaries are temporary QA artifacts, not a repository-archived historical overlay. Values below are minimum–maximum **run percentiles**, not pooled percentiles. No timing/RSS acceptance tolerance was set beforehand; these are diagnostic observations, not a no-regression result.
+
+| Headless CPU metric, ms | Before 3–4 | After 3–4 |
+| --- | ---: | ---: |
+| Legacy canvas baseline p50 | 0.006000–0.006209 | 0.005917–0.007250 |
+| Legacy canvas baseline p95 | 0.026292–0.031875 | 0.026250–0.032000 |
+| Legacy canvas baseline p99 | 0.027958–0.041583 | 0.027584–0.034875 |
+| Legacy canvas baseline max | 0.054792–0.267375 | 0.056833–0.102875 |
+| One-tab switch/canvas p95 | 0.0118–0.0139 | 0.0156–0.0169 |
+| Three-tab switch/canvas p95 | 0.6570–0.7602 | 0.8715–0.8743 |
+| Eight-tab switch/canvas p95 | 0.7095–0.7765 | 0.8753–0.8843 |
+
+The tab fixture includes real manager/cache switching and headless canvas work for 128 frames; it is not a native complete-app frame. The earlier fixture used stage-2 development tabs without durable recovery; the current one uses the default durable workflow. The higher three/eight-tab p95 is an observed cost, not evidence of zero regression or a speedup. All runs preserve exact pixel assertions and checksum `200540160`, with retained/logical buffers of 1,572,864 / 4,718,592 / 12,582,912 bytes for 1/3/8 tabs. Complete tab-test process RSS is 43.438–43.672 MiB before and 40.141–40.922 MiB after, not the native GUI working set.
+
+The 512×384 baseline deliberately uses the test-only legacy constructor to preserve its old synchronous-save contract. Its nine-save p50/p95 ranges are 19.100875–20.345250 / 21.120959–27.634084 ms before and 17.532333–19.025833 / 24.377542–26.333542 ms after; p95 is the maximum of nine samples and save p99 is not estimated. Process RSS is 30.516–30.594 / 30.734–32.359 MiB. This is regression evidence for that historical harness, **not** default asynchronous-save latency.
+
+The new `multi_document_async_save_release_workload` uses the production default constructor, queues a real original save and executes 256 pointer/canvas frames with storage polling. Across three current-tree runs, frame p50 is 0.006083–0.006125 ms, p95 0.026666–0.026833, p99 0.027541–0.028958 and maximum 0.221958–0.258500; process RSS is 28.156–28.219 MiB. Original completion was observed after 69.489709–71.113083 ms. That last number includes workload scheduling and polling: it is an **observed completion upper bound**, not isolated transaction latency. Exact source snapshot readback (normalizing only filename/revision) and final raster/composite checksums `32465291941967` / `63671080545421` pass; edits made after submission remain dirty. No synchronous-before versus asynchronous-after speedup is inferred from these different scopes.
+
+One eight-tab near-budget run accepted 64/64 edits. Post-commit unique retained-pixel high-water was **1,066,240,000 bytes**, below the **1,073,741,824-byte** pixel cap, with **501,760,000 logical bytes**. The edit loop took 202.351 ms excluding construction/rendering/saving; complete-process RSS reached **1,094.656 MiB**. The pixel census is not an RSS ceiling: SQLite, bounded encoder/decoder work, allocator overhead, GPU and other application memory are separate. One run is a budget stress check, not a tail-latency distribution.
+
+```sh
+cargo test --release -p parfait multi_document_baseline_release_workload -- --ignored --nocapture --test-threads=1
+cargo test --release -p parfait multi_document_tabs_release_workload -- --ignored --nocapture --test-threads=1
+cargo test --release -p parfait multi_document_async_save_release_workload -- --ignored --nocapture --test-threads=1
+cargo test --release -p parfait multi_document_retained_budget_release_workload -- --ignored --nocapture --test-threads=1
+```
+
+Run each executable in a fresh child and read that child's `resource.getrusage(RUSAGE_CHILDREN).ru_maxrss` (bytes on this macOS host) for comparable peak RSS; Cargo's own memory is not included. CPU frame timing excludes OS input, native event delivery, GPU presentation and display response. Native two-tab startup/restart smoke is [separately scoped](testing.md#multi-document-stages-34-default-durable-workflow). No physical-pen latency, Windows/Linux performance, power-loss safety or competitive parity is claimed.
+
+
+
+## Historical multi-document 2A–2C: development workloads
+
+2026-10-20, macOS 26.4.1 arm64, Rust 1.99.1, the workspace release profile (thin LTO, stripped). The sandbox denied the processor-model query; this is not a named modest reference-device acceptance run. The following are **current-tree measurements only**, not an interleaved before/after comparison. No timing/RSS regression tolerance was established for this increment, so performance effects remain **unjudged**. Existing pixel oracles and recovery checks still pass.
+
+```sh
+cargo test --release --workspace multi_document_ -- --ignored --nocapture --test-threads=1
+```
+
+After compilation completed, three fresh-process single-document runs alternated with three fresh-process tab-workload runs; a final separate near-budget process ran once. Each child was wrapped with `resource.getrusage(RUSAGE_CHILDREN).ru_maxrss`, as in the 1A procedure below. Exploratory runs/build overlap are excluded. These headless tests do not create a native window or measure physical pen/GPU presentation latency.
+
+| Current-tree workload | CPU p50 ms, range of 3 runs | p95 ms | observed p99 ms | maximum ms |
+| --- | ---: | ---: | ---: | ---: |
+| Existing 512×384 masked-folder stroke, 256 canvas updates/run | 0.006042–0.009667 | 0.026709–0.037333 | 0.038375–0.043916 | 0.056292–0.826375 |
+| One 512×384 tab, 128 frames/run | 0.0115–0.0140 | 0.0229–0.0299 | 0.0504–0.1222 | 1.5426–10.4644 |
+| Three 512×384 tabs, 128 frames/run | 0.6573–0.7248 | 0.8633–1.4672 | 0.8829–1.8984 | 1.3643–2.1590 |
+| Eight 512×384 tabs, 128 frames/run | 0.6323–0.7401 | 0.6718–0.8685 | 0.7151–0.8930 | 1.2600–1.3159 |
+
+The tab timing encloses activation and headless tab/canvas UI, including CPU cache rebuild/upload preparation, but not the subsequent pixel oracle. It includes the initial cold frame. One-tab activation is a same-ID no-op after initialization; three/eight tabs alternate different documents and rebuild the single active cache. They are different workloads, not evidence of speedup with more tabs. Retain the 10.4644-ms first-case maximum and the 1.8984-ms three-tab observed p99 rather than hiding them. Nearest-rank p99 from only 128/256 observations is descriptive, not a stable tail-latency guarantee.
+
+Tab fixtures are independently expected to composite to 786,432 white bytes, sum checksum `200540160` on every iteration. Their retained/logical pixel counts are exactly 1,572,864 / 4,718,592 / 12,582,912 bytes for 1/3/8 tabs; inactive sessions have no canvas textures. Complete tab-workload process peak RSS is 45,842,432–47,464,448 bytes. The original masked-folder workload keeps raw checksum `32465291941967` and composite checksum `63671080545421`; its nine synchronous saves/run have p50 18.255708–20.436292 ms and p95 (the maximum of nine) 26.200916–57.572292 ms. Save p99 is not estimated. That complete process peaks at 32,063,488–39,124,992 RSS bytes. These old-format-compatible snapshots now use exact-capacity byte decoding and capped encode buffers; no serialization version changed.
+
+`multi_document_retained_budget_release_workload` opens eight 2800×2800 two-raster drawings, retains each initial original-save baseline and cycles 64 small strokes through the tabs. All 64 were accepted; History reclamation keeps the observed post-commit unique-buffer high-water at **1,066,240,000 bytes**, below **1,073,741,824** (1 GiB), with logical pixels **501,760,000 bytes**. Every iteration asserts the pixel cap and released edit reservation; refused edits, if any, must preserve artwork and state ID. Stroke-loop CPU time was 183.347 ms, excluding fixture construction, GUI rendering and saving. Full-process peak RSS was **1,093,025,792 bytes**, which intentionally is not equated to the 1 GiB pixel cap. This one run is a budget stress check, not a comfortable-user-memory limit or a latency distribution.
+
+The separate 1152 MiB storage work envelope covers bounded raw/compressed buffers; only one encoder/decoder uses that gate at a time. The development reader reserves decoded pixels separately, while exact-capacity deserialization prevents hidden Vec slack from exceeding that reservation. SQLite internals, brush scratch, GPU memory, allocator overhead, strings and other application memory are outside the retained-pixel budget. No native multi-tab/file-dialog measurement, physical-tablet measurement, Windows/Linux result, automatic multi-document recovery, power-loss guarantee, competitive parity or end-to-end pen-latency improvement is claimed.
+
 ## Solid Layer Foundation
 
 Fill and Paper retain three color bytes and no RGBA canvas. They add no dependency, texture cache or worker. Non-raster composition reuses one row per solid/folder node; a maximum-width 64-node test checks actual Vec capacities at no more than 1 MiB total and verifies allocation identity through composition. Existing raster-only composition retains its flat path. Masks still reserve a scalar channel in the conservative logical budget, including Uniform masks. The release executable grows from 13,126,736 to 13,143,792 bytes (+17,056); this is not process RSS.
