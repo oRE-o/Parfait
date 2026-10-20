@@ -7,7 +7,10 @@ pub(crate) mod paint;
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum MaskCoverage {
     Uniform(u8),
-    Dense(Arc<Vec<u8>>),
+    Dense(
+        #[serde(deserialize_with = "crate::deserialize_pixel_buffer")]
+        Arc<Vec<u8>>,
+    ),
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]

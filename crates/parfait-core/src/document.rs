@@ -45,6 +45,7 @@ pub struct Layer {
     pub opacity: f32,
     #[serde(default)]
     pub blend_mode: BlendMode,
+    #[serde(deserialize_with = "crate::deserialize_pixel_buffer")]
     pub pixels: Arc<Vec<u8>>,
     #[serde(default)]
     pub mask: Option<crate::LayerMask>,

@@ -1,11 +1,16 @@
 use crate::{Document, EditStateId};
+use std::sync::atomic::{AtomicU64, Ordering};
+static ENTRY_ORDER: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Clone)]
 struct Entry {
+    order: u64,
     edit_state: EditStateId,
     id: u64,
     label: String,
     document: Document,
 }
+#[derive(Clone)]
 struct Pending {
     before_id: EditStateId,
     reserved_id: EditStateId,
@@ -18,6 +23,7 @@ pub struct HistoryRow<'a> {
     pub current: bool,
     pub future: bool,
 }
+#[derive(Clone)]
 pub struct History {
     current_state: EditStateId,
     entries: Vec<Entry>,
@@ -39,6 +45,53 @@ impl History {
             next_id: 1,
             pending: None,
         })
+    }
+    pub fn restored(state: EditStateId) -> Self {
+        Self {
+            current_state: state,
+            entries: Vec::new(),
+            cursor: 0,
+            next_id: 1,
+            pending: None,
+        }
+    }
+    /// Includes pending before images; callers must not evict those.
+    pub fn visit_documents(&self, mut visit: impl FnMut(&Document)) {
+        for entry in &self.entries {
+            visit(&entry.document);
+        }
+        if let Some(pending) = &self.pending {
+            visit(&pending.before);
+        }
+    }
+    /// Visits protected images and a hypothetical history after oldest-first eviction.
+    pub fn visit_after_eviction(
+        &self,
+        remove: usize,
+        mut visit: impl FnMut(&Document),
+    ) {
+        for entry in self.entries.iter().skip(remove.min(self.evictable())) {
+            visit(&entry.document);
+        }
+        if let Some(pending) = &self.pending {
+            visit(&pending.before);
+        }
+    }
+    pub fn eviction_order(&self) -> impl Iterator<Item = u64> + '_ {
+        self.entries.iter().take(self.evictable()).map(|entry| entry.order)
+    }
+    pub fn evictable(&self) -> usize {
+        self.cursor.saturating_sub(1)
+    }
+    pub fn evict_oldest(&mut self, count: usize) {
+        let count = count.min(self.evictable());
+        self.entries.drain(..count);
+        self.cursor -= count;
+    }
+    pub fn pending_changed(&self, document: &Document) -> bool {
+        self.pending
+            .as_ref()
+            .is_some_and(|p| !p.before.same_edit_state(document))
     }
     pub fn state_id(&self) -> EditStateId {
         self.current_state
@@ -98,6 +151,7 @@ impl History {
         }
         if self.entries.is_empty() {
             self.entries.push(Entry {
+                order: ENTRY_ORDER.fetch_add(1, Ordering::Relaxed),
                 edit_state: pending.before_id,
                 id: 0,
                 label: "Initial state".into(),
@@ -109,6 +163,7 @@ impl History {
         self.entries.truncate(self.cursor + 1);
         self.current_state = pending.reserved_id;
         self.entries.push(Entry {
+            order: ENTRY_ORDER.fetch_add(1, Ordering::Relaxed),
             edit_state: self.current_state,
             id: self.next_id,
             label: pending.label,

@@ -8,6 +8,7 @@ pub(crate) struct LegacyLayer {
     pub visible: bool,
     pub locked: bool,
     pub opacity: f32,
+    #[serde(deserialize_with = "parfait_core::deserialize_pixel_buffer")]
     pub pixels: Arc<Vec<u8>>,
 }
 #[derive(Serialize, Deserialize)]

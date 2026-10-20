@@ -15,6 +15,10 @@ impl EditStateId {
         Ok(Self(bytes))
     }
 
+    pub fn from_bytes(bytes: [u8; 16]) -> Self {
+        Self(bytes)
+    }
+
     pub fn bytes(self) -> [u8; 16] {
         self.0
     }

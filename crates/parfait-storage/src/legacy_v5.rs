@@ -12,6 +12,7 @@ pub(crate) struct LegacyLayer {
     pub clipped: bool,
     pub opacity: f32,
     pub blend_mode: BlendMode,
+    #[serde(deserialize_with = "parfait_core::deserialize_pixel_buffer")]
     pub pixels: Arc<Vec<u8>>,
     pub mask: Option<LayerMask>,
 }

@@ -38,3 +38,6 @@ pub use response_curve::{
     MAX_CURVE_POINTS, ResponseCurve, automatic_curve_controls,
     reconcile_curve_controls, sample_bezier_response, sample_response,
 };
+
+mod memory;
+pub use memory::{BufferCensus, deserialize_pixel_buffer};

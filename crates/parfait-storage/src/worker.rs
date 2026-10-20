@@ -22,6 +22,14 @@ pub struct Autosave {
     thread: Option<JoinHandle<()>>,
 }
 impl Autosave {
+    pub fn disabled() -> Self {
+        let (_, events) = mpsc::channel();
+        Self {
+            queue: Arc::new((Mutex::new(Queue::default()), Condvar::new())),
+            events,
+            thread: None,
+        }
+    }
     pub fn start(path: PathBuf) -> Result<Self> {
         let store = Store::open(&path)?;
         store.mark_open()?;

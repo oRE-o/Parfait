@@ -1,5 +1,8 @@
 //! Transactional project snapshots. No UI dependency; disk work belongs to the worker.
 mod budget;
+mod coordinator;
+mod source;
+pub use source::{SavedSource, SourceEvent, SourceFailure, SourceRequest};
 mod legacy;
 mod legacy_v2;
 mod legacy_v3;
@@ -12,11 +15,21 @@ mod legacy_v9;
 mod migration_tests;
 #[cfg(test)]
 mod procedural_tests;
+mod recovery;
 #[cfg(test)]
 mod selection_tests;
+mod session;
 #[cfg(test)]
 mod through_tests;
+mod work_budget;
 mod worker;
+pub use coordinator::{
+    JobKey, RecoveryEvent, RecoveryRequest, StorageCoordinator,
+};
+pub use recovery::{NativePath, Recovered, RecoveryMetadata, SnapshotHead};
+pub use session::{
+    SessionRecord, SessionStore, document_hex, migrate_legacy, recovery_path,
+};
 const SNAPSHOT_V2: &[u8] = b"PARFAIT\0SNAP2\0";
 const SNAPSHOT_V3: &[u8] = b"PARFAIT\0SNAP3\0";
 const SNAPSHOT_V4: &[u8] = b"PARFAIT\0SNAP4\0";
@@ -28,14 +41,18 @@ const SNAPSHOT_V9: &[u8] = b"PARFAIT\0SNAP9\0";
 const SNAPSHOT_V10: &[u8] = b"PARFAIT\0SNAP10\0";
 use anyhow::{Context, Result, bail, ensure};
 use bincode::Options;
-use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
+#[cfg(test)]
+use flate2::read::ZlibDecoder;
+use flate2::{Compression, write::ZlibEncoder};
 use fs2::FileExt;
 use parfait_core::Document;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
+#[cfg(test)]
+use std::io::Read;
 use std::{
     fs::{File, OpenOptions},
-    io::{Read, Write},
+    io::Write,
     path::Path,
     time::Duration,
 };
@@ -70,8 +87,25 @@ pub struct Store {
 pub struct Loaded {
     pub document: Document,
     pub fell_back: bool,
+    pub head: SnapshotHead,
 }
 impl Store {
+    /// Reads an existing source without migrations, table creation, or write pragmas.
+    pub fn open_read_only(path: &Path) -> Result<Self> {
+        let connection = Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        connection.busy_timeout(Duration::from_secs(3))?;
+        let version: i64 =
+            connection
+                .pragma_query_value(None, "user_version", |r| r.get(0))?;
+        ensure!(
+            (0..=10).contains(&version),
+            "This project uses an unsupported format ({version})"
+        );
+        Ok(Self { connection })
+    }
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) =
             path.parent().filter(|p| !p.as_os_str().is_empty())
@@ -109,6 +143,25 @@ impl Store {
         Ok(())
     }
     pub fn save(&mut self, doc: &Document) -> Result<()> {
+        self.save_inner(doc, None, None).map(|_| ())
+    }
+    pub fn save_original(
+        &mut self,
+        doc: &Document,
+        expected: Option<SnapshotHead>,
+    ) -> Result<SnapshotHead> {
+        ensure!(
+            expected.as_ref().is_none_or(|head| doc.revision > head.generation),
+            "Original generation must advance"
+        );
+        self.save_inner(doc, None, Some(expected))
+    }
+    fn save_inner(
+        &mut self,
+        doc: &Document,
+        metadata: Option<Vec<u8>>,
+        source_check: Option<Option<SnapshotHead>>,
+    ) -> Result<SnapshotHead> {
         ensure!(doc.validate(), "Invalid document");
         ensure!(
             doc.logical_pixel_bytes() <= MAX_BYTES,
@@ -118,44 +171,92 @@ impl Store {
             snapshot_size(doc).is_some_and(|bytes| bytes <= MAX_BYTES),
             "Snapshot exceeds 512 MiB before encoding"
         );
-        let mut raw = SNAPSHOT_V10.to_vec();
+        let reservation = work_budget::EncodingReservation::acquire(
+            snapshot_size(doc).unwrap(),
+        )?;
+        let mut raw = work_budget::WorkBuffer::new(reservation.raw)?;
+        raw.write_all(SNAPSHOT_V10)?;
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .with_limit(MAX_BYTES - SNAPSHOT_V10.len() as u64)
             .serialize_into(&mut raw, doc)?;
+        let raw = raw.finish();
         ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
         let checksum = Sha256::digest(&raw).to_vec();
-        let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
+        let compressed = work_budget::WorkBuffer::new(reservation.compressed)?;
+        let mut enc = ZlibEncoder::new(compressed, Compression::fast());
         enc.write_all(&raw)?;
-        let payload = enc.finish()?;
-        let tx = self.connection.transaction()?;
+        let payload = enc.finish()?.finish();
+        let head = SnapshotHead {
+            generation: doc.revision,
+            checksum: checksum.clone().try_into().unwrap(),
+        };
+        let tx = self.connection.transaction_with_behavior(
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        if let Some(expected) = source_check {
+            use rusqlite::OptionalExtension;
+            let actual=tx.query_row("SELECT revision,checksum FROM snapshots ORDER BY revision DESC LIMIT 1",[],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,Vec<u8>>(1)?))).optional()?;
+            let actual = actual
+                .map(|(generation, checksum)| -> Result<SnapshotHead> {
+                    Ok(SnapshotHead {
+                        generation: u64::try_from(generation)?,
+                        checksum: checksum.try_into().map_err(|_| {
+                            anyhow::anyhow!("Invalid original head")
+                        })?,
+                    })
+                })
+                .transpose()?;
+            if actual != expected {
+                return Err(source::SourceConflict(actual).into());
+            }
+        }
         tx.execute(
             "INSERT OR REPLACE INTO snapshots VALUES(?1,?2,?3)",
-            params![i64::try_from(doc.revision)?, checksum, payload],
+            params![i64::try_from(doc.revision)?, &checksum, payload],
         )?;
         tx.execute("DELETE FROM snapshots WHERE revision NOT IN (SELECT revision FROM snapshots ORDER BY revision DESC LIMIT 3)",[])?;
+        recovery::write_metadata(
+            &tx,
+            &SnapshotHead {
+                generation: doc.revision,
+                checksum: checksum.try_into().unwrap(),
+            },
+            metadata,
+        )?;
         tx.pragma_update(None, "user_version", 10)?;
         tx.commit()?;
-        Ok(())
+        Ok(head)
     }
     pub fn load(&self) -> Result<Option<Loaded>> {
+        let _workspace = work_budget::EncodingReservation::acquire(MAX_BYTES)?;
         let mut stmt = self.connection.prepare(
-            "SELECT checksum,payload FROM snapshots ORDER BY revision DESC",
+            "SELECT CASE WHEN length(checksum)=32 THEN checksum ELSE NULL END, CASE WHEN length(payload) <= ?1 THEN payload ELSE NULL END, revision FROM snapshots ORDER BY revision DESC",
         )?;
-        let rows = stmt.query_map([], |r| {
-            Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, Vec<u8>>(1)?))
-        })?;
+        let rows = stmt.query_map(
+            [work_budget::compressed_bound(MAX_BYTES).unwrap() as i64],
+            |r| {
+                Ok((
+                    r.get::<_, Option<Vec<u8>>>(0)?,
+                    r.get::<_, Option<Vec<u8>>>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            },
+        )?;
         let mut bad = false;
         for row in rows {
-            let (hash, payload) = row?;
+            let (hash, payload, generation) = row?;
             let decode = || -> Result<Document> {
-                let mut raw = Vec::new();
-                ZlibDecoder::new(payload.as_slice())
-                    .take(MAX_BYTES + 1)
-                    .read_to_end(&mut raw)?;
-                ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
+                ensure!(generation >= 0, "Invalid snapshot generation");
+                let payload = payload.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("Compressed snapshot too large")
+                })?;
+                let hash = hash.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("Invalid checksum length")
+                })?;
+                let raw = work_budget::decode_bounded(payload, MAX_BYTES)?;
                 ensure!(
-                    Sha256::digest(&raw).as_slice() == hash,
+                    Sha256::digest(&raw).as_slice() == hash.as_slice(),
                     "Snapshot checksum mismatch"
                 );
                 let options = bincode::DefaultOptions::new()
@@ -226,7 +327,14 @@ impl Store {
                     if bad {
                         document.revision = u64::try_from(max)? + 1;
                     }
-                    return Ok(Some(Loaded { document, fell_back: bad }));
+                    return Ok(Some(Loaded {
+                        document,
+                        fell_back: bad,
+                        head: SnapshotHead {
+                            generation: u64::try_from(generation)?,
+                            checksum: hash.unwrap().try_into().unwrap(),
+                        },
+                    }));
                 }
                 Err(_) => bad = true,
             }
@@ -237,7 +345,12 @@ impl Store {
         Ok(None)
     }
     pub fn checkpoint(&self) -> Result<()> {
-        self.connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+        let (busy, _, _): (i64, i64, i64) = self.connection.query_row(
+            "PRAGMA wal_checkpoint(TRUNCATE)",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        ensure!(busy == 0, "Checkpoint is busy; committed WAL is retained");
         Ok(())
     }
 }
@@ -356,3 +469,9 @@ mod tests {
         assert!(lock_session(&path).is_ok());
     }
 }
+
+#[cfg(test)]
+mod read_only_tests;
+
+#[cfg(test)]
+mod stage3_tests;
