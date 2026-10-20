@@ -164,7 +164,11 @@ impl Parfait {
     pub fn edit(&mut self, action: impl FnOnce(&mut Document)) {
         self.edit_named("Edit", action);
     }
-    pub(crate) fn edit_named(&mut self, label: &str, action: impl FnOnce(&mut Document)) {
+    pub(crate) fn edit_named(
+        &mut self,
+        label: &str,
+        action: impl FnOnce(&mut Document),
+    ) {
         self.finish_stroke();
         self.finish_layer_edit();
         self.history.begin(&self.doc, label);
@@ -220,12 +224,13 @@ impl Parfait {
     }
     pub fn save_project(&mut self, save_as: bool) {
         self.finish_layer_edit();
-        let path = if !save_as { self.project.clone() } else { None }.or_else(|| {
-            rfd::FileDialog::new()
-                .add_filter("Parfait project", &["parfait"])
-                .set_file_name(format!("{}.parfait", self.doc.name))
-                .save_file()
-        });
+        let path =
+            if !save_as { self.project.clone() } else { None }.or_else(|| {
+                rfd::FileDialog::new()
+                    .add_filter("Parfait project", &["parfait"])
+                    .set_file_name(format!("{}.parfait", self.doc.name))
+                    .save_file()
+            });
         if let Some(path) = path {
             match self.save_project_to(path) {
                 Ok(()) => self.notice = Some("Project saved.".into()),
@@ -250,7 +255,9 @@ impl Parfait {
     }
     pub fn new_document(&mut self) {
         self.finish_layer_edit();
-        match self.write_project(&self.recovery_path.with_file_name("before-new.parfait")) {
+        match self.write_project(
+            &self.recovery_path.with_file_name("before-new.parfait"),
+        ) {
             Ok(()) => {
                 let rev = self.doc.revision + 1;
                 self.doc = Document::new(1024, 768);
@@ -264,7 +271,11 @@ impl Parfait {
                 self.view = View::default();
                 self.force_save();
             }
-            Err(e) => self.error = Some(format!("Could not back up the current drawing: {e:#}")),
+            Err(e) => {
+                self.error = Some(format!(
+                    "Could not back up the current drawing: {e:#}"
+                ))
+            }
         }
     }
     pub fn export(&mut self) {
@@ -309,7 +320,9 @@ impl Parfait {
         } else {
             Duration::from_millis(400)
         };
-        if self.doc.revision != self.submitted && self.last_submit.elapsed() > interval {
+        if self.doc.revision != self.submitted
+            && self.last_submit.elapsed() > interval
+        {
             self.force_save();
         }
     }
@@ -328,7 +341,11 @@ impl eframe::App for Parfait {
             self.workspace_ui(ui);
             self.settle_layer_edit(&ctx);
             egui::CentralPanel::default()
-                .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(self.display.background)))
+                .frame(
+                    egui::Frame::NONE.fill(egui::Color32::from_gray(
+                        self.display.background,
+                    )),
+                )
                 .show(ui, |ui| self.canvas(ui));
         });
         self.brush_details_ui(&ctx);
@@ -344,7 +361,9 @@ impl eframe::App for Parfait {
                 .resizable(false)
                 .show(&ctx, |ui| {
                     egui::ScrollArea::vertical()
-                        .max_height((ctx.content_rect().height() - 130.).max(100.))
+                        .max_height(
+                            (ctx.content_rect().height() - 130.).max(100.),
+                        )
                         .show(ui, |ui| {
                             for line in crate::shortcuts::HELP {
                                 ui.label(*line);
@@ -365,10 +384,17 @@ impl eframe::App for Parfait {
                         });
                     ui.separator();
                     crate::widgets::action_row(ui, |ui| {
-                        if crate::widgets::action_button(ui, "Close", 64.).clicked() {
+                        if crate::widgets::action_button(ui, "Close", 64.)
+                            .clicked()
+                        {
                             self.show_help = false;
                         }
-                        if crate::widgets::action_button(ui, "Shortcut settings…", 140.).clicked()
+                        if crate::widgets::action_button(
+                            ui,
+                            "Shortcut settings…",
+                            140.,
+                        )
+                        .clicked()
                         {
                             self.open_shortcut_settings();
                         }
@@ -430,17 +456,20 @@ impl eframe::App for Parfait {
             self.show_licenses &= licenses_open;
         }
         if let Some(error) = self.error.clone() {
-            egui::Window::new("Attention")
-                .collapsible(false)
-                .show(&ctx, |ui| {
+            egui::Window::new("Attention").collapsible(false).show(
+                &ctx,
+                |ui| {
                     ui.label(error);
                     ui.separator();
                     crate::widgets::action_row(ui, |ui| {
-                        if crate::widgets::action_button(ui, "OK", 64.).clicked() {
+                        if crate::widgets::action_button(ui, "OK", 64.)
+                            .clicked()
+                        {
                             self.error = None;
                         }
                     });
-                });
+                },
+            );
         }
         ctx.request_repaint_after(self.maintenance_interval());
         crate::chrome::resize_edges(ui);
@@ -450,14 +479,19 @@ impl eframe::App for Parfait {
         {
             self.error = Some(format!("Screenshot failed: {error}"));
         }
-        if ctx.input(|i| i.viewport().close_requested()) && self.saved < self.doc.revision {
+        if ctx.input(|i| i.viewport().close_requested())
+            && self.saved < self.doc.revision
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.finish_stroke();
             self.finish_layer_edit();
             self.close_pending = true;
             self.force_save();
         }
-        if self.close_pending && self.saved >= self.doc.revision && !self.saving_failed {
+        if self.close_pending
+            && self.saved >= self.doc.revision
+            && !self.saving_failed
+        {
             self.close_pending = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -510,11 +544,7 @@ mod tests {
         app.stroke = Some(Stroke::begin(
             &mut app.doc,
             Brush::default(),
-            parfait_core::Point {
-                x: 4.,
-                y: 4.,
-                pressure: 1.,
-            },
+            parfait_core::Point { x: 4., y: 4., pressure: 1. },
         ));
         app.saved = app.doc.revision;
         assert_eq!(app.maintenance_interval(), Duration::from_millis(100));

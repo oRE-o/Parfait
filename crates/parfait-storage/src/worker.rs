@@ -48,7 +48,8 @@ impl Autosave {
                         }
                         Err(e) => {
                             healthy = false;
-                            let _ = send.send(SaveEvent::Failed(format!("{e:#}")));
+                            let _ =
+                                send.send(SaveEvent::Failed(format!("{e:#}")));
                         }
                     }
                 }
@@ -61,11 +62,7 @@ impl Autosave {
                 }
             }
         });
-        Ok(Self {
-            queue,
-            events,
-            thread: Some(thread),
-        })
+        Ok(Self { queue, events, thread: Some(thread) })
     }
     /// Coalesces pending snapshots instead of allowing an unbounded memory queue.
     pub fn submit(&self, doc: Document) {

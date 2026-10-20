@@ -3,11 +3,10 @@ use parfait_storage::Store;
 use std::{path::PathBuf, sync::Arc};
 
 fn main() -> anyhow::Result<()> {
-    let directory = PathBuf::from(
-        std::env::args()
-            .nth(1)
-            .ok_or_else(|| anyhow::anyhow!("Pass a new, isolated fixture directory"))?,
-    );
+    let directory =
+        PathBuf::from(std::env::args().nth(1).ok_or_else(|| {
+            anyhow::anyhow!("Pass a new, isolated fixture directory")
+        })?);
     anyhow::ensure!(
         !directory.exists(),
         "Refusing to replace an existing data directory"
@@ -33,7 +32,8 @@ fn main() -> anyhow::Result<()> {
         let color = if row < 192 {
             [gray; 3]
         } else {
-            [[255, 0, 0], [0, 255, 0], [0, 0, 255], [200, 100, 50]][column / 128]
+            [[255, 0, 0], [0, 255, 0], [0, 0, 255], [200, 100, 50]]
+                [column / 128]
         };
         *pixel = [
             color[0],

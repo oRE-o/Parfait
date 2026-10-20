@@ -73,12 +73,14 @@ fn synchronous_project_and_png_baseline() {
             let directory = tempfile::tempdir().unwrap();
             let mut document = fixture(width, height, layers, noisy);
             let composite = document.composite();
-            let checksum = composite
-                .iter()
-                .enumerate()
-                .fold(0u64, |checksum, (index, value)| {
-                    checksum.wrapping_add((index as u64 + 1).wrapping_mul(u64::from(*value)))
-                });
+            let checksum = composite.iter().enumerate().fold(
+                0u64,
+                |checksum, (index, value)| {
+                    checksum.wrapping_add(
+                        (index as u64 + 1).wrapping_mul(u64::from(*value)),
+                    )
+                },
+            );
             let case = format!("{width}x{height}-{layers}layers-noisy{noisy}");
             println!(
                 "case={case} logical_bytes={} snapshot_bytes={}",
@@ -92,17 +94,24 @@ fn synchronous_project_and_png_baseline() {
             let mut export_times = Vec::new();
             for iteration in 0..3 {
                 document.touch();
-                let fresh = directory.path().join(format!("fresh-{iteration}.parfait"));
+                let fresh =
+                    directory.path().join(format!("fresh-{iteration}.parfait"));
                 let start = Instant::now();
-                Parfait::write_project_document(black_box(&document), &fresh).unwrap();
+                Parfait::write_project_document(black_box(&document), &fresh)
+                    .unwrap();
                 fresh_times.push(start.elapsed().as_secs_f64() * 1000.);
                 verify_project(&document, &fresh);
                 std::fs::remove_file(fresh).unwrap();
                 let start = Instant::now();
-                Parfait::write_project_document(black_box(&document), &existing).unwrap();
+                Parfait::write_project_document(
+                    black_box(&document),
+                    &existing,
+                )
+                .unwrap();
                 overwrite_times.push(start.elapsed().as_secs_f64() * 1000.);
                 verify_project(&document, &existing);
-                let png = directory.path().join(format!("export-{iteration}.png"));
+                let png =
+                    directory.path().join(format!("export-{iteration}.png"));
                 let start = Instant::now();
                 image::save_buffer_with_format(
                     &png,
@@ -114,7 +123,10 @@ fn synchronous_project_and_png_baseline() {
                 )
                 .unwrap();
                 export_times.push(start.elapsed().as_secs_f64() * 1000.);
-                assert_eq!(image::open(&png).unwrap().into_rgba8().as_raw(), &composite);
+                assert_eq!(
+                    image::open(&png).unwrap().into_rgba8().as_raw(),
+                    &composite
+                );
                 std::fs::remove_file(png).unwrap();
             }
             report(&case, "fresh_project", &fresh_times, checksum);

@@ -48,7 +48,8 @@ impl Axis {
         }
         let units_per_point = f64::from(units_per_point);
         let value_start = f64::from(value_start);
-        let value_end = value_start + f64::from(screen_end - screen_start) * units_per_point;
+        let value_end = value_start
+            + f64::from(screen_end - screen_start) * units_per_point;
         if value_end.abs() > 1_000_000_000_000. {
             return None;
         }
@@ -60,8 +61,10 @@ impl Axis {
             units_per_point,
             minor_step,
             label_step,
-            first: (value_start.min(value_end) / minor_step as f64).ceil() as i64,
-            last: (value_start.max(value_end) / minor_step as f64).floor() as i64,
+            first: (value_start.min(value_end) / minor_step as f64).ceil()
+                as i64,
+            last: (value_start.max(value_end) / minor_step as f64).floor()
+                as i64,
         })
     }
 
@@ -71,7 +74,8 @@ impl Axis {
             Tick {
                 value,
                 position: self.screen_start
-                    + ((value as f64 - self.value_start) / self.units_per_point) as f32,
+                    + ((value as f64 - self.value_start) / self.units_per_point)
+                        as f32,
                 label: value % self.label_step == 0,
             }
         })
@@ -97,27 +101,14 @@ pub fn paint(
     let ink = Color32::from_gray(181);
     let font = egui::FontId::monospace(9.);
     let axes = [
-        (
-            horizontal,
-            viewport.left(),
-            viewport.right(),
-            document_start.x,
-        ),
-        (
-            vertical,
-            viewport.top(),
-            viewport.bottom(),
-            document_start.y,
-        ),
+        (horizontal, viewport.left(), viewport.right(), document_start.x),
+        (vertical, viewport.top(), viewport.bottom(), document_start.y),
     ];
     for (index, (clip, start, end, origin)) in axes.into_iter().enumerate() {
         let painter = ui.painter().with_clip_rect(clip);
         painter.rect_filled(clip, 0., Color32::from_gray(66));
-        let slope = if index == 0 {
-            units_per_point.x
-        } else {
-            units_per_point.y
-        };
+        let slope =
+            if index == 0 { units_per_point.x } else { units_per_point.y };
         for tick in Axis::new(start, end, origin, slope)
             .into_iter()
             .flat_map(Axis::ticks)
@@ -136,7 +127,11 @@ pub fn paint(
                     Stroke::new(1., ink),
                 );
                 if tick.label {
-                    let galley = painter.layout_no_wrap(tick.value.to_string(), font.clone(), ink);
+                    let galley = painter.layout_no_wrap(
+                        tick.value.to_string(),
+                        font.clone(),
+                        ink,
+                    );
                     let label = egui::epaint::TextShape::new(
                         egui::pos2(tick.position + 3., clip.top() + 1.),
                         galley,
@@ -153,7 +148,11 @@ pub fn paint(
                     Stroke::new(1., ink),
                 );
                 if tick.label {
-                    let galley = painter.layout_no_wrap(tick.value.to_string(), font.clone(), ink);
+                    let galley = painter.layout_no_wrap(
+                        tick.value.to_string(),
+                        font.clone(),
+                        ink,
+                    );
                     let label = egui::epaint::TextShape::new(
                         egui::pos2(clip.left() + 1., tick.position - 3.),
                         galley,
@@ -169,13 +168,7 @@ pub fn paint(
     }
     let painter = ui.painter().with_clip_rect(corner);
     painter.rect_filled(corner, 0., Color32::from_gray(56));
-    painter.text(
-        corner.center(),
-        egui::Align2::CENTER_CENTER,
-        "px",
-        font,
-        ink,
-    );
+    painter.text(corner.center(), egui::Align2::CENTER_CENTER, "px", font, ink);
 }
 
 #[cfg(test)]
@@ -188,14 +181,21 @@ mod tests {
         for zoom in [0.05, 0.367, 0.779, 1., 2., 12.] {
             let before = Axis::new(40., 1400., -300., 1. / zoom).unwrap();
             for delta in [-157.25, -0.5, 0.25, 93.75] {
-                let after = Axis::new(40., 1400., -300. - delta / zoom, 1. / zoom).unwrap();
+                let after =
+                    Axis::new(40., 1400., -300. - delta / zoom, 1. / zoom)
+                        .unwrap();
                 assert_eq!(before.minor_step, after.minor_step);
                 assert_eq!(before.label_step, after.label_step);
                 assert_eq!(before.label_step % 100, 0);
                 for tick in before.ticks() {
                     assert_eq!(tick.value % 10, 0);
-                    if let Some(moved) = after.ticks().find(|moved| moved.value == tick.value) {
-                        assert!((moved.position - tick.position - delta).abs() < 0.002);
+                    if let Some(moved) =
+                        after.ticks().find(|moved| moved.value == tick.value)
+                    {
+                        assert!(
+                            (moved.position - tick.position - delta).abs()
+                                < 0.002
+                        );
                         assert_eq!(tick.label, moved.label);
                     }
                 }
@@ -212,10 +212,17 @@ mod tests {
             for tick in ticks {
                 assert!(tick.position.is_finite());
                 assert!((18. - 0.001..=1000. + 0.001).contains(&tick.position));
-                assert!(((-254. + (tick.position - 18.) * slope) - tick.value as f32).abs() < 0.01);
+                assert!(
+                    ((-254. + (tick.position - 18.) * slope)
+                        - tick.value as f32)
+                        .abs()
+                        < 0.01
+                );
             }
         }
-        for (origin, slope) in [(0., 0.), (0., f32::NAN), (f32::INFINITY, 1.), (0., 1e20)] {
+        for (origin, slope) in
+            [(0., 0.), (0., f32::NAN), (f32::INFINITY, 1.), (0., 1e20)]
+        {
             assert!(Axis::new(0., 1000., origin, slope).is_none());
         }
         assert!(Axis::new(0., 0., 0., 1.).is_none());
@@ -225,7 +232,8 @@ mod tests {
     }
 
     #[test]
-    fn painted_labels_follow_document_coordinates_and_are_clipped_to_each_ruler() {
+    fn painted_labels_follow_document_coordinates_and_are_clipped_to_each_ruler()
+     {
         let ctx = egui::Context::default();
         let outer = Rect::from_min_size(Pos2::ZERO, egui::vec2(600., 400.));
         let viewport = Rect::from_min_max(egui::pos2(18., 18.), outer.max);
@@ -254,17 +262,30 @@ mod tests {
             }
             let horizontal = labels
                 .iter()
-                .find(|(_, text)| text.galley.job.text == "100" && text.angle == 0.)
+                .find(|(_, text)| {
+                    text.galley.job.text == "100" && text.angle == 0.
+                })
                 .unwrap();
-            assert!((horizontal.1.pos.x - (viewport.left() + 100. + pan.x + 3.)).abs() < 0.001);
+            assert!(
+                (horizontal.1.pos.x - (viewport.left() + 100. + pan.x + 3.))
+                    .abs()
+                    < 0.001
+            );
             assert_eq!(horizontal.0.bottom(), viewport.top());
             let vertical = labels
                 .iter()
-                .find(|(_, text)| text.galley.job.text == "100" && text.angle < 0.)
+                .find(|(_, text)| {
+                    text.galley.job.text == "100" && text.angle < 0.
+                })
                 .unwrap();
-            assert!((vertical.1.pos.y - (viewport.top() + 100. + pan.y - 3.)).abs() < 0.001);
+            assert!(
+                (vertical.1.pos.y - (viewport.top() + 100. + pan.y - 3.)).abs()
+                    < 0.001
+            );
             assert_eq!(vertical.0.right(), viewport.left());
-            assert!(labels.iter().any(|(_, text)| text.galley.job.text == "px"));
+            assert!(
+                labels.iter().any(|(_, text)| text.galley.job.text == "px")
+            );
         }
     }
 
@@ -273,11 +294,9 @@ mod tests {
         let ctx = egui::Context::default();
         let outer = Rect::from_min_size(Pos2::ZERO, egui::vec2(600., 400.));
         let viewport = Rect::from_min_max(egui::pos2(18., 18.), outer.max);
-        for slope in [
-            egui::vec2(-1., 1.),
-            egui::vec2(1., -1.),
-            egui::vec2(-1., -1.),
-        ] {
+        for slope in
+            [egui::vec2(-1., 1.), egui::vec2(1., -1.), egui::vec2(-1., -1.)]
+        {
             let origin = egui::vec2(
                 if slope.x < 0. { 300. } else { 0. },
                 if slope.y < 0. { 300. } else { 0. },
@@ -310,9 +329,15 @@ mod tests {
                     })
                     .unwrap();
                 if horizontal {
-                    assert!((label.pos.x - viewport.left() - offset - 3.).abs() < 0.001);
+                    assert!(
+                        (label.pos.x - viewport.left() - offset - 3.).abs()
+                            < 0.001
+                    );
                 } else {
-                    assert!((label.pos.y - viewport.top() - offset + 3.).abs() < 0.001);
+                    assert!(
+                        (label.pos.y - viewport.top() - offset + 3.).abs()
+                            < 0.001
+                    );
                 }
             }
             output.textures_delta.clear();

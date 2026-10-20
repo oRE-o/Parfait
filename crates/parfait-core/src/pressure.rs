@@ -5,9 +5,7 @@ pub struct PressureCalibration {
 }
 impl Default for PressureCalibration {
     fn default() -> Self {
-        Self {
-            points: vec![[0., 0.], [1., 1.]],
-        }
+        Self { points: vec![[0., 0.], [1., 1.]] }
     }
 }
 impl PressureCalibration {
@@ -26,11 +24,7 @@ impl PressureCalibration {
                 .all(|w| w[1][0] - w[0][0] >= 0.001 && w[1][1] >= w[0][1])
     }
     pub fn map(&self, raw: f32) -> f32 {
-        let raw = if raw.is_finite() {
-            raw.clamp(0., 1.)
-        } else {
-            1.
-        };
+        let raw = if raw.is_finite() { raw.clamp(0., 1.) } else { 1. };
         crate::sample_response(&self.points, raw)
     }
     /// Map the observed 95th percentile to full output, rejecting sparse/flat input.
@@ -82,7 +76,8 @@ mod tests {
     fn suggestion_requires_real_variation_and_rejects_outliers() {
         assert!(PressureCalibration::suggest(&[1.; 100]).is_none());
         assert!(PressureCalibration::suggest(&[0.1, 0.8]).is_none());
-        let mut samples: Vec<_> = (0..100).map(|i| 0.1 + i as f32 * 0.005).collect();
+        let mut samples: Vec<_> =
+            (0..100).map(|i| 0.1 + i as f32 * 0.005).collect();
         samples.push(1.);
         let c = PressureCalibration::suggest(&samples).unwrap();
         assert!(c.validate());

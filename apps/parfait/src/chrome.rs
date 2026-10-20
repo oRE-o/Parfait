@@ -3,7 +3,9 @@ use crate::{
     app::Parfait,
     widgets::{self, Icon},
 };
-use eframe::egui::{self, Color32, Pos2, Rect, ResizeDirection, ViewportCommand};
+use eframe::egui::{
+    self, Color32, Pos2, Rect, ResizeDirection, ViewportCommand,
+};
 
 impl Parfait {
     pub fn title_bar(&mut self, ui: &mut egui::Ui) {
@@ -146,11 +148,14 @@ pub fn resize_edges(ui: &mut egui::Ui) {
     ];
     for (i, (rect, dir, cursor)) in edges.into_iter().enumerate() {
         let response = ui
-            .interact(rect, egui::Id::new(("window_edge", i)), egui::Sense::drag())
+            .interact(
+                rect,
+                egui::Id::new(("window_edge", i)),
+                egui::Sense::drag(),
+            )
             .on_hover_cursor(cursor);
         if response.drag_started() {
-            ui.ctx()
-                .send_viewport_cmd(ViewportCommand::BeginResize(dir));
+            ui.ctx().send_viewport_cmd(ViewportCommand::BeginResize(dir));
         }
     }
 }

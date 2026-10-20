@@ -9,11 +9,17 @@ use eframe::egui;
 mod tests;
 
 impl Parfait {
-    fn tree_command_disabled_reason(&self, command: Command) -> Option<&'static str> {
+    fn tree_command_disabled_reason(
+        &self,
+        command: Command,
+    ) -> Option<&'static str> {
         self.tree_flag_reason(command)
     }
 
-    pub(crate) fn command_disabled_reason(&self, command: Command) -> Option<&'static str> {
+    pub(crate) fn command_disabled_reason(
+        &self,
+        command: Command,
+    ) -> Option<&'static str> {
         if command.is_pixel_selection() {
             return self.pixel_selection_reason(command);
         }
@@ -27,11 +33,13 @@ impl Parfait {
             return self.raster_conversion_disabled_reason(conversion);
         }
         if command == Command::ClearEditingTarget {
-            return self.command_disabled_reason(if self.editing_layer_mask() {
-                Command::ClearLayerMask
-            } else {
-                Command::ClearLayer
-            });
+            return self.command_disabled_reason(
+                if self.editing_layer_mask() {
+                    Command::ClearLayerMask
+                } else {
+                    Command::ClearLayer
+                },
+            );
         }
         if command.category() == Category::Layer {
             let mask = self.selected_layer_mask();
@@ -40,16 +48,22 @@ impl Parfait {
                 && !self.doc.layers[self.doc.active].clipped
                 && self.doc.layers.iter().enumerate().any(|(index, _)| {
                     mask & (1 << index) != 0
-                        && !self.doc.layers[..index]
-                            .iter()
-                            .enumerate()
-                            .any(|(below, layer)| mask & (1 << below) == 0 && !layer.clipped)
+                        && !self.doc.layers[..index].iter().enumerate().any(
+                            |(below, layer)| {
+                                mask & (1 << below) == 0 && !layer.clipped
+                            },
+                        )
                 })
             {
-                return Some("Keep an unclipped base layer below every selected clipping layer.");
+                return Some(
+                    "Keep an unclipped base layer below every selected clipping layer.",
+                );
             }
             if mask.count_ones() > 1
-                && matches!(command, Command::MoveLayerUp | Command::MoveLayerDown)
+                && matches!(
+                    command,
+                    Command::MoveLayerUp | Command::MoveLayerDown
+                )
             {
                 if self.stroke.is_some()
                     || self.dialog_open()
@@ -78,23 +92,33 @@ impl Parfait {
                     Some("The selected layers are already at this boundary.")
                 };
             }
-            if let Some(reason) = self.layer_command_disabled_reason(command, self.doc.active) {
+            if let Some(reason) =
+                self.layer_command_disabled_reason(command, self.doc.active)
+            {
                 return Some(reason);
             }
             match command {
-                Command::DeleteLayer if mask.count_ones() as usize >= self.doc.layers.len() => {
+                Command::DeleteLayer
+                    if mask.count_ones() as usize >= self.doc.layers.len() =>
+                {
                     return Some("Keep at least one layer in the drawing.");
                 }
                 Command::DuplicateLayer => {
-                    return parfait_storage::layer_duplication_error(&self.doc, mask);
+                    return parfait_storage::layer_duplication_error(
+                        &self.doc, mask,
+                    );
                 }
                 _ => {}
             }
             return None;
         }
         match command {
-            Command::Undo if !self.history.can_undo() => Some("There is no earlier edit to undo."),
-            Command::Redo if !self.history.can_redo() => Some("There is no later edit to redo."),
+            Command::Undo if !self.history.can_undo() => {
+                Some("There is no earlier edit to undo.")
+            }
+            Command::Redo if !self.history.can_redo() => {
+                Some("There is no later edit to redo.")
+            }
             _ => None,
         }
     }
@@ -119,14 +143,19 @@ impl Parfait {
         if let Some(action) = command.layer_combine() {
             if matches!(
                 action,
-                parfait_core::LayerCombine::TransferDown | parfait_core::LayerCombine::MergeDown
+                parfait_core::LayerCombine::TransferDown
+                    | parfait_core::LayerCombine::MergeDown
             ) && self.selected_layer_mask().count_ones() != 1
             {
-                return Some("Select one active layer, or use Merge selected layers.");
+                return Some(
+                    "Select one active layer, or use Merge selected layers.",
+                );
             }
             if action == parfait_core::LayerCombine::CopyVisible
-                && let Some(reason) =
-                    parfait_storage::layer_growth_error(&self.doc, "Visible copy".len())
+                && let Some(reason) = parfait_storage::layer_growth_error(
+                    &self.doc,
+                    "Visible copy".len(),
+                )
             {
                 return Some(reason);
             }
@@ -149,8 +178,12 @@ impl Parfait {
         {
             return Some("용지에는 색과 표시, 잠금만 설정할 수 있습니다.");
         }
-        if target.kind != parfait_core::LayerKind::Raster && command == Command::LayerAlphaLock {
-            return Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.");
+        if target.kind != parfait_core::LayerKind::Raster
+            && command == Command::LayerAlphaLock
+        {
+            return Some(
+                "투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.",
+            );
         }
         if self.doc.has_non_raster_layers() {
             if matches!(
@@ -165,15 +198,20 @@ impl Parfait {
             ) {
                 return self.tree_collection_reason(command, 1 << layer);
             }
-            if command == Command::LayerAlphaLock && target.kind == parfait_core::LayerKind::Folder
+            if command == Command::LayerAlphaLock
+                && target.kind == parfait_core::LayerKind::Folder
             {
-                return Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.");
+                return Some(
+                    "투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.",
+                );
             }
             if command == Command::LayerClipping
                 && !target.clipped
                 && self.doc.layer_clipping_base_below(layer, 0).is_none()
             {
-                return Some("같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요.");
+                return Some(
+                    "같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요.",
+                );
             }
         }
         if command.is_layer_mask() {
@@ -182,19 +220,27 @@ impl Parfait {
         match command {
             Command::NewLayerFolder
             | Command::GroupLayersInFolder
-            | Command::UngroupLayerFolder => self.folder_command_reason(command),
+            | Command::UngroupLayerFolder => {
+                self.folder_command_reason(command)
+            }
             Command::NewLayer => {
                 let parent = if target.kind == parfait_core::LayerKind::Folder {
                     Some(layer)
                 } else {
                     target.parent.and_then(|id| self.doc.layer_index(id))
                 };
-                if parent.is_some_and(|index| !self.doc.layer_ancestors_unlocked(index)) {
-                    return Some("Unlock the parent folder before inserting a layer.");
+                if parent.is_some_and(|index| {
+                    !self.doc.layer_ancestors_unlocked(index)
+                }) {
+                    return Some(
+                        "Unlock the parent folder before inserting a layer.",
+                    );
                 }
                 parfait_storage::layer_growth_error(
                     &self.doc,
-                    "Layer ".len() + self.doc.layers.len().ilog10() as usize + 1,
+                    "Layer ".len()
+                        + self.doc.layers.len().ilog10() as usize
+                        + 1,
                 )
             }
             Command::DuplicateLayer => {
@@ -203,7 +249,9 @@ impl Parfait {
             Command::DeleteLayer if self.doc.layers.len() == 1 => {
                 Some("Keep at least one layer in the drawing.")
             }
-            Command::MoveLayerUp | Command::MoveActiveLayerUp | Command::MoveActiveLayerToTop
+            Command::MoveLayerUp
+            | Command::MoveActiveLayerUp
+            | Command::MoveActiveLayerToTop
                 if layer + 1 == self.doc.layers.len() =>
             {
                 Some("This layer is already at the top.")
@@ -215,12 +263,16 @@ impl Parfait {
             {
                 Some("This layer is already at the bottom.")
             }
-            Command::SelectLayerAbove | Command::SelectLayerBelow if self.doc.layers.len() == 1 => {
+            Command::SelectLayerAbove | Command::SelectLayerBelow
+                if self.doc.layers.len() == 1 =>
+            {
                 Some("There is only one layer in the drawing.")
             }
             Command::LayerClipping
                 if !target.clipped
-                    && !self.doc.layers[..layer].iter().any(|layer| !layer.clipped) =>
+                    && !self.doc.layers[..layer]
+                        .iter()
+                        .any(|layer| !layer.clipped) =>
             {
                 Some("There is no unclipped base layer below this layer.")
             }
@@ -228,17 +280,24 @@ impl Parfait {
         }
     }
 
-    pub(crate) fn execute_layer_command(&mut self, command: Command, layer: usize) {
+    pub(crate) fn execute_layer_command(
+        &mut self,
+        command: Command,
+        layer: usize,
+    ) {
         if self.doc.has_non_raster_layers()
             && matches!(
                 command,
-                Command::DeleteLayer | Command::MoveLayerUp | Command::MoveLayerDown
+                Command::DeleteLayer
+                    | Command::MoveLayerUp
+                    | Command::MoveLayerDown
             )
         {
             self.execute_tree_collection(command, 1 << layer);
             return;
         }
-        if let Some(reason) = self.layer_command_disabled_reason(command, layer) {
+        if let Some(reason) = self.layer_command_disabled_reason(command, layer)
+        {
             self.notice = Some(reason.into());
             return;
         }
@@ -283,17 +342,23 @@ impl Parfait {
             Command::LayerVisibility => {
                 document.layers[layer].visible = !document.layers[layer].visible
             }
-            Command::LayerLock => document.layers[layer].locked = !document.layers[layer].locked,
+            Command::LayerLock => {
+                document.layers[layer].locked = !document.layers[layer].locked
+            }
             Command::LayerAlphaLock => {
-                document.layers[layer].alpha_locked = !document.layers[layer].alpha_locked
+                document.layers[layer].alpha_locked =
+                    !document.layers[layer].alpha_locked
             }
             Command::LayerClipping => {
                 document.layers[layer].clipped = !document.layers[layer].clipped
             }
             Command::LayerReference => {
-                document.layers[layer].reference = !document.layers[layer].reference
+                document.layers[layer].reference =
+                    !document.layers[layer].reference
             }
-            Command::LayerDraft => document.layers[layer].draft = !document.layers[layer].draft,
+            Command::LayerDraft => {
+                document.layers[layer].draft = !document.layers[layer].draft
+            }
             _ => unreachable!(),
         });
         if self.doc.active != active_before && self.doc.revision == revision {
@@ -319,19 +384,33 @@ impl Parfait {
         }
     }
 
-    pub(crate) fn layer_command_icon(&mut self, ui: &mut egui::Ui, icon: Icon, command: Command) {
+    pub(crate) fn layer_command_icon(
+        &mut self,
+        ui: &mut egui::Ui,
+        icon: Icon,
+        command: Command,
+    ) {
         if ui.available_size_before_wrap().x < 22. {
             ui.end_row();
         }
         let reason = self.command_disabled_reason(command);
         let response = ui
             .add_enabled_ui(reason.is_none(), |ui| {
-                widgets::flat_icon(ui, icon, false, self.keymap.tooltip(command), 22.)
+                widgets::flat_icon(
+                    ui,
+                    icon,
+                    false,
+                    self.keymap.tooltip(command),
+                    22.,
+                )
             })
             .inner;
         #[cfg(test)]
         ui.data_mut(|data| {
-            data.insert_temp(egui::Id::new(("layer_command", command)), response.rect)
+            data.insert_temp(
+                egui::Id::new(("layer_command", command)),
+                response.rect,
+            )
         });
         if response.clicked() {
             self.execute_command(command, ui.ctx());

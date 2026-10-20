@@ -19,21 +19,16 @@ fn main() {
             "dense",
             MaskCoverage::Dense(Arc::new(
                 (0..1024 * 768)
-                    .map(|index| ((index % 1024 * 7 + index / 1024 * 11) % 256) as u8)
+                    .map(|index| {
+                        ((index % 1024 * 7 + index / 1024 * 11) % 256) as u8
+                    })
                     .collect(),
             )),
         ),
     ] {
-        document.layers[1].mask = Some(LayerMask {
-            enabled: true,
-            coverage: coverage.clone(),
-        });
-        let full_bounds = PixelRect {
-            x0: 0,
-            y0: 0,
-            x1: 1024,
-            y1: 768,
-        };
+        document.layers[1].mask =
+            Some(LayerMask { enabled: true, coverage: coverage.clone() });
+        let full_bounds = PixelRect { x0: 0, y0: 0, x1: 1024, y1: 768 };
         let mut full = document.composite();
         let untinted = full.clone();
         assert!(mask_area::tint_mask_area(
@@ -49,23 +44,20 @@ fn main() {
             .zip(full.as_chunks::<4>().0.iter())
             .enumerate()
         {
-            let alpha = (u32::from(255 - coverage.value(index)) * 128 + 127) / 255;
+            let alpha =
+                (u32::from(255 - coverage.value(index)) * 128 + 127) / 255;
             for (channel, tint) in [112u32, 96, 255].iter().enumerate() {
-                let expected =
-                    (u32::from(before[channel]) * (255 - alpha) + tint * alpha + 127) / 255;
+                let expected = (u32::from(before[channel]) * (255 - alpha)
+                    + tint * alpha
+                    + 127)
+                    / 255;
                 assert_eq!(u32::from(after[channel]), expected);
             }
             assert_eq!(before[3], after[3]);
         }
-        for bounds in [
-            full_bounds,
-            PixelRect {
-                x0: 73,
-                y0: 91,
-                x1: 201,
-                y1: 219,
-            },
-        ] {
+        for bounds in
+            [full_bounds, PixelRect { x0: 73, y0: 91, x1: 201, y1: 219 }]
+        {
             let original = document.composite_region(bounds);
             let mut tinted = original.clone();
             assert!(mask_area::tint_mask_area(
@@ -86,7 +78,8 @@ fn main() {
             let start = Instant::now();
             let mut compose_checksum = 0;
             for _ in 0..20 {
-                compose_checksum += checksum(black_box(&document.composite_region(bounds)));
+                compose_checksum +=
+                    checksum(black_box(&document.composite_region(bounds)));
             }
             let compose_ms = start.elapsed().as_secs_f64() * 1000. / 20.;
             let mut tint_ms = 0.;

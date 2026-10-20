@@ -1,8 +1,14 @@
-use crate::{Document, LayerKind, LayerMask, MaskCoverage, layer_mask::masked_alpha};
+use crate::{
+    Document, LayerKind, LayerMask, MaskCoverage, layer_mask::masked_alpha,
+};
 use std::sync::Arc;
 
 #[inline]
-pub(crate) fn strength(selection: Option<&MaskCoverage>, index: usize, amount: f32) -> f32 {
+pub(crate) fn strength(
+    selection: Option<&MaskCoverage>,
+    index: usize,
+    amount: f32,
+) -> f32 {
     match selection {
         None => amount,
         Some(coverage) => amount * (f32::from(coverage.value(index)) / 255.),
@@ -37,7 +43,11 @@ fn canonical(values: Vec<u8>) -> MaskCoverage {
     }
 }
 
-pub(crate) fn interpolate_pixel(before: [u8; 4], after: [u8; 4], coverage: u8) -> [u8; 4] {
+pub(crate) fn interpolate_pixel(
+    before: [u8; 4],
+    after: [u8; 4],
+    coverage: u8,
+) -> [u8; 4] {
     if before == after {
         return before;
     }
@@ -64,7 +74,10 @@ pub(crate) fn interpolate_pixel(before: [u8; 4], after: [u8; 4], coverage: u8) -
     result
 }
 
-pub(crate) fn clear_pixels(pixels: &mut Arc<Vec<u8>>, selection: Option<&MaskCoverage>) -> bool {
+pub(crate) fn clear_pixels(
+    pixels: &mut Arc<Vec<u8>>,
+    selection: Option<&MaskCoverage>,
+) -> bool {
     let Some(selection) = selection else {
         if pixels.iter().all(|byte| *byte == 0) {
             return false;
@@ -72,31 +85,26 @@ pub(crate) fn clear_pixels(pixels: &mut Arc<Vec<u8>>, selection: Option<&MaskCov
         Arc::make_mut(pixels).fill(0);
         return true;
     };
-    let Some(first) = pixels
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .enumerate()
-        .position(|(index, pixel)| {
+    let Some(first) = pixels.as_chunks::<4>().0.iter().enumerate().position(
+        |(index, pixel)| {
             interpolate_pixel(*pixel, [0; 4], selection.value(index)) != *pixel
-        })
-    else {
+        },
+    ) else {
         return false;
     };
     for (offset, pixel) in Arc::make_mut(pixels).as_chunks_mut::<4>().0[first..]
         .iter_mut()
         .enumerate()
     {
-        *pixel = interpolate_pixel(*pixel, [0; 4], selection.value(first + offset));
+        *pixel =
+            interpolate_pixel(*pixel, [0; 4], selection.value(first + offset));
     }
     true
 }
 
 impl Document {
     pub fn selection_value(&self, index: usize) -> u8 {
-        self.selection
-            .as_ref()
-            .map_or(255, |coverage| coverage.value(index))
+        self.selection.as_ref().map_or(255, |coverage| coverage.value(index))
     }
 
     pub fn selection_creation_reason(&self) -> Option<&'static str> {
@@ -104,13 +112,19 @@ impl Document {
             return Some("The drawing has invalid image data.");
         }
         (self.selection.is_none()
-            && self.logical_pixel_bytes() + u64::from(self.width) * u64::from(self.height)
+            && self.logical_pixel_bytes()
+                + u64::from(self.width) * u64::from(self.height)
                 > 512 * 1024 * 1024)
-            .then_some("The selection would exceed the 512 MiB logical pixel budget.")
+            .then_some(
+                "The selection would exceed the 512 MiB logical pixel budget.",
+            )
     }
 
     pub fn set_selection(&mut self, coverage: Option<MaskCoverage>) -> bool {
-        if !self.validate() || (self.selection_creation_reason().is_some() && coverage.is_some()) {
+        if !self.validate()
+            || (self.selection_creation_reason().is_some()
+                && coverage.is_some())
+        {
             return false;
         }
         let count = (self.width * self.height) as usize;
@@ -123,7 +137,8 @@ impl Document {
             (None, None) => true,
             (Some(before), Some(after)) => {
                 before.same_edit_state(after)
-                    || (0..count).all(|index| before.value(index) == after.value(index))
+                    || (0..count)
+                        .all(|index| before.value(index) == after.value(index))
             }
             _ => false,
         };
@@ -149,7 +164,9 @@ impl Document {
         }
         let inverted = match &self.selection {
             None => MaskCoverage::Uniform(255),
-            Some(MaskCoverage::Uniform(value)) => MaskCoverage::Uniform(255 - value),
+            Some(MaskCoverage::Uniform(value)) => {
+                MaskCoverage::Uniform(255 - value)
+            }
             Some(MaskCoverage::Dense(values)) => {
                 canonical(values.iter().map(|value| 255 - value).collect())
             }
@@ -161,7 +178,11 @@ impl Document {
         })
     }
 
-    pub fn selection_from_layers(&mut self, selected: u64, mode: SelectionMode) -> bool {
+    pub fn selection_from_layers(
+        &mut self,
+        selected: u64,
+        mode: SelectionMode,
+    ) -> bool {
         if self.selection_creation_reason().is_some()
             || selected == 0
             || (self.layers.len() < 64 && selected >> self.layers.len() != 0)
@@ -212,8 +233,8 @@ impl Document {
                         } else {
                             layer.source_pixel(pixel)[3]
                         };
-                        *target =
-                            SelectionMode::Add.combine(*target, layer.mask_alpha(pixel, alpha));
+                        *target = SelectionMode::Add
+                            .combine(*target, layer.mask_alpha(pixel, alpha));
                     }
                 }
             }
@@ -229,7 +250,8 @@ impl Document {
                     } else {
                         layer.source_pixel(pixel)[3]
                     };
-                    alpha = SelectionMode::Add.combine(alpha, layer.mask_alpha(pixel, source));
+                    alpha = SelectionMode::Add
+                        .combine(alpha, layer.mask_alpha(pixel, source));
                 }
                 *target = mode.combine(self.selection_value(pixel), alpha);
             }
@@ -242,7 +264,11 @@ impl Document {
         })
     }
 
-    pub fn create_mask_from_selection(&mut self, layer: usize, outside: bool) -> bool {
+    pub fn create_mask_from_selection(
+        &mut self,
+        layer: usize,
+        outside: bool,
+    ) -> bool {
         if self.layer_mask_creation_reason(layer).is_some() {
             return false;
         }
@@ -253,26 +279,29 @@ impl Document {
             selection.clone()
         } else {
             match selection {
-                MaskCoverage::Uniform(value) => MaskCoverage::Uniform(255 - value),
+                MaskCoverage::Uniform(value) => {
+                    MaskCoverage::Uniform(255 - value)
+                }
                 MaskCoverage::Dense(values) => {
                     canonical(values.iter().map(|value| 255 - value).collect())
                 }
             }
         };
-        self.layers[layer].mask = Some(LayerMask {
-            enabled: true,
-            coverage,
-        });
+        self.layers[layer].mask = Some(LayerMask { enabled: true, coverage });
         self.touch();
         true
     }
 
-    pub(crate) fn restore_mask_selection(&mut self, layer: usize) -> Option<bool> {
+    pub(crate) fn restore_mask_selection(
+        &mut self,
+        layer: usize,
+    ) -> Option<bool> {
         let selection = self.selection.as_ref()?;
         let mask = self.layers.get_mut(layer)?.mask.as_mut()?;
         let values: Vec<_> = (0..(self.width * self.height) as usize)
             .map(|index| {
-                SelectionMode::Add.combine(mask.coverage.value(index), selection.value(index))
+                SelectionMode::Add
+                    .combine(mask.coverage.value(index), selection.value(index))
             })
             .collect();
         if values

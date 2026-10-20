@@ -59,7 +59,11 @@ impl Parfait {
             for suffix in ["", "-wal", "-shm", "-journal"] {
                 anyhow::ensure!(
                     target
-                        != resolved(&self.recovery_path.with_file_name(format!("{name}{suffix}")))?,
+                        != resolved(
+                            &self
+                                .recovery_path
+                                .with_file_name(format!("{name}{suffix}"))
+                        )?,
                     "Choose a project file outside the application's working files"
                 );
             }
@@ -67,7 +71,10 @@ impl Parfait {
         Ok(())
     }
 
-    pub(crate) fn write_project_document(document: &Document, path: &Path) -> anyhow::Result<()> {
+    pub(crate) fn write_project_document(
+        document: &Document,
+        path: &Path,
+    ) -> anyhow::Result<()> {
         let mut store = Store::open(path)?;
         let mut snapshot = document.clone();
         if let Some(old) = store.load()? {
@@ -75,7 +82,9 @@ impl Parfait {
                 .revision
                 .max(old.document.revision)
                 .checked_add(1)
-                .ok_or_else(|| anyhow::anyhow!("Project revision limit reached"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Project revision limit reached")
+                })?;
         }
         store.save(&snapshot)?;
         store.mark_clean()?;
@@ -83,7 +92,10 @@ impl Parfait {
         Ok(())
     }
 
-    pub(crate) fn save_project_to(&mut self, path: PathBuf) -> anyhow::Result<()> {
+    pub(crate) fn save_project_to(
+        &mut self,
+        path: PathBuf,
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
             self.stroke.is_none(),
             "Finish the current stroke before saving"
@@ -105,7 +117,10 @@ impl Parfait {
         Ok(())
     }
 
-    pub(crate) fn open_project_from(&mut self, path: PathBuf) -> anyhow::Result<()> {
+    pub(crate) fn open_project_from(
+        &mut self,
+        path: PathBuf,
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
             self.stroke.is_none(),
             "Finish the current stroke before opening a project"
@@ -120,11 +135,10 @@ impl Parfait {
             .load()?
             .map(|loaded| loaded.document)
             .ok_or_else(|| anyhow::anyhow!("Project contains no snapshots"))?;
-        document.revision = self
-            .doc
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| anyhow::anyhow!("Project revision limit reached"))?;
+        document.revision =
+            self.doc.revision.checked_add(1).ok_or_else(|| {
+                anyhow::anyhow!("Project revision limit reached")
+            })?;
         self.doc = document;
         self.project = Some(path);
         self.project_saved_state = Some(self.doc.clone());

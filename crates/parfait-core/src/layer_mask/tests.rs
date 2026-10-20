@@ -11,8 +11,9 @@ fn mask_clear_restores_coverage_without_touching_content_or_enable_state() {
             let mask = document.layers[1].mask.as_mut().unwrap();
             mask.enabled = enabled;
             if dense {
-                mask.coverage =
-                    MaskCoverage::Dense(Arc::new((0..64).map(|index| index * 4).collect()));
+                mask.coverage = MaskCoverage::Dense(Arc::new(
+                    (0..64).map(|index| index * 4).collect(),
+                ));
             }
             let before = document.clone();
             let mut history = History::default();
@@ -23,8 +24,13 @@ fn mask_clear_restores_coverage_without_touching_content_or_enable_state() {
                 document.layers[1].mask.as_ref().unwrap().coverage,
                 MaskCoverage::Uniform(255)
             );
-            assert_eq!(document.layers[1].mask.as_ref().unwrap().enabled, enabled);
-            for (current, previous) in document.layers.iter().zip(&before.layers) {
+            assert_eq!(
+                document.layers[1].mask.as_ref().unwrap().enabled,
+                enabled
+            );
+            for (current, previous) in
+                document.layers.iter().zip(&before.layers)
+            {
                 assert!(Arc::ptr_eq(&current.pixels, &previous.pixels));
             }
             let after = document.clone();
@@ -49,7 +55,8 @@ fn mask_clear_noops_and_invalid_targets_preserve_buffers_revision_and_redo() {
             }
             2 => {
                 document.layers[1].locked = true;
-                document.layers[1].mask.as_mut().unwrap().coverage = MaskCoverage::Uniform(0);
+                document.layers[1].mask.as_mut().unwrap().coverage =
+                    MaskCoverage::Uniform(0);
             }
             3 => document.layers[1].mask = None,
             4 => {
@@ -127,7 +134,8 @@ fn independently_baked(document: &Document) -> Document {
                     MaskCoverage::Uniform(value) => *value,
                     MaskCoverage::Dense(values) => values[index],
                 };
-                pixel[3] = ((u32::from(pixel[3]) * u32::from(value) + 127) / 255) as u8;
+                pixel[3] = ((u32::from(pixel[3]) * u32::from(value) + 127)
+                    / 255) as u8;
             }
         }
     }
@@ -135,7 +143,8 @@ fn independently_baked(document: &Document) -> Document {
 }
 
 #[test]
-fn masked_composition_matches_baked_reference_all_modes_clipping_masks_and_regions() {
+fn masked_composition_matches_baked_reference_all_modes_clipping_masks_and_regions()
+ {
     for base_mode in BlendMode::ALL {
         for clip_mode in BlendMode::ALL {
             let mut document = sample(19, 11, 7);
@@ -147,24 +156,9 @@ fn masked_composition_matches_baked_reference_all_modes_clipping_masks_and_regio
             let before = document.clone();
             let baked = independently_baked(&document);
             for rect in [
-                PixelRect {
-                    x0: 0,
-                    y0: 0,
-                    x1: 19,
-                    y1: 11,
-                },
-                PixelRect {
-                    x0: 3,
-                    y0: 2,
-                    x1: 17,
-                    y1: 8,
-                },
-                PixelRect {
-                    x0: 18,
-                    y0: 10,
-                    x1: 24,
-                    y1: 30,
-                },
+                PixelRect { x0: 0, y0: 0, x1: 19, y1: 11 },
+                PixelRect { x0: 3, y0: 2, x1: 17, y1: 8 },
+                PixelRect { x0: 18, y0: 10, x1: 24, y1: 30 },
             ] {
                 for selection in [u64::MAX, 0b1011111, 0b1101101, 0] {
                     assert_eq!(
@@ -220,7 +214,8 @@ fn effective_alpha_rounding_edges_and_no_mask_fast_paths_are_exact() {
 }
 
 #[test]
-fn create_remove_enable_and_apply_preserve_pixels_identity_no_ops_and_lock_guards() {
+fn create_remove_enable_and_apply_preserve_pixels_identity_no_ops_and_lock_guards()
+ {
     let mut document = Document::new(3, 2);
     let original = document.clone();
     assert!(!document.create_layer_mask(0, 0));
@@ -266,14 +261,13 @@ fn mask_history_cow_apply_and_no_op_preserve_redo_and_raw_rgb() {
     let before = document.clone();
     let mut history = History::default();
     history.begin(&document, "Edit mask");
-    if let MaskCoverage::Dense(values) = &mut document.layers[0].mask.as_mut().unwrap().coverage {
+    if let MaskCoverage::Dense(values) =
+        &mut document.layers[0].mask.as_mut().unwrap().coverage
+    {
         Arc::make_mut(values)[0] = 255;
     }
     assert!(history.commit(&document));
-    assert!(Arc::ptr_eq(
-        &document.layers[0].pixels,
-        &before.layers[0].pixels
-    ));
+    assert!(Arc::ptr_eq(&document.layers[0].pixels, &before.layers[0].pixels));
     history.undo(&mut document);
     assert!(document.same_edit_state(&before));
     assert!(history.can_redo());
@@ -313,11 +307,7 @@ fn hit_testing_and_combine_commands_respect_masks_and_do_not_apply_twice() {
         let mut document = sample(
             13,
             9,
-            if action == LayerCombine::MergeDown {
-                2
-            } else {
-                3
-            },
+            if action == LayerCombine::MergeDown { 2 } else { 3 },
         );
         let expected = document.composite();
         let selected = (1 << document.layers.len()) - 1;
@@ -334,7 +324,8 @@ fn hit_testing_and_combine_commands_respect_masks_and_do_not_apply_twice() {
         }
     }
     let mut document = Document::new(1, 1);
-    Arc::make_mut(&mut document.layers[1].pixels).copy_from_slice(&[10, 20, 30, 255]);
+    Arc::make_mut(&mut document.layers[1].pixels)
+        .copy_from_slice(&[10, 20, 30, 255]);
     assert!(document.create_layer_mask(1, 0));
     assert_eq!(document.layer_at(0, 0), Some(0));
     assert!(document.set_layer_mask_enabled(1, false));
@@ -362,10 +353,8 @@ fn dense_mask_lengths_and_reserved_logical_memory_are_validated() {
     });
     assert!(!document.validate());
     assert!(!document.apply_layer_mask(1));
-    document.layers[1].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(255),
-    });
+    document.layers[1].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(255) });
     assert!(document.validate());
     assert_eq!(document.logical_pixel_bytes(), 54);
     let mut large = Document::new(4096, 4096);

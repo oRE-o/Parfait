@@ -32,17 +32,18 @@ fn y_bounds(points: &[[f32; 2]], i: usize, increasing: bool) -> (f32, f32) {
     if increasing {
         (
             if i == 0 { 0. } else { points[i - 1][1] },
-            if i + 1 == points.len() {
-                1.
-            } else {
-                points[i + 1][1]
-            },
+            if i + 1 == points.len() { 1. } else { points[i + 1][1] },
         )
     } else {
         (0., 1.)
     }
 }
-fn move_node(points: &mut [[f32; 2]], i: usize, value: [f32; 2], options: &Options<'_>) {
+fn move_node(
+    points: &mut [[f32; 2]],
+    i: usize,
+    value: [f32; 2],
+    options: &Options<'_>,
+) {
     if options.fixed_endpoints && (i == 0 || i + 1 == points.len()) {
         return;
     }
@@ -75,10 +76,9 @@ pub fn edit_brush(
     selected: &mut Option<usize>,
     options: Options<'_>,
 ) -> Rect {
-    let mut controls = curve
-        .controls
-        .clone()
-        .unwrap_or_else(|| parfait_core::automatic_curve_controls(&curve.points));
+    let mut controls = curve.controls.clone().unwrap_or_else(|| {
+        parfait_core::automatic_curve_controls(&curve.points)
+    });
     let (plot, edited) = edit_inner(
         ui,
         id,
@@ -116,13 +116,12 @@ fn edit_inner(
             .iter()
             .flatten()
             .all(|v| v.is_finite() && (0. ..=1.).contains(v))
-        && points
-            .windows(2)
-            .all(|w| w[1][0] > w[0][0] && (!options.increasing || w[1][1] >= w[0][1]));
+        && points.windows(2).all(|w| {
+            w[1][0] > w[0][0] && (!options.increasing || w[1][1] >= w[0][1])
+        });
     if !valid {
         return (
-            ui.colored_label(Color32::LIGHT_RED, "Invalid response curve")
-                .rect,
+            ui.colored_label(Color32::LIGHT_RED, "Invalid response curve").rect,
             false,
         );
     }
@@ -435,7 +434,8 @@ fn edit_inner(
 mod tests {
     use super::*;
     #[test]
-    fn round_handle_drag_changes_curvature_not_anchors_and_keyboard_stays_on_handle() {
+    fn round_handle_drag_changes_curvature_not_anchors_and_keyboard_stays_on_handle()
+     {
         let ctx = egui::Context::default();
         let mut curve = parfait_core::ResponseCurve::default();
         let anchors = curve.points.clone();
@@ -444,7 +444,10 @@ mod tests {
             let mut plot = Rect::NOTHING;
             let mut output = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(500., 500.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(500., 500.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -505,7 +508,9 @@ mod tests {
             modifiers: Default::default(),
         }]);
         assert_eq!(nudged.points, anchors);
-        assert!((nudged.controls.as_ref().unwrap()[0][0][1] - 0.81).abs() < 0.0001);
+        assert!(
+            (nudged.controls.as_ref().unwrap()[0][0][1] - 0.81).abs() < 0.0001
+        );
         let outside = position(-0.3, 1.2);
         let (_, clamped) = frame(vec![
             button(position(0.15, 0.81), true),
@@ -516,7 +521,8 @@ mod tests {
         assert!(clamped.validate());
     }
     #[test]
-    fn press_move_release_in_one_frame_adds_moves_and_deletes_without_losing_the_gesture() {
+    fn press_move_release_in_one_frame_adds_moves_and_deletes_without_losing_the_gesture()
+     {
         let ctx = egui::Context::default();
         let mut points = vec![[0., 0.], [1., 1.]];
         let mut selected = None;
@@ -524,7 +530,10 @@ mod tests {
             let mut plot = Rect::NOTHING;
             let mut output = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(500., 450.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(500., 450.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -607,7 +616,10 @@ mod tests {
             let mut plot = Rect::NOTHING;
             let mut output = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(500., 450.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(500., 450.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -643,13 +655,15 @@ mod tests {
             modifiers: Default::default(),
         };
         let start = position(0.37, 0.68);
-        let (_, added) = frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
+        let (_, added) =
+            frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
         assert_eq!(added.len(), 3);
         let (_, released) = frame(vec![button(start, false)]);
         assert_eq!(released, added);
         frame(vec![button(start, true)]);
         let end = position(0.63, 0.2);
-        let (_, moved) = frame(vec![egui::Event::PointerMoved(end), button(end, false)]);
+        let (_, moved) =
+            frame(vec![egui::Event::PointerMoved(end), button(end, false)]);
         assert!((moved[1][0] - 0.63).abs() < 0.0001);
         assert!((moved[1][1] - 0.2).abs() < 0.0001);
         let peak = position(0.3, 0.9);
@@ -658,11 +672,8 @@ mod tests {
         assert_eq!(falling.len(), 4);
         assert!(falling[1][1] > falling[2][1]);
         assert!(
-            parfait_core::ResponseCurve {
-                points: falling,
-                controls: None
-            }
-            .validate()
+            parfait_core::ResponseCurve { points: falling, controls: None }
+                .validate()
         );
         let key = |key| egui::Event::Key {
             key,
@@ -671,7 +682,8 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::SHIFT,
         };
-        let (_, nudged) = frame(vec![key(egui::Key::ArrowRight), key(egui::Key::ArrowDown)]);
+        let (_, nudged) =
+            frame(vec![key(egui::Key::ArrowRight), key(egui::Key::ArrowDown)]);
         assert!((nudged[1][0] - 0.4).abs() < 0.0001);
         assert!((nudged[1][1] - 0.8).abs() < 0.0001);
         let selected = position(nudged[1][0], nudged[1][1]);
@@ -710,13 +722,17 @@ mod tests {
     #[test]
     fn free_brush_editor_bounds_point_count_and_keeps_endpoints() {
         let ctx = egui::Context::default();
-        let mut points: Vec<_> = (0..16).map(|index| [index as f32 / 15., 0.5]).collect();
+        let mut points: Vec<_> =
+            (0..16).map(|index| [index as f32 / 15., 0.5]).collect();
         let mut selected = None;
         let mut frame = |events| {
             let mut plot = Rect::NOTHING;
             let mut output = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(500., 450.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(500., 450.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -766,15 +782,20 @@ mod tests {
     }
 
     #[test]
-    fn brush_curve_release_frame_keeps_last_drag_position_and_keyboard_constraints() {
+    fn brush_curve_release_frame_keeps_last_drag_position_and_keyboard_constraints()
+     {
         let ctx = egui::Context::default();
-        let mut points = vec![[0., 0.], [0.25, 0.25], [0.5, 0.5], [0.75, 0.75], [1., 1.]];
+        let mut points =
+            vec![[0., 0.], [0.25, 0.25], [0.5, 0.5], [0.75, 0.75], [1., 1.]];
         let mut selected = Some(2);
         let mut frame = |events| {
             let mut plot = Rect::NOTHING;
             let mut output = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(500., 400.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(500., 400.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -805,7 +826,8 @@ mod tests {
             modifiers: Default::default(),
         };
         frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
-        let (_, changed) = frame(vec![egui::Event::PointerMoved(end), button(end, false)]);
+        let (_, changed) =
+            frame(vec![egui::Event::PointerMoved(end), button(end, false)]);
         assert!((changed[2][1] - 0.7).abs() < 0.001);
         let key = |key| egui::Event::Key {
             key,
@@ -833,22 +855,28 @@ mod tests {
             let mut plot = Rect::NOTHING;
             let mut out = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(700., 400.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(700., 400.),
+                    )),
                     events,
                     ..Default::default()
                 },
                 |ui| {
                     ui.horizontal(|ui| {
-                        plot = edit(ui, "pressure", &mut a, &mut sa, Options::default());
+                        plot = edit(
+                            ui,
+                            "pressure",
+                            &mut a,
+                            &mut sa,
+                            Options::default(),
+                        );
                         edit(
                             ui,
                             "tilt",
                             &mut b,
                             &mut sb,
-                            Options {
-                                increasing: false,
-                                ..Default::default()
-                            },
+                            Options { increasing: false, ..Default::default() },
                         );
                     });
                 },
@@ -887,22 +915,17 @@ mod tests {
             &mut falling,
             1,
             [0.8, 0.1],
-            &Options {
-                increasing: false,
-                ..Default::default()
-            },
+            &Options { increasing: false, ..Default::default() },
         );
         assert_eq!(falling[1], [0.8, 0.1]);
         assert!(sample(&falling, 0.4) > 0.1 && sample(&falling, 0.4) < 1.);
-        let mut pressure = vec![[0., 0.], [0.25, 0.3], [0.5, 0.5], [0.75, 0.7], [1., 1.]];
+        let mut pressure =
+            vec![[0., 0.], [0.25, 0.3], [0.5, 0.5], [0.75, 0.7], [1., 1.]];
         move_node(
             &mut pressure,
             2,
             [0.9, 1.],
-            &Options {
-                fixed_x: true,
-                ..Default::default()
-            },
+            &Options { fixed_x: true, ..Default::default() },
         );
         assert_eq!(pressure[2], [0.5, 0.7]);
         move_node(&mut pressure, 0, [0.8, 0.9], &Options::default());

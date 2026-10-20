@@ -357,10 +357,7 @@ const LAYER: &[MenuItem] = &[
     ),
     Group(
         "편집 대상으로 설정",
-        &[
-            Action(Command::SelectLayerAbove),
-            Action(Command::SelectLayerBelow),
-        ],
+        &[Action(Command::SelectLayerAbove), Action(Command::SelectLayerBelow)],
     ),
 ];
 
@@ -455,10 +452,7 @@ pub(super) const VIEW: &[MenuItem] = &[
             Planned("제어점끼리 스냅"),
         ],
     ),
-    Group(
-        "컬러 프로파일",
-        &[Planned("미리보기 설정…"), Planned("미리보기")],
-    ),
+    Group("컬러 프로파일", &[Planned("미리보기 설정…"), Planned("미리보기")]),
     Separator,
     Toggle(Command::PixelGrid),
     Action(Command::DisplaySettings),
@@ -504,10 +498,7 @@ const FILTER: &[MenuItem] = &[
             Planned("언샤프 마스크…"),
         ],
     ),
-    Group(
-        "선화 수정",
-        &[Planned("선폭 수정…"), Planned("잡티 지우기…")],
-    ),
+    Group("선화 수정", &[Planned("선폭 수정…"), Planned("잡티 지우기…")]),
     Group(
         "효과",
         &[

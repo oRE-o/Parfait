@@ -1,4 +1,6 @@
-use parfait_core::{BlendMode, Document, Layer, LayerId, LayerKind, LayerMask, MaskCoverage};
+use parfait_core::{
+    BlendMode, Document, Layer, LayerId, LayerKind, LayerMask, MaskCoverage,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

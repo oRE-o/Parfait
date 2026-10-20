@@ -37,14 +37,19 @@ impl RowComposite<'_> {
             }
             let mut clips = [0; 64];
             let mut count = 0;
-            for (clip, layer) in self.document.layers.iter().enumerate().skip(index + 1) {
+            for (clip, layer) in
+                self.document.layers.iter().enumerate().skip(index + 1)
+            {
                 if self.layout.parents[clip] != parent {
                     continue;
                 }
                 if !layer.clipped {
                     break;
                 }
-                if layer.visible && layer.opacity > 0. && self.selection & (1 << clip) != 0 {
+                if layer.visible
+                    && layer.opacity > 0.
+                    && self.selection & (1 << clip) != 0
+                {
                     clips[count] = clip;
                     count += 1;
                 }
@@ -63,7 +68,9 @@ impl RowComposite<'_> {
                     source,
                     base.opacity,
                     base.blend_mode,
-                    |column, alpha| base.mask_alpha(self.start / 4 + column, alpha),
+                    |column, alpha| {
+                        base.mask_alpha(self.start / 4 + column, alpha)
+                    },
                 );
             } else {
                 crate::document::composite_flat_row(
@@ -76,12 +83,8 @@ impl RowComposite<'_> {
             }
             return;
         }
-        for (column, (destination, pixel)) in output
-            .as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .zip(source)
-            .enumerate()
+        for (column, (destination, pixel)) in
+            output.as_chunks_mut::<4>().0.iter_mut().zip(source).enumerate()
         {
             let alpha = base.mask_alpha(self.start / 4 + column, pixel[3]);
             if alpha == 0 {
@@ -96,17 +99,23 @@ impl RowComposite<'_> {
                 if alpha == 0 {
                     continue;
                 }
-                if !clipped && base.blend_mode != BlendMode::Normal && destination[3] > 0 {
+                if !clipped
+                    && base.blend_mode != BlendMode::Normal
+                    && destination[3] > 0
+                {
                     let backdrop_alpha = f32::from(destination[3]) / 255.;
                     for channel in 0..3 {
                         let source = f32::from(color[channel]) / 255.;
-                        let blended = base
-                            .blend_mode
-                            .channel(f32::from(destination[channel]) / 255., source);
-                        color[channel] =
-                            ((source * (1. - backdrop_alpha) + blended * backdrop_alpha) * 255.)
-                                .round()
-                                .clamp(0., 255.) as u8;
+                        let blended = base.blend_mode.channel(
+                            f32::from(destination[channel]) / 255.,
+                            source,
+                        );
+                        color[channel] = ((source * (1. - backdrop_alpha)
+                            + blended * backdrop_alpha)
+                            * 255.)
+                            .round()
+                            .clamp(0., 255.)
+                            as u8;
                     }
                 }
                 clipped = true;
@@ -121,11 +130,7 @@ impl RowComposite<'_> {
                 destination,
                 [color[0], color[1], color[2]],
                 f32::from(alpha) / 255. * base.opacity,
-                if clipped {
-                    BlendMode::Normal
-                } else {
-                    base.blend_mode
-                },
+                if clipped { BlendMode::Normal } else { base.blend_mode },
             );
         }
     }
@@ -173,7 +178,11 @@ fn fill_folders(
 }
 
 impl Document {
-    pub(crate) fn composite_folder_region(&self, rect: PixelRect, selection: u64) -> Vec<u8> {
+    pub(crate) fn composite_folder_region(
+        &self,
+        rect: PixelRect,
+        selection: u64,
+    ) -> Vec<u8> {
         let rect = rect.clipped(self.width, self.height);
         let stride = (rect.x1 - rect.x0) as usize * 4;
         let mut output = vec![0; stride * (rect.y1 - rect.y0) as usize];
@@ -184,16 +193,23 @@ impl Document {
             return output;
         };
         let mut folders = folder_rows(self, stride);
-        if self
-            .layers
-            .iter()
-            .any(|layer| layer.blend_mode == BlendMode::Through && !layer.clipped)
-        {
-            through::compose(self, &layout, &mut folders, rect, selection, &mut output);
+        if self.layers.iter().any(|layer| {
+            layer.blend_mode == BlendMode::Through && !layer.clipped
+        }) {
+            through::compose(
+                self,
+                &layout,
+                &mut folders,
+                rect,
+                selection,
+                &mut output,
+            );
             return output;
         }
         for (row, destination) in output.chunks_exact_mut(stride).enumerate() {
-            let start = ((rect.y0 as usize + row) * self.width as usize + rect.x0 as usize) * 4;
+            let start = ((rect.y0 as usize + row) * self.width as usize
+                + rect.x0 as usize)
+                * 4;
             fill_folders(self, &layout, &mut folders, selection, start, stride);
             RowComposite {
                 document: self,
@@ -208,7 +224,11 @@ impl Document {
         output
     }
 
-    pub(crate) fn folder_layer_at(&self, column: u32, row: u32) -> Option<usize> {
+    pub(crate) fn folder_layer_at(
+        &self,
+        column: u32,
+        row: u32,
+    ) -> Option<usize> {
         let layout = self.folder_layout()?;
         let start = ((row * self.width + column) * 4) as usize;
         let mut folders = folder_rows(self, 4);
@@ -221,31 +241,31 @@ impl Document {
             start,
             stride: 4,
         };
-        self.layers
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(index, layer)| {
-                if layer.kind == LayerKind::Folder {
+        self.layers.iter().enumerate().rev().find_map(|(index, layer)| {
+            if layer.kind == LayerKind::Folder {
+                return None;
+            }
+            let mut ancestor = index;
+            while ancestor != 64 {
+                let target = &self.layers[ancestor];
+                let base = self.clipping_base(ancestor)?;
+                let base_layer = &self.layers[base];
+                if !target.visible
+                    || target.opacity == 0.
+                    || target
+                        .mask_alpha(start / 4, composite.source(ancestor)[3])
+                        == 0
+                    || !base_layer.visible
+                    || base_layer.opacity == 0.
+                    || base_layer
+                        .mask_alpha(start / 4, composite.source(base)[3])
+                        == 0
+                {
                     return None;
                 }
-                let mut ancestor = index;
-                while ancestor != 64 {
-                    let target = &self.layers[ancestor];
-                    let base = self.clipping_base(ancestor)?;
-                    let base_layer = &self.layers[base];
-                    if !target.visible
-                        || target.opacity == 0.
-                        || target.mask_alpha(start / 4, composite.source(ancestor)[3]) == 0
-                        || !base_layer.visible
-                        || base_layer.opacity == 0.
-                        || base_layer.mask_alpha(start / 4, composite.source(base)[3]) == 0
-                    {
-                        return None;
-                    }
-                    ancestor = layout.parents[ancestor];
-                }
-                Some(index)
-            })
+                ancestor = layout.parents[ancestor];
+            }
+            Some(index)
+        })
     }
 }

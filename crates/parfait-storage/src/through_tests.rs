@@ -71,10 +71,7 @@ fn exact_v7_tree_layout_upgrades_without_changing_masks_roles_ids_or_content() {
     document.layers[2].opacity = 0.625;
     let original = document.clone();
     insert(&store, document.revision, &version_seven(&document));
-    store
-        .connection
-        .pragma_update(None, "user_version", 7)
-        .unwrap();
+    store.connection.pragma_update(None, "user_version", 7).unwrap();
     assert_eq!(store.load().unwrap().unwrap().document, document);
     document.layers[2].blend_mode = BlendMode::Through;
     document.touch();
@@ -82,7 +79,8 @@ fn exact_v7_tree_layout_upgrades_without_changing_masks_roles_ids_or_content() {
     assert_eq!(
         store
             .connection
-            .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                .get(0))
             .unwrap(),
         10
     );
@@ -94,10 +92,12 @@ fn exact_v7_tree_layout_upgrades_without_changing_masks_roles_ids_or_content() {
 }
 
 #[test]
-fn current_through_roundtrips_and_bad_current_or_mislabelled_legacy_heads_fall_back() {
+fn current_through_roundtrips_and_bad_current_or_mislabelled_legacy_heads_fall_back()
+ {
     for legacy in [false, true] {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open(&directory.path().join("through.parfait")).unwrap();
+        let mut store =
+            Store::open(&directory.path().join("through.parfait")).unwrap();
         let mut document = Document::new(4, 3);
         document.group_layers_in_folder(2, "Pass".into()).unwrap();
         document.layers[2].blend_mode = BlendMode::Through;

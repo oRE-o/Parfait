@@ -54,7 +54,8 @@ fn run() -> anyhow::Result<()> {
                 .or_else(|| std::env::var_os("XDG_DATA_HOME"))
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
-                    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share")
+                    PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+                        .join(".local/share")
                 })
                 .join("Parfait")
         });
@@ -64,7 +65,8 @@ fn run() -> anyhow::Result<()> {
         .find(|p| p[0] == "--screenshot")
         .map(|p| diagnostics::Capture::new(PathBuf::from(&p[1])));
     if args.iter().any(|arg| arg == "--calibrate-pressure") {
-        app.calibration_dialog = Some(calibration::CalibrationDialog::new(app.calibration.clone()));
+        app.calibration_dialog =
+            Some(calibration::CalibrationDialog::new(app.calibration.clone()));
     }
     if args.iter().any(|arg| arg == "--brush-details") {
         app.brush_details.open = true;

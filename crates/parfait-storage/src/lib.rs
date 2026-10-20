@@ -43,9 +43,10 @@ pub use worker::{Autosave, SaveEvent};
 
 const MAX_BYTES: u64 = budget::SNAPSHOT_LIMIT;
 pub use budget::{
-    layer_duplication_error, layer_folder_growth_error, layer_growth_count_error,
-    layer_growth_error, layer_mask_creation_error, layer_reparent_error, mask_edit_error,
-    selection_update_error, snapshot_size, solid_layer_growth_error, solid_rasterization_error,
+    layer_duplication_error, layer_folder_growth_error,
+    layer_growth_count_error, layer_growth_error, layer_mask_creation_error,
+    layer_reparent_error, mask_edit_error, selection_update_error,
+    snapshot_size, solid_layer_growth_error, solid_rasterization_error,
 };
 
 /// Workspace and brush preferences are separate from artwork and committed atomically.
@@ -53,10 +54,8 @@ pub fn load_preferences(path: &Path) -> Result<Option<String>> {
     use rusqlite::OptionalExtension;
     let c = Connection::open(path)?;
     c.execute_batch("CREATE TABLE IF NOT EXISTS preferences(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL)")?;
-    Ok(
-        c.query_row("SELECT json FROM preferences WHERE id=1", [], |r| r.get(0))
-            .optional()?,
-    )
+    Ok(c.query_row("SELECT json FROM preferences WHERE id=1", [], |r| r.get(0))
+        .optional()?)
 }
 pub fn save_preferences(path: &Path, json: &str) -> Result<()> {
     ensure!(json.len() <= 32 * 1024 * 1024, "Preferences exceed 32 MiB");
@@ -74,12 +73,16 @@ pub struct Loaded {
 }
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        if let Some(parent) =
+            path.parent().filter(|p| !p.as_os_str().is_empty())
+        {
             std::fs::create_dir_all(parent)?;
         }
         let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(3))?;
-        let version: i64 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        let version: i64 =
+            connection
+                .pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(
             (0..=10).contains(&version),
             "This project uses an unsupported format ({version})"
@@ -91,18 +94,18 @@ impl Store {
         Ok(Self { connection })
     }
     pub fn unclean(&self) -> Result<bool> {
-        Ok(self
-            .connection
-            .query_row("SELECT clean=0 FROM session WHERE id=1", [], |r| r.get(0))?)
+        Ok(self.connection.query_row(
+            "SELECT clean=0 FROM session WHERE id=1",
+            [],
+            |r| r.get(0),
+        )?)
     }
     pub fn mark_open(&self) -> Result<()> {
-        self.connection
-            .execute("UPDATE session SET clean=0 WHERE id=1", [])?;
+        self.connection.execute("UPDATE session SET clean=0 WHERE id=1", [])?;
         Ok(())
     }
     pub fn mark_clean(&self) -> Result<()> {
-        self.connection
-            .execute("UPDATE session SET clean=1 WHERE id=1", [])?;
+        self.connection.execute("UPDATE session SET clean=1 WHERE id=1", [])?;
         Ok(())
     }
     pub fn save(&mut self, doc: &Document) -> Result<()> {
@@ -136,9 +139,9 @@ impl Store {
         Ok(())
     }
     pub fn load(&self) -> Result<Option<Loaded>> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT checksum,payload FROM snapshots ORDER BY revision DESC")?;
+        let mut stmt = self.connection.prepare(
+            "SELECT checksum,payload FROM snapshots ORDER BY revision DESC",
+        )?;
         let rows = stmt.query_map([], |r| {
             Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, Vec<u8>>(1)?))
         })?;
@@ -159,44 +162,54 @@ impl Store {
                     .with_fixint_encoding()
                     .with_limit(MAX_BYTES)
                     .reject_trailing_bytes();
-                let doc: Document = if let Some(payload) = raw.strip_prefix(SNAPSHOT_V10) {
+                let doc: Document = if let Some(payload) =
+                    raw.strip_prefix(SNAPSHOT_V10)
+                {
                     options.deserialize(payload)?
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V9) {
-                    let old: legacy_v9::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v9::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V8) {
-                    let old: legacy_v8::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v8::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V7) {
-                    let old: legacy_v8::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v8::LegacyDocument =
+                        options.deserialize(payload)?;
                     ensure!(
-                        old.layers
-                            .iter()
-                            .all(|layer| layer.blend_mode != parfait_core::BlendMode::Through),
+                        old.layers.iter().all(|layer| layer.blend_mode
+                            != parfait_core::BlendMode::Through),
                         "Version 7 cannot contain a pass-through folder"
                     );
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V6) {
-                    let old: legacy_v6::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v6::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V5) {
-                    let old: legacy_v5::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v5::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V4) {
-                    let old: legacy_v4::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v4::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V3) {
-                    let old: legacy_v3::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v3::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V2) {
-                    let old: legacy_v2::LegacyDocument = options.deserialize(payload)?;
+                    let old: legacy_v2::LegacyDocument =
+                        options.deserialize(payload)?;
                     old.into()
                 } else {
                     ensure!(
                         !raw.starts_with(b"PARFAIT\0"),
                         "Unsupported snapshot version"
                     );
-                    let old: legacy::LegacyDocument = options.deserialize(&raw)?;
+                    let old: legacy::LegacyDocument =
+                        options.deserialize(&raw)?;
                     old.into()
                 };
                 ensure!(doc.validate(), "Invalid document layout");
@@ -213,10 +226,7 @@ impl Store {
                     if bad {
                         document.revision = u64::try_from(max)? + 1;
                     }
-                    return Ok(Some(Loaded {
-                        document,
-                        fell_back: bad,
-                    }));
+                    return Ok(Some(Loaded { document, fell_back: bad }));
                 }
                 Err(_) => bad = true,
             }
@@ -227,8 +237,7 @@ impl Store {
         Ok(None)
     }
     pub fn checkpoint(&self) -> Result<()> {
-        self.connection
-            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+        self.connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
         Ok(())
     }
 }
@@ -244,8 +253,9 @@ pub fn lock_session(path: &Path) -> Result<File> {
         .read(true)
         .write(true)
         .open(path)?;
-    file.try_lock_exclusive()
-        .context("This recovery folder is already open in another Parfait window")?;
+    file.try_lock_exclusive().context(
+        "This recovery folder is already open in another Parfait window",
+    )?;
     Ok(file)
 }
 
@@ -309,10 +319,7 @@ mod tests {
                 params![Sha256::digest(&raw).to_vec(), enc.finish().unwrap()],
             )
             .unwrap();
-        store
-            .connection
-            .pragma_update(None, "user_version", 1)
-            .unwrap();
+        store.connection.pragma_update(None, "user_version", 1).unwrap();
         let mut d = store.load().unwrap().unwrap().document;
         assert_eq!(d.layers[0].blend_mode, parfait_core::BlendMode::Normal);
         assert_eq!(d.layers[0].pixels.as_slice(), &[30, 60, 90, 128]);

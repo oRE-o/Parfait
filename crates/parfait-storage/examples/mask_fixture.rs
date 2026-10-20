@@ -3,11 +3,10 @@ use parfait_storage::Store;
 use std::{path::PathBuf, sync::Arc};
 
 fn main() -> anyhow::Result<()> {
-    let directory = PathBuf::from(
-        std::env::args()
-            .nth(1)
-            .ok_or_else(|| anyhow::anyhow!("Pass a new, isolated fixture directory"))?,
-    );
+    let directory =
+        PathBuf::from(std::env::args().nth(1).ok_or_else(|| {
+            anyhow::anyhow!("Pass a new, isolated fixture directory")
+        })?);
     anyhow::ensure!(
         !directory.exists(),
         "Refusing to replace an existing data directory"
@@ -22,7 +21,9 @@ fn main() -> anyhow::Result<()> {
             let offset = (row * 512 + column) * 4;
             Arc::make_mut(&mut document.layers[1].pixels)[offset..offset + 4]
                 .copy_from_slice(&[40, 130, 230, 255]);
-            let distance = ((column as f32 - 256.).powi(2) + (row as f32 - 192.).powi(2)).sqrt();
+            let distance = ((column as f32 - 256.).powi(2)
+                + (row as f32 - 192.).powi(2))
+            .sqrt();
             radial.push(((150. - distance) * 12.).clamp(0., 255.) as u8);
         }
     }

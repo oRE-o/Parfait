@@ -11,17 +11,21 @@ impl Parfait {
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
         {
-            return Some("Finish the current gesture or dialog before converting pixels.");
+            return Some(
+                "Finish the current gesture or dialog before converting pixels.",
+            );
         }
         if self.editing_layer_mask() {
-            return Some("Select the layer's content thumbnail, not its mask, to convert pixels.");
+            return Some(
+                "Select the layer's content thumbnail, not its mask, to convert pixels.",
+            );
         }
-        self.doc
-            .raster_conversion_reason(self.doc.active, conversion)
+        self.doc.raster_conversion_reason(self.doc.active, conversion)
     }
 
     pub(crate) fn execute_raster_conversion(&mut self, command: Command) {
-        let Some(conversion) = command.raster_conversion(self.brush.color) else {
+        let Some(conversion) = command.raster_conversion(self.brush.color)
+        else {
             return;
         };
         if let Some(reason) = self.command_disabled_reason(command) {

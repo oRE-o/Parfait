@@ -2,7 +2,8 @@ use super::*;
 use parfait_core::PixelRect;
 
 #[test]
-fn delete_and_backspace_clear_mask_target_while_content_clear_remains_explicit() {
+fn delete_and_backspace_clear_mask_target_while_content_clear_remains_explicit()
+{
     for clear_key in [egui::Key::Delete, egui::Key::Backspace] {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
@@ -70,11 +71,7 @@ fn clear_guards_and_focused_text_do_not_change_the_drawing() {
         app.workspace.resizing = blocker == 1;
         app.doc.layers[1].locked = blocker == 2;
         if blocker == 3 {
-            app.begin_canvas_stroke(Point {
-                x: 8.,
-                y: 8.,
-                pressure: 1.,
-            });
+            app.begin_canvas_stroke(Point { x: 8., y: 8., pressure: 1. });
         }
         let before = app.doc.clone();
         app.execute_command(Command::ClearEditingTarget, &context);
@@ -85,10 +82,7 @@ fn clear_guards_and_focused_text_do_not_change_the_drawing() {
     let mut text = String::from("sample");
     for events in [vec![], vec![key(egui::Key::Backspace)]] {
         let mut output = context.run_ui(
-            egui::RawInput {
-                events,
-                ..Default::default()
-            },
+            egui::RawInput { events, ..Default::default() },
             |ui| {
                 ui.text_edit_singleline(&mut text).request_focus();
                 app.shortcuts(ui.ctx());
@@ -139,10 +133,13 @@ fn update_cache(
     let [left, top] = delta.pos.unwrap_or([0, 0]);
     for row in 0..image.size[1] {
         let at = (top + row) * app.doc.width as usize + left;
-        cache[at..at + image.size[0]]
-            .copy_from_slice(&image.pixels[row * image.size[0]..(row + 1) * image.size[0]]);
+        cache[at..at + image.size[0]].copy_from_slice(
+            &image.pixels[row * image.size[0]..(row + 1) * image.size[0]],
+        );
     }
-    for (index, pixel) in app.doc.composite().as_chunks::<4>().0.iter().enumerate() {
+    for (index, pixel) in
+        app.doc.composite().as_chunks::<4>().0.iter().enumerate()
+    {
         let background = if (index % app.doc.width as usize / 16
             + index / app.doc.width as usize / 16)
             .is_multiple_of(2)
@@ -153,7 +150,8 @@ fn update_cache(
         };
         let alpha = f32::from(pixel[3]) / 255.;
         let mut expected: [u8; 3] = std::array::from_fn(|channel| {
-            (f32::from(pixel[channel]) * alpha + background * (1. - alpha)).round() as u8
+            (f32::from(pixel[channel]) * alpha + background * (1. - alpha))
+                .round() as u8
         });
         if app.active_mask_overlay().is_some() {
             let coverage = app.doc.layers[app.doc.active]
@@ -164,7 +162,9 @@ fn update_cache(
                 .value(index);
             let tint_alpha = (u32::from(255 - coverage) * 128 + 127) / 255;
             for (target, tint) in expected.iter_mut().zip([112u32, 96, 255]) {
-                *target = ((u32::from(*target) * (255 - tint_alpha) + tint * tint_alpha + 127)
+                *target = ((u32::from(*target) * (255 - tint_alpha)
+                    + tint * tint_alpha
+                    + 127)
                     / 255) as u8;
             }
         }
@@ -176,7 +176,8 @@ fn update_cache(
 }
 
 #[test]
-fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal() {
+fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal()
+{
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = Document::new(128, 128);
@@ -184,11 +185,7 @@ fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal()
     app.doc.layers[1].pixels = Arc::new([160, 80, 30, 180].repeat(128 * 128));
     app.doc.create_layer_mask(1, 127);
     app.select_layer_target(1, true);
-    app.brush = Brush {
-        size: 12.,
-        pressure: false,
-        ..Default::default()
-    };
+    app.brush = Brush { size: 12., pressure: false, ..Default::default() };
     let context = egui::Context::default();
     let mut cache = vec![egui::Color32::TRANSPARENT; 128 * 128];
     let output = canvas_frame(&mut app, &context, vec![]);
@@ -199,10 +196,7 @@ fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal()
     let output = canvas_frame(&mut app, &context, vec![]);
     update_cache(&app, &output, &mut cache, false);
     assert_eq!(app.doc, before);
-    assert_eq!(
-        (app.saved, app.submitted, app.history.rows().count()),
-        saved
-    );
+    assert_eq!((app.saved, app.submitted, app.history.rows().count()), saved);
     app.view.pan += egui::vec2(8., 4.);
     let output = canvas_frame(&mut app, &context, vec![]);
     assert!(output.is_none());
@@ -223,10 +217,7 @@ fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal()
     );
     update_cache(&app, &output, &mut cache, true);
     canvas_frame(&mut app, &context, vec![pointer(false)]);
-    assert!(Arc::ptr_eq(
-        &app.doc.layers[1].pixels,
-        &before.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&app.doc.layers[1].pixels, &before.layers[1].pixels));
     app.undo();
     let output = canvas_frame(&mut app, &context, vec![]);
     update_cache(&app, &output, &mut cache, false);
@@ -284,15 +275,14 @@ fn old_keymaps_keep_delete_owner_and_new_mask_commands_persist_assignments() {
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
     legacy["version"] = 16.into();
-    legacy["keymap"]["bindings"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|binding| {
-            !matches!(
-                binding["command"].as_str(),
-                Some("clear_editing_target" | "clear_layer_mask" | "show_mask_area")
+    legacy["keymap"]["bindings"].as_array_mut().unwrap().retain(|binding| {
+        !matches!(
+            binding["command"].as_str(),
+            Some(
+                "clear_editing_target" | "clear_layer_mask" | "show_mask_area"
             )
-        });
+        )
+    });
     parfait_storage::save_preferences(
         &directory.path().join("preferences.sqlite"),
         &legacy.to_string(),
@@ -337,12 +327,7 @@ fn clear_dense_white_mask_does_not_discard_the_redo_branch() {
     assert!(app.doc.same_edit_state(&before));
     assert_eq!(app.doc.revision, before.revision);
     assert!(app.history.can_redo());
-    let region = PixelRect {
-        x0: 0,
-        y0: 0,
-        x1: 8,
-        y1: 8,
-    };
+    let region = PixelRect { x0: 0, y0: 0, x1: 8, y1: 8 };
     assert_eq!(
         app.doc.composite_region(region),
         before.composite_region(region)

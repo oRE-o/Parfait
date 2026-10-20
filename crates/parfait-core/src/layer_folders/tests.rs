@@ -4,9 +4,8 @@ use crate::{History, LayerMask, MaskCoverage, PixelRect};
 #[test]
 fn subtree_move_duplicate_delete_preserve_identity_buffers_and_history() {
     let mut document = fixture();
-    let folder = document
-        .group_layers_in_folder(0b110, "Folder".into())
-        .unwrap();
+    let folder =
+        document.group_layers_in_folder(0b110, "Folder".into()).unwrap();
     let before = document.clone();
     let mut history = History::default();
     history.begin(&document, "Duplicate subtree");
@@ -49,9 +48,7 @@ fn subtree_move_duplicate_delete_preserve_identity_buffers_and_history() {
 #[test]
 fn sibling_orders_keep_nested_branches_contiguous_and_refuse_mixed_parents() {
     let mut document = fixture();
-    document
-        .group_layers_in_folder(1 << 1, "Folder".into())
-        .unwrap();
+    document.group_layers_in_folder(1 << 1, "Folder".into()).unwrap();
     assert_eq!(
         document.layer_sibling_order(1 << 2, true, false),
         Some(vec![0, 3, 1, 2, 4])
@@ -61,9 +58,7 @@ fn sibling_orders_keep_nested_branches_contiguous_and_refuse_mixed_parents() {
         Some(vec![1, 2, 0, 3, 4])
     );
     assert!(
-        document
-            .layer_sibling_order((1 << 1) | (1 << 3), true, true)
-            .is_none()
+        document.layer_sibling_order((1 << 1) | (1 << 3), true, true).is_none()
     );
     assert!(document.layer_tree_delete_reason(u64::MAX).is_some());
     assert!(document.layer_tree_delete_reason(0b11111).is_some());
@@ -73,9 +68,7 @@ fn sibling_orders_keep_nested_branches_contiguous_and_refuse_mixed_parents() {
 #[test]
 fn folder_mask_stroke_changes_coverage_without_allocating_folder_pixels() {
     let mut document = fixture();
-    document
-        .group_layers_in_folder(0b110, "Folder".into())
-        .unwrap();
+    document.group_layers_in_folder(0b110, "Folder".into()).unwrap();
     assert!(document.create_layer_mask(3, 255));
     let before = document.clone();
     let brush = crate::Brush {
@@ -87,11 +80,7 @@ fn folder_mask_stroke_changes_coverage_without_allocating_folder_pixels() {
     let mut stroke = crate::Stroke::begin_mask(
         &mut document,
         brush,
-        crate::Point {
-            x: 2.,
-            y: 1.,
-            pressure: 1.,
-        },
+        crate::Point { x: 2., y: 1., pressure: 1. },
     )
     .unwrap();
     assert!(stroke.take_damage().is_some());
@@ -173,9 +162,7 @@ fn grouping_ungrouping_preserves_ids_content_order_and_named_history() {
     let before = document.clone();
     let mut history = History::default();
     history.begin(&document, "Group layers");
-    let folder = document
-        .group_layers_in_folder(0b110, "線画".into())
-        .unwrap();
+    let folder = document.group_layers_in_folder(0b110, "線画".into()).unwrap();
     assert!(document.validate());
     assert_eq!(document.layers[3].id, folder);
     assert!(document.layers[3].pixels.is_empty());
@@ -201,14 +188,10 @@ fn grouping_ungrouping_preserves_ids_content_order_and_named_history() {
 #[test]
 fn nested_creation_insertion_and_nonadjacent_siblings_are_real_subtrees() {
     let mut document = fixture();
-    let original = document
-        .layers
-        .iter()
-        .map(|layer| layer.id)
-        .collect::<Vec<_>>();
-    let folder = document
-        .group_layers_in_folder(0b1010, "Folder".into())
-        .unwrap();
+    let original =
+        document.layers.iter().map(|layer| layer.id).collect::<Vec<_>>();
+    let folder =
+        document.group_layers_in_folder(0b1010, "Folder".into()).unwrap();
     assert_eq!(
         document
             .layers
@@ -230,24 +213,20 @@ fn nested_creation_insertion_and_nonadjacent_siblings_are_real_subtrees() {
     document.add_layer();
     assert_eq!(document.layers[document.active].parent, Some(nested));
     assert!(document.validate());
-    assert!(document.ungroup_layer_folder(document.layer_index(nested).unwrap()));
+    assert!(
+        document.ungroup_layer_folder(document.layer_index(nested).unwrap())
+    );
     assert!(document.validate());
     assert_eq!(document.layers[document.active].parent, Some(folder));
     let all = (1 << document.layers.len()) - 1;
-    assert!(
-        document
-            .group_layers_in_folder(all, "All roots".into())
-            .is_some()
-    );
+    assert!(document.group_layers_in_folder(all, "All roots".into()).is_some());
     assert!(document.validate());
 }
 
 #[test]
 fn invalid_parent_cycles_interleaving_and_folder_pixels_are_rejected() {
     let mut document = fixture();
-    document
-        .group_layers_in_folder(0b110, "Folder".into())
-        .unwrap();
+    document.group_layers_in_folder(0b110, "Folder".into()).unwrap();
     for invalid in 0..6 {
         let mut broken = document.clone();
         match invalid {
@@ -277,28 +256,26 @@ fn invalid_parent_cycles_interleaving_and_folder_pixels_are_rejected() {
 }
 
 #[test]
-fn isolated_nested_folders_match_independently_baked_flat_composition_and_regions() {
+fn isolated_nested_folders_match_independently_baked_flat_composition_and_regions()
+ {
     let mut document = fixture();
     document.layers[2].clipped = true;
-    let inner = document
-        .group_layers_in_folder(0b110, "Inner".into())
-        .unwrap();
-    let outer = document
-        .group_layers_in_folder(0b11000, "Outer".into())
-        .unwrap();
+    let inner = document.group_layers_in_folder(0b110, "Inner".into()).unwrap();
+    let outer =
+        document.group_layers_in_folder(0b11000, "Outer".into()).unwrap();
     let inner_index = document.layer_index(inner).unwrap();
     document.layers[inner_index].mask = Some(LayerMask {
         enabled: true,
-        coverage: MaskCoverage::Dense(Arc::new((0..15).map(|index| (index * 17) as u8).collect())),
+        coverage: MaskCoverage::Dense(Arc::new(
+            (0..15).map(|index| (index * 17) as u8).collect(),
+        )),
     });
     let inner_index = document.layer_index(inner).unwrap();
     let outer_index = document.layer_index(outer).unwrap();
     document.layers[inner_index].opacity = 0.63;
     document.layers[outer_index].opacity = 0.47;
-    document.layers[outer_index].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(193),
-    });
+    document.layers[outer_index].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(193) });
     for inner_mode in BlendMode::ALL {
         document.layers[inner_index].blend_mode = inner_mode;
         for outer_mode in BlendMode::ALL {
@@ -309,12 +286,7 @@ fn isolated_nested_folders_match_independently_baked_flat_composition_and_region
                 reference.composite(),
                 "{inner_mode:?}/{outer_mode:?}"
             );
-            let region = PixelRect {
-                x0: 1,
-                y0: 1,
-                x1: 4,
-                y1: 3,
-            };
+            let region = PixelRect { x0: 1, y0: 1, x1: 4, y1: 3 };
             assert_eq!(
                 document.composite_region(region),
                 reference.composite_region(region)
@@ -326,9 +298,8 @@ fn isolated_nested_folders_match_independently_baked_flat_composition_and_region
 #[test]
 fn sibling_clipping_cannot_escape_a_folder_and_folder_bases_are_supported() {
     let mut document = fixture();
-    let folder = document
-        .group_layers_in_folder(0b110, "Folder".into())
-        .unwrap();
+    let folder =
+        document.group_layers_in_folder(0b110, "Folder".into()).unwrap();
     document.layers[1].clipped = true;
     assert_eq!(document.clipping_base(1), None);
     assert_eq!(document.clipping_base(2), Some(2));
@@ -342,7 +313,8 @@ fn sibling_clipping_cannot_escape_a_folder_and_folder_bases_are_supported() {
 }
 
 #[test]
-fn ancestor_visibility_locks_and_hit_testing_apply_to_children_not_folder_pixels() {
+fn ancestor_visibility_locks_and_hit_testing_apply_to_children_not_folder_pixels()
+ {
     let mut document = Document::new(1, 1);
     document.layers[1].pixels = Arc::new(vec![20, 40, 60, 255]);
     let folder = document.group_layers_in_folder(2, "Folder".into()).unwrap();
@@ -358,10 +330,8 @@ fn ancestor_visibility_locks_and_hit_testing_apply_to_children_not_folder_pixels
     assert!(document.layer_ancestors_unlocked(1));
     assert_eq!(document.layer_at(0, 0), Some(0));
     document.layers[parent].visible = true;
-    document.layers[parent].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(0),
-    });
+    document.layers[parent].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(0) });
     assert_eq!(document.layer_at(0, 0), Some(0));
 }
 
@@ -390,9 +360,7 @@ fn sixty_four_deep_nodes_use_no_folder_pixel_storage_and_keep_atomic_limits() {
 fn folder_clipping_base_and_source_match_flat_baking_for_every_blend_pair() {
     for folder_is_clip in [false, true] {
         let mut document = fixture();
-        document
-            .group_layers_in_folder(0b110, "Folder".into())
-            .unwrap();
+        document.group_layers_in_folder(0b110, "Folder".into()).unwrap();
         let (base, clip) = if folder_is_clip { (0, 3) } else { (3, 4) };
         document.layers[clip].clipped = true;
         document.layers[base].mask = Some(LayerMask {
@@ -420,15 +388,12 @@ fn folder_clipping_base_and_source_match_flat_baking_for_every_blend_pair() {
 }
 
 #[test]
-fn folder_and_locked_ancestor_refuse_all_pixel_writers_without_copying_buffers() {
+fn folder_and_locked_ancestor_refuse_all_pixel_writers_without_copying_buffers()
+{
     use crate::{Brush, BrushOperation, Point, RasterConversion, Stroke};
     let mut document = Document::new(8, 8);
     document.group_layers_in_folder(2, "Folder".into()).unwrap();
-    let point = Point {
-        x: 4.,
-        y: 4.,
-        pressure: 1.,
-    };
+    let point = Point { x: 4., y: 4., pressure: 1. };
     for operation in [
         BrushOperation::Paint,
         BrushOperation::Erase,
@@ -437,32 +402,31 @@ fn folder_and_locked_ancestor_refuse_all_pixel_writers_without_copying_buffers()
         BrushOperation::Smudge,
     ] {
         let before = document.clone();
-        let brush = Brush {
-            operation,
-            ..Default::default()
-        };
+        let brush = Brush { operation, ..Default::default() };
         let mut stroke = Stroke::begin(&mut document, brush, point);
         stroke.extend(&mut document, Point { x: 5., ..point });
         assert!(document.same_edit_state(&before));
         assert_eq!(document.revision, before.revision);
     }
-    assert!(!document.convert_layer_pixels(2, RasterConversion::DrawingColor([10, 20, 30])));
+    assert!(
+        !document.convert_layer_pixels(
+            2,
+            RasterConversion::DrawingColor([10, 20, 30])
+        )
+    );
     document.layers[2].locked = true;
     document.active = 1;
     let before = document.clone();
     Stroke::begin(&mut document, Brush::default(), point);
     assert!(document.same_edit_state(&before));
-    assert!(!document.convert_layer_pixels(1, RasterConversion::BrightnessToOpacity));
-    assert!(!document.create_layer_mask(1, 128));
     assert!(
-        document
-            .create_layer_folder("Locked parent".into())
-            .is_none()
+        !document
+            .convert_layer_pixels(1, RasterConversion::BrightnessToOpacity)
     );
+    assert!(!document.create_layer_mask(1, 128));
+    assert!(document.create_layer_folder("Locked parent".into()).is_none());
     assert!(
-        document
-            .group_layers_in_folder(2, "Locked parent".into())
-            .is_none()
+        document.group_layers_in_folder(2, "Locked parent".into()).is_none()
     );
     assert!(!document.ungroup_layer_folder(2));
     assert!(document.same_edit_state(&before));
@@ -495,16 +459,16 @@ fn folder_composition_timing_workload() {
                     .collect(),
             );
         }
-        document
-            .group_layers_in_folder(0b11110000, "Inner".into())
-            .unwrap();
+        document.group_layers_in_folder(0b11110000, "Inner".into()).unwrap();
         document
             .group_layers_in_folder((1 << 8) | 0b1111, "Outer".into())
             .unwrap();
         let reference = baked(&document);
         let expected = reference.composite();
         assert_eq!(document.composite(), expected);
-        for (label, drawing) in [("flat_baked", &reference), ("folders", &document)] {
+        for (label, drawing) in
+            [("flat_baked", &reference), ("folders", &document)]
+        {
             let mut elapsed = Vec::new();
             for _ in 0..25 {
                 let started = Instant::now();

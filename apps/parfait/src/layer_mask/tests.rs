@@ -19,11 +19,12 @@ fn frame(app: &mut Parfait, context: &egui::Context, events: Vec<egui::Event>) {
             app.prepare_layer_list(ui.ctx());
             app.shortcuts(ui.ctx());
             app.update_previews(ui.ctx());
-            egui::Panel::left("mask_test_layers")
-                .exact_size(240.)
-                .show(ui, |ui| {
+            egui::Panel::left("mask_test_layers").exact_size(240.).show(
+                ui,
+                |ui| {
                     app.palette(ui, crate::workspace::Palette::Layers, 500.);
-                });
+                },
+            );
             egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
         },
     );
@@ -50,7 +51,9 @@ fn click(app: &mut Parfait, context: &egui::Context, position: egui::Pos2) {
 
 fn target(context: &egui::Context, layer: usize, mask: bool) -> egui::Rect {
     context
-        .data(|data| data.get_temp(egui::Id::new(("layer_target", layer, mask))))
+        .data(|data| {
+            data.get_temp(egui::Id::new(("layer_target", layer, mask)))
+        })
         .unwrap()
 }
 
@@ -81,22 +84,11 @@ fn mask_commands_are_active_only_undoable_and_durably_reopened() {
     );
     assert_eq!(app.history.rows().count(), 2);
     assert_eq!(app.selected_layer_mask(), 3);
-    app.brush = Brush {
-        size: 12.,
-        pressure: false,
-        ..Default::default()
-    };
-    assert!(app.begin_canvas_stroke(Point {
-        x: 16.,
-        y: 16.,
-        pressure: 1.
-    }));
+    app.brush = Brush { size: 12., pressure: false, ..Default::default() };
+    assert!(app.begin_canvas_stroke(Point { x: 16., y: 16., pressure: 1. }));
     app.finish_stroke();
     let painted = app.doc.clone();
-    assert!(Arc::ptr_eq(
-        &painted.layers[1].pixels,
-        &before.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&painted.layers[1].pixels, &before.layers[1].pixels));
     app.undo();
     assert_eq!(
         app.doc.layers[1].mask.as_ref().unwrap().coverage,
@@ -106,11 +98,7 @@ fn mask_commands_are_active_only_undoable_and_durably_reopened() {
     assert!(app.doc.same_edit_state(&painted));
     app.execute_command(Command::LayerMaskEnabled, &context);
     assert!(!app.doc.layers[1].mask.as_ref().unwrap().enabled);
-    assert!(!app.begin_canvas_stroke(Point {
-        x: 16.,
-        y: 16.,
-        pressure: 1.
-    }));
+    assert!(!app.begin_canvas_stroke(Point { x: 16., y: 16., pressure: 1. }));
     app.execute_command(Command::LayerMaskEnabled, &context);
     app.force_save();
     let expected = app.doc.clone();
@@ -127,10 +115,7 @@ fn mask_commands_are_active_only_undoable_and_durably_reopened() {
     assert!(app.doc.same_edit_state(&reopened));
     app.execute_command(Command::DeleteLayerMask, &context);
     assert!(app.doc.layers[1].mask.is_none());
-    assert!(Arc::ptr_eq(
-        &app.doc.layers[1].pixels,
-        &reopened.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&app.doc.layers[1].pixels, &reopened.layers[1].pixels));
 }
 
 #[test]
@@ -140,12 +125,8 @@ fn actual_thumbnail_clicks_route_canvas_input_and_keep_layout_disjoint() {
     app.doc = Document::new(32, 32);
     app.doc.layers[1].pixels = Arc::new([200, 50, 90, 255].repeat(1024));
     app.doc.create_layer_mask(1, 255);
-    app.brush = Brush {
-        erase: true,
-        size: 12.,
-        pressure: false,
-        ..Default::default()
-    };
+    app.brush =
+        Brush { erase: true, size: 12., pressure: false, ..Default::default() };
     let context = egui::Context::default();
     crate::theme::apply(&context);
     frame(&mut app, &context, vec![]);
@@ -167,18 +148,12 @@ fn actual_thumbnail_clicks_route_canvas_input_and_keep_layout_disjoint() {
         .unwrap();
     click(&mut app, &context, canvas.center());
     assert_ne!(app.doc.layers[1].mask, before.layers[1].mask);
-    assert!(Arc::ptr_eq(
-        &app.doc.layers[1].pixels,
-        &before.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&app.doc.layers[1].pixels, &before.layers[1].pixels));
     let masked = app.doc.clone();
     click(&mut app, &context, content.center());
     assert!(!app.editing_layer_mask());
     click(&mut app, &context, canvas.center());
-    assert!(!Arc::ptr_eq(
-        &app.doc.layers[1].pixels,
-        &masked.layers[1].pixels
-    ));
+    assert!(!Arc::ptr_eq(&app.doc.layers[1].pixels, &masked.layers[1].pixels));
     assert_eq!(app.doc.layers[1].mask, masked.layers[1].mask);
 }
 
@@ -194,11 +169,7 @@ fn mask_stroke_escape_and_noop_preserve_redo_and_never_fall_back_to_content() {
     let before = app.doc.clone();
     let context = egui::Context::default();
     crate::theme::apply(&context);
-    app.brush = Brush {
-        size: 12.,
-        pressure: false,
-        ..Default::default()
-    };
+    app.brush = Brush { size: 12., pressure: false, ..Default::default() };
     frame(&mut app, &context, vec![]);
     let canvas: egui::Rect = context
         .data(|data| data.get_temp(egui::Id::new("canvas_rect")))
@@ -234,11 +205,9 @@ fn mask_stroke_escape_and_noop_preserve_redo_and_never_fall_back_to_content() {
     app.brush.opacity = 0.;
     click(&mut app, &context, canvas.center());
     assert!(app.history.can_redo());
-    for operation in [
-        BrushOperation::Blend,
-        BrushOperation::Blur,
-        BrushOperation::Smudge,
-    ] {
+    for operation in
+        [BrushOperation::Blend, BrushOperation::Blur, BrushOperation::Smudge]
+    {
         app.brush.operation = operation;
         assert!(!app.begin_canvas_stroke(Point {
             x: 16.,
@@ -321,15 +290,8 @@ fn mask_command_guards_and_target_changes_preserve_atomic_state() {
     app.doc.layers[1].locked = false;
     app.execute_command(Command::LayerMaskRevealAll, &context);
     app.doc.layers[1].alpha_locked = true;
-    assert!(
-        app.command_disabled_reason(Command::ApplyLayerMask)
-            .is_some()
-    );
-    assert!(app.begin_canvas_stroke(Point {
-        x: 16.,
-        y: 16.,
-        pressure: 1.
-    }));
+    assert!(app.command_disabled_reason(Command::ApplyLayerMask).is_some());
+    assert!(app.begin_canvas_stroke(Point { x: 16., y: 16., pressure: 1. }));
     let before = app.doc.clone();
     app.select_layer_target(1, false);
     assert!(app.editing_layer_mask());

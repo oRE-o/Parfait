@@ -18,8 +18,11 @@ fn selection_and_mask_menu_items_apply_real_edits_and_undo_once() {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
         app.doc = Document::new(8, 8);
-        app.doc.layers[1].pixels = std::sync::Arc::new([20, 40, 60, 128].repeat(64));
-        if command != Command::LayerSelectionCreate && command != Command::SelectAll {
+        app.doc.layers[1].pixels =
+            std::sync::Arc::new([20, 40, 60, 128].repeat(64));
+        if command != Command::LayerSelectionCreate
+            && command != Command::SelectAll
+        {
             app.doc.set_selection(Some(MaskCoverage::Uniform(64)));
         }
         let before = app.doc.clone();
@@ -91,20 +94,17 @@ fn folder_menu_actions_create_group_and_ungroup_with_one_edit() {
             frame(&mut app, &context, vec![], 960.);
         }
         open(&mut app, &context, TopMenu::Layer);
-        let target = reveal(&mut app, &context, root_path(TopMenu::Layer), |context| {
-            rect(context, ("menu_item", command.label()))
-        });
+        let target =
+            reveal(&mut app, &context, root_path(TopMenu::Layer), |context| {
+                rect(context, ("menu_item", command.label()))
+            });
         click(&mut app, &context, target);
         assert!(!egui::Popup::is_any_open(&context));
         assert!(app.doc.validate());
         assert_ne!(app.doc.layers, before.layers);
         assert_eq!(
             app.doc.layers.len(),
-            if command == Command::UngroupLayerFolder {
-                3
-            } else {
-                4
-            }
+            if command == Command::UngroupLayerFolder { 3 } else { 4 }
         );
         assert_eq!(app.history.rows().count(), 2);
         app.undo();
@@ -114,7 +114,12 @@ fn folder_menu_actions_create_group_and_ungroup_with_one_edit() {
     }
 }
 
-fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, width: f32) {
+fn frame(
+    app: &mut Parfait,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+    width: f32,
+) {
     ctx.data_mut(|data| {
         data.remove::<TopMenu>(egui::Id::new("open_top_menu"));
     });
@@ -139,9 +144,11 @@ fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, width
     output.textures_delta.clear();
 }
 
-fn rect(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Rect {
-    ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new(id)))
-        .unwrap()
+fn rect(
+    ctx: &egui::Context,
+    id: impl std::hash::Hash + std::fmt::Debug,
+) -> egui::Rect {
+    ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new(id))).unwrap()
 }
 
 fn click(app: &mut Parfait, ctx: &egui::Context, target: egui::Rect) {
@@ -184,7 +191,9 @@ fn escape(app: &mut Parfait, ctx: &egui::Context) {
 fn open(app: &mut Parfait, ctx: &egui::Context, menu: TopMenu) {
     click(app, ctx, rect(ctx, ("top_menu", menu)));
     assert_eq!(
-        ctx.data(|data| data.get_temp::<TopMenu>(egui::Id::new("open_top_menu"))),
+        ctx.data(
+            |data| data.get_temp::<TopMenu>(egui::Id::new("open_top_menu"))
+        ),
         Some(menu)
     );
 }
@@ -228,7 +237,8 @@ fn reveal(
                     phase: egui::TouchPhase::Move,
                     delta: egui::vec2(
                         0.,
-                        (viewport.center().y - item.center().y).clamp(-240., 240.),
+                        (viewport.center().y - item.center().y)
+                            .clamp(-240., 240.),
                     ),
                     modifiers: Default::default(),
                 },
@@ -245,27 +255,41 @@ fn root_path(menu: TopMenu) -> egui::Id {
 
 fn group_rect(ctx: &egui::Context, id: egui::Id) -> egui::Rect {
     ctx.data(|data| {
-        data.get_temp::<(egui::Rect, bool)>(egui::Id::new(("catalog_group", id)))
-            .unwrap()
-            .0
+        data.get_temp::<(egui::Rect, bool)>(egui::Id::new((
+            "catalog_group",
+            id,
+        )))
+        .unwrap()
+        .0
     })
 }
 
-fn open_group(app: &mut Parfait, ctx: &egui::Context, path: egui::Id, index: usize) -> egui::Id {
+fn open_group(
+    app: &mut Parfait,
+    ctx: &egui::Context,
+    path: egui::Id,
+    index: usize,
+) -> egui::Id {
     let id = path.with(index);
     let target = reveal(app, ctx, path, |ctx| group_rect(ctx, id));
     if ctx.data(|data| {
-        data.get_temp::<(egui::Rect, bool)>(egui::Id::new(("catalog_group", id)))
-            .unwrap()
-            .1
+        data.get_temp::<(egui::Rect, bool)>(egui::Id::new((
+            "catalog_group",
+            id,
+        )))
+        .unwrap()
+        .1
     }) {
         return id;
     }
     click(app, ctx, target);
     assert!(ctx.data(|data| {
-        data.get_temp::<(egui::Rect, bool)>(egui::Id::new(("catalog_group", id)))
-            .unwrap()
-            .1
+        data.get_temp::<(egui::Rect, bool)>(egui::Id::new((
+            "catalog_group",
+            id,
+        )))
+        .unwrap()
+        .1
     }));
     id
 }
@@ -274,16 +298,7 @@ fn open_group(app: &mut Parfait, ctx: &egui::Context, path: egui::Id, index: usi
 fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     assert_eq!(
         TopMenu::ALL.map(TopMenu::label),
-        [
-            "파일",
-            "편집",
-            "레이어",
-            "선택",
-            "표시",
-            "필터",
-            "창",
-            "도움말"
-        ]
+        ["파일", "편집", "레이어", "선택", "표시", "필터", "창", "도움말"]
     );
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
@@ -347,20 +362,12 @@ fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
     frame(&mut app, &ctx, vec![], 960.);
     frame(&mut app, &ctx, vec![], 960.);
     open(&mut app, &ctx, TopMenu::Layer);
-    click(
-        &mut app,
-        &ctx,
-        rect(&ctx, ("menu_item", Command::NewLayer.label())),
-    );
+    click(&mut app, &ctx, rect(&ctx, ("menu_item", Command::NewLayer.label())));
     assert_eq!(app.doc.layers.len(), 3);
     assert_eq!(app.history.rows().count(), 2);
     assert!(!egui::Popup::is_any_open(&ctx));
     open(&mut app, &ctx, TopMenu::Edit);
-    click(
-        &mut app,
-        &ctx,
-        rect(&ctx, ("menu_item", Command::Undo.label())),
-    );
+    click(&mut app, &ctx, rect(&ctx, ("menu_item", Command::Undo.label())));
     assert_eq!(app.doc.layers, before.layers);
     assert!(app.history.can_redo());
     let before = app.doc.clone();
@@ -369,7 +376,9 @@ fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
         .workspace
         .panels
         .iter()
-        .find(|placement| placement.palette == crate::workspace::Palette::Layers)
+        .find(|placement| {
+            placement.palette == crate::workspace::Palette::Layers
+        })
         .unwrap()
         .visible;
     let target = reveal(&mut app, &ctx, root_path(TopMenu::Window), |ctx| {
@@ -380,7 +389,8 @@ fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
         app.workspace
             .panels
             .iter()
-            .find(|placement| placement.palette == crate::workspace::Palette::Layers)
+            .find(|placement| placement.palette
+                == crate::workspace::Palette::Layers)
             .unwrap()
             .visible,
         !visible
@@ -414,7 +424,8 @@ fn edit_menu_conversions_change_only_content_and_share_history() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = Document::new(8, 8);
-    app.doc.layers[1].pixels = std::sync::Arc::new([128, 128, 128, 128].repeat(64));
+    app.doc.layers[1].pixels =
+        std::sync::Arc::new([128, 128, 128, 128].repeat(64));
     app.doc.create_layer_mask(1, 127);
     app.brush.color = [17, 140, 230];
     let before = app.doc.clone();
@@ -422,11 +433,14 @@ fn edit_menu_conversions_change_only_content_and_share_history() {
     crate::theme::apply(&context);
     frame(&mut app, &context, vec![], 960.);
     frame(&mut app, &context, vec![], 960.);
-    for command in [Command::BrightnessToOpacity, Command::ConvertToDrawingColor] {
+    for command in
+        [Command::BrightnessToOpacity, Command::ConvertToDrawingColor]
+    {
         open(&mut app, &context, TopMenu::Edit);
-        let target = reveal(&mut app, &context, root_path(TopMenu::Edit), |context| {
-            rect(context, ("menu_item", command.label()))
-        });
+        let target =
+            reveal(&mut app, &context, root_path(TopMenu::Edit), |context| {
+                rect(context, ("menu_item", command.label()))
+            });
         click(&mut app, &context, target);
         assert!(!egui::Popup::is_any_open(&context));
     }
@@ -452,21 +466,25 @@ fn unimplemented_selection_and_filter_items_are_disabled_and_never_paint() {
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
     frame(&mut app, &ctx, vec![], 960.);
-    for (menu, label) in [
-        (TopMenu::Select, "선택 범위 확장…"),
-        (TopMenu::Filter, "선명하게"),
-    ] {
+    for (menu, label) in
+        [(TopMenu::Select, "선택 범위 확장…"), (TopMenu::Filter, "선명하게")]
+    {
         open(&mut app, &ctx, menu);
         if menu == TopMenu::Filter {
             let index = catalog::entries(menu)
                 .iter()
-                .position(|item| matches!(item, catalog::MenuItem::Group("선명하게", _)))
+                .position(|item| {
+                    matches!(item, catalog::MenuItem::Group("선명하게", _))
+                })
                 .unwrap();
             open_group(&mut app, &ctx, root_path(menu), index);
         }
         let (target, enabled) = ctx
             .data(|data| {
-                data.get_temp::<(egui::Rect, bool)>(egui::Id::new(("unsupported_menu", label)))
+                data.get_temp::<(egui::Rect, bool)>(egui::Id::new((
+                    "unsupported_menu",
+                    label,
+                )))
             })
             .unwrap();
         assert!(!enabled);
@@ -480,7 +498,10 @@ fn unimplemented_selection_and_filter_items_are_disabled_and_never_paint() {
 
 #[test]
 fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
-    fn check(items: &[catalog::MenuItem], depth: usize) -> (usize, usize, usize) {
+    fn check(
+        items: &[catalog::MenuItem],
+        depth: usize,
+    ) -> (usize, usize, usize) {
         use catalog::MenuItem;
         assert!(!items.is_empty());
         assert!(depth <= 3);
@@ -530,7 +551,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
             assert!(!label.is_empty());
             assert!(!label.starts_with('/'));
             assert!(!label.contains("http"));
-            for excluded in ["애니메이션", "타임라인", "무비", "오디오", "타임 랩스"]
+            for excluded in
+                ["애니메이션", "타임라인", "무비", "오디오", "타임 랩스"]
             {
                 assert!(!label.contains(excluded));
             }
@@ -553,7 +575,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
 }
 
 #[test]
-fn layer_organization_menu_routes_execute_active_actions_not_selected_set_moves() {
+fn layer_organization_menu_routes_execute_active_actions_not_selected_set_moves()
+ {
     for (command, group, destination) in [
         (Command::RenameLayer, "레이어 설정", 2),
         (Command::MoveActiveLayerUp, "정렬", 3),
@@ -582,7 +605,8 @@ fn layer_organization_menu_routes_execute_active_actions_not_selected_set_moves(
             .iter()
             .position(|item| matches!(item, catalog::MenuItem::Group(label, _) if *label == group))
             .unwrap();
-        let path = open_group(&mut app, &context, root_path(TopMenu::Layer), index);
+        let path =
+            open_group(&mut app, &context, root_path(TopMenu::Layer), index);
         let target = reveal(&mut app, &context, path, |context| {
             rect(context, ("menu_item", command.label()))
         });
@@ -608,7 +632,8 @@ fn layer_organization_menu_routes_execute_active_actions_not_selected_set_moves(
 }
 
 #[test]
-fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits() {
+fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
+{
     fn collect(
         menu: TopMenu,
         items: &'static [catalog::MenuItem],
@@ -630,7 +655,8 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
     let artwork = app.doc.clone();
     app.persist_preferences(true);
     let preferences = app.saved_preferences_json();
-    let snapshot: crate::preferences::Preferences = serde_json::from_str(&preferences).unwrap();
+    let snapshot: crate::preferences::Preferences =
+        serde_json::from_str(&preferences).unwrap();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
@@ -683,22 +709,22 @@ fn long_root_menus_scroll_to_the_last_entry_inside_the_viewport() {
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
     frame(&mut app, &ctx, vec![], 960.);
-    for menu in [
-        TopMenu::Edit,
-        TopMenu::Layer,
-        TopMenu::View,
-        TopMenu::Window,
-    ] {
+    for menu in [TopMenu::Edit, TopMenu::Layer, TopMenu::View, TopMenu::Window]
+    {
         open(&mut app, &ctx, menu);
         let path = root_path(menu);
         let items = catalog::entries(menu);
         let target = match items.last().unwrap() {
-            catalog::MenuItem::Action(command) => reveal(&mut app, &ctx, path, |ctx| {
-                rect(ctx, ("menu_item", command.label()))
-            }),
-            catalog::MenuItem::Group(_, _) => reveal(&mut app, &ctx, path, |ctx| {
-                group_rect(ctx, path.with(items.len() - 1))
-            }),
+            catalog::MenuItem::Action(command) => {
+                reveal(&mut app, &ctx, path, |ctx| {
+                    rect(ctx, ("menu_item", command.label()))
+                })
+            }
+            catalog::MenuItem::Group(_, _) => {
+                reveal(&mut app, &ctx, path, |ctx| {
+                    group_rect(ctx, path.with(items.len() - 1))
+                })
+            }
             _ => panic!("Unexpected last entry"),
         };
         let viewport = rect(&ctx, ("catalog_viewport", path));
@@ -724,7 +750,9 @@ fn nested_layer_flags_and_subtool_details_keep_the_shared_command_path() {
     open(&mut app, &ctx, TopMenu::Layer);
     let index = catalog::entries(TopMenu::Layer)
         .iter()
-        .position(|item| matches!(item, catalog::MenuItem::Group("레이어 설정", _)))
+        .position(|item| {
+            matches!(item, catalog::MenuItem::Group("레이어 설정", _))
+        })
         .unwrap();
     open_group(&mut app, &ctx, root_path(TopMenu::Layer), index);
     click(

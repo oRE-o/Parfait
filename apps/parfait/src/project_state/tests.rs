@@ -17,8 +17,7 @@ fn recovery_completion_does_not_mark_a_new_or_edited_project_saved() {
     app.saved = app.doc.revision;
     assert_eq!(app.recovery_status(), "복구 저장됨");
     assert!(app.project_is_modified());
-    app.save_project_to(directory.path().join("drawing.parfait"))
-        .unwrap();
+    app.save_project_to(directory.path().join("drawing.parfait")).unwrap();
     assert_eq!(app.project_status(), "파일 저장됨");
     app.edit(|document| document.layers[1].opacity = 0.5);
     assert_eq!(app.project_status(), "파일 수정됨");
@@ -37,7 +36,8 @@ fn recovery_completion_does_not_mark_a_new_or_edited_project_saved() {
 }
 
 #[test]
-fn save_as_commits_candidate_name_path_and_shared_baseline_only_after_success() {
+fn save_as_commits_candidate_name_path_and_shared_baseline_only_after_success()
+{
     let directory = tempfile::tempdir().unwrap();
     let mut app = fixture(directory.path());
     let path = directory.path().join("첫 그림.parfait");
@@ -129,8 +129,7 @@ fn marker_ignores_selection_revision_and_view_but_tracks_content_and_masks() {
         enabled: true,
         coverage: MaskCoverage::Dense(Arc::new(vec![127; 1024])),
     });
-    app.save_project_to(directory.path().join("drawing.parfait"))
-        .unwrap();
+    app.save_project_to(directory.path().join("drawing.parfait")).unwrap();
     app.select_layer(0);
     app.doc.next_layer_id += 1;
     app.doc.touch();
@@ -141,7 +140,10 @@ fn marker_ignores_selection_revision_and_view_but_tracks_content_and_masks() {
     assert!(!app.project_is_modified());
     app.select_layer(1);
     app.edit(|document| {
-        document.convert_layer_pixels(1, RasterConversion::DrawingColor([70, 80, 90]));
+        document.convert_layer_pixels(
+            1,
+            RasterConversion::DrawingColor([70, 80, 90]),
+        );
     });
     assert!(app.project_is_modified());
     app.undo();
@@ -157,14 +159,12 @@ fn marker_ignores_selection_revision_and_view_but_tracks_content_and_masks() {
         assert!(!app.project_is_modified());
     }
     assert_eq!(app.doc, before);
-    assert!(Arc::ptr_eq(
-        &app.doc.layers[1].pixels,
-        &before.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&app.doc.layers[1].pixels, &before.layers[1].pixels));
 }
 
 #[test]
-fn unchanged_save_preserves_redo_and_recovery_reopen_requires_explicit_file_choice() {
+fn unchanged_save_preserves_redo_and_recovery_reopen_requires_explicit_file_choice()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = fixture(directory.path());
     let path = directory.path().join("drawing.parfait");
@@ -214,8 +214,11 @@ fn working_file_targets_and_symbolic_aliases_are_refused() {
         assert!(app.save_project_to(alias.clone()).is_err());
         assert!(app.open_project_from(alias).is_err());
         let broken_alias = directory.path().join("broken-alias.parfait");
-        std::os::unix::fs::symlink(directory.path().join("missing.parfait"), &broken_alias)
-            .unwrap();
+        std::os::unix::fs::symlink(
+            directory.path().join("missing.parfait"),
+            &broken_alias,
+        )
+        .unwrap();
         assert!(app.save_project_to(broken_alias.clone()).is_err());
         assert!(app.open_project_from(broken_alias).is_err());
         assert!(!directory.path().join("missing.parfait").exists());
@@ -272,18 +275,27 @@ fn labels_and_unsaved_star_fit_the_minimum_and_normal_window_widths() {
                 output.textures_delta.clear();
                 assert!(text.iter().any(|text| text == "복구 저장됨"));
                 assert!(text.iter().any(|text| text == app.project_status()));
-                let caption = format!("{}{}", app.doc.name, if saved { "" } else { " *" });
+                let caption = format!(
+                    "{}{}",
+                    app.doc.name,
+                    if saved { "" } else { " *" }
+                );
                 assert!(text.iter().any(|text| text == &caption));
             }
             let recovery: egui::Rect = context
                 .data(|data| data.get_temp(egui::Id::new("menu_save_status")))
                 .unwrap();
             let project: egui::Rect = context
-                .data(|data| data.get_temp(egui::Id::new("project_save_status")))
+                .data(|data| {
+                    data.get_temp(egui::Id::new("project_save_status"))
+                })
                 .unwrap();
             let help: egui::Rect = context
                 .data(|data| {
-                    data.get_temp(egui::Id::new(("top_menu", crate::menus::TopMenu::Help)))
+                    data.get_temp(egui::Id::new((
+                        "top_menu",
+                        crate::menus::TopMenu::Help,
+                    )))
                 })
                 .unwrap();
             assert!(help.right() <= project.left());

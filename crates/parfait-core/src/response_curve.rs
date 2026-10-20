@@ -12,10 +12,7 @@ pub struct ResponseCurve {
 }
 impl Default for ResponseCurve {
     fn default() -> Self {
-        Self {
-            points: vec![[0., 0.], [1., 1.]],
-            controls: None,
-        }
+        Self { points: vec![[0., 0.], [1., 1.]], controls: None }
     }
 }
 impl From<[f32; 5]> for ResponseCurve {
@@ -47,11 +44,9 @@ impl ResponseCurve {
             && self.controls.as_ref().is_none_or(|controls| {
                 controls.len() + 1 == self.points.len()
                     && controls.iter().enumerate().all(|(index, handles)| {
-                        handles
-                            .iter()
-                            .flatten()
-                            .all(|value| value.is_finite() && (0. ..=1.).contains(value))
-                            && self.points[index][0] <= handles[0][0]
+                        handles.iter().flatten().all(|value| {
+                            value.is_finite() && (0. ..=1.).contains(value)
+                        }) && self.points[index][0] <= handles[0][0]
                             && handles[0][0] <= handles[1][0]
                             && handles[1][0] <= self.points[index + 1][0]
                     })
@@ -59,13 +54,17 @@ impl ResponseCurve {
     }
     pub fn sample(&self, input: f32) -> f32 {
         match &self.controls {
-            Some(controls) => sample_bezier_response(&self.points, controls, input),
+            Some(controls) => {
+                sample_bezier_response(&self.points, controls, input)
+            }
             None => sample_response(&self.points, input),
         }
     }
 }
 impl<'de> Deserialize<'de> for ResponseCurve {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum Encoded {
@@ -147,13 +146,16 @@ pub fn reconcile_curve_controls(
             } else {
                 previous.windows(2).position(|old| old == pair)
             };
-            let Some(original) = original.filter(|original| *original < controls.len()) else {
+            let Some(original) =
+                original.filter(|original| *original < controls.len())
+            else {
                 return automatic[index];
             };
             let mut handles = controls[original];
             for (side, handle) in handles.iter_mut().enumerate() {
                 for axis in 0..2 {
-                    handle[axis] += pair[side][axis] - previous[original + side][axis];
+                    handle[axis] +=
+                        pair[side][axis] - previous[original + side][axis];
                 }
                 handle[0] = handle[0].clamp(pair[0][0], pair[1][0]);
                 handle[1] = handle[1].clamp(0., 1.);
@@ -168,7 +170,11 @@ pub fn reconcile_curve_controls(
         .collect();
 }
 
-pub fn sample_bezier_response(points: &[[f32; 2]], controls: &[[[f32; 2]; 2]], input: f32) -> f32 {
+pub fn sample_bezier_response(
+    points: &[[f32; 2]],
+    controls: &[[[f32; 2]; 2]],
+    input: f32,
+) -> f32 {
     let input = if input.is_finite() { input } else { 1. };
     if input <= points[0][0] {
         return points[0][1];
@@ -222,7 +228,8 @@ pub fn sample_response(points: &[[f32; 2]], x: f32) -> f32 {
 mod tests {
     use super::*;
     #[test]
-    fn bezier_handles_preserve_legacy_shape_and_change_bending_without_moving_anchors() {
+    fn bezier_handles_preserve_legacy_shape_and_change_bending_without_moving_anchors()
+     {
         for points in [
             vec![[0., 0.], [1., 1.]],
             vec![[0., 0.], [0.17, 0.9], [0.62, 0.1], [1., 1.]],
@@ -236,7 +243,10 @@ mod tests {
             for step in 0..=1000 {
                 let input = step as f32 / 1000.;
                 assert!(
-                    (curve.sample(input) - sample_response(&curve.points, input)).abs() < 0.00002
+                    (curve.sample(input)
+                        - sample_response(&curve.points, input))
+                    .abs()
+                        < 0.00002
                 );
             }
         }
@@ -275,15 +285,13 @@ mod tests {
         assert!((controls[1][0][0] - before[0] - 0.05).abs() < 0.00001);
         assert_eq!(controls[2], unaffected);
         assert!(
-            ResponseCurve {
-                points: moved,
-                controls: Some(controls)
-            }
-            .validate()
+            ResponseCurve { points: moved, controls: Some(controls) }
+                .validate()
         );
     }
     #[test]
-    fn arbitrary_inputs_and_falling_outputs_are_valid_but_bad_coordinates_are_not() {
+    fn arbitrary_inputs_and_falling_outputs_are_valid_but_bad_coordinates_are_not()
+     {
         let curve = ResponseCurve {
             points: vec![[0., 0.2], [0.17, 0.9], [0.62, 0.1], [1., 0.7]],
             controls: None,
@@ -300,22 +308,11 @@ mod tests {
             vec![[0., f32::NAN], [1., 1.]],
             vec![[0., 0.], [1., 1.1]],
         ] {
-            assert!(
-                !ResponseCurve {
-                    points,
-                    controls: None
-                }
-                .validate()
-            );
+            assert!(!ResponseCurve { points, controls: None }.validate());
         }
-        let points: Vec<_> = (0..=16).map(|index| [index as f32 / 16., 0.5]).collect();
-        assert!(
-            !ResponseCurve {
-                points,
-                controls: None
-            }
-            .validate()
-        );
+        let points: Vec<_> =
+            (0..=16).map(|index| [index as f32 / 16., 0.5]).collect();
+        assert!(!ResponseCurve { points, controls: None }.validate());
         let legacy: ResponseCurve = [0., 0.1, 0.4, 0.9, 1.].into();
         assert!(legacy.validate());
         assert_eq!(legacy.points[2], [0.5, 0.4]);
@@ -333,7 +330,8 @@ mod tests {
             for pair in points.windows(2) {
                 let mut last = pair[0][1];
                 for k in 0..=100 {
-                    let x = pair[0][0] + (pair[1][0] - pair[0][0]) * k as f32 / 100.;
+                    let x = pair[0][0]
+                        + (pair[1][0] - pair[0][0]) * k as f32 / 100.;
                     let y = sample_response(&points, x);
                     assert!(
                         y >= pair[0][1].min(pair[1][1]) - 1e-6
@@ -347,12 +345,18 @@ mod tests {
         let points = [[0., 0.], [0.3, 0.1], [0.7, 0.8], [1., 1.]];
         assert!((sample_response(&points, 0.15) - 0.05).abs() > 0.005);
         let e = 0.0001;
-        let left = (sample_response(&points, 0.3) - sample_response(&points, 0.3 - e)) / e;
-        let right = (sample_response(&points, 0.3 + e) - sample_response(&points, 0.3)) / e;
+        let left = (sample_response(&points, 0.3)
+            - sample_response(&points, 0.3 - e))
+            / e;
+        let right = (sample_response(&points, 0.3 + e)
+            - sample_response(&points, 0.3))
+            / e;
         assert!((left - right).abs() < 0.01);
         for i in 0..=100 {
             let x = i as f32 / 100.;
-            assert!((sample_response(&[[0., 0.], [1., 1.]], x) - x).abs() < 1e-6);
+            assert!(
+                (sample_response(&[[0., 0.], [1., 1.]], x) - x).abs() < 1e-6
+            );
         }
     }
     #[test]

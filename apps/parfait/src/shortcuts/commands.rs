@@ -1,4 +1,7 @@
-use crate::{app::Parfait, brushes::BrushGroup, display::ViewCommand, widgets, workspace::Palette};
+use crate::{
+    app::Parfait, brushes::BrushGroup, display::ViewCommand, widgets,
+    workspace::Palette,
+};
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
@@ -335,7 +338,9 @@ impl Command {
 
     pub fn category(self) -> Category {
         match self {
-            Self::SelectAll | Self::Deselect | Self::InvertSelection => Category::Edit,
+            Self::SelectAll | Self::Deselect | Self::InvertSelection => {
+                Category::Edit
+            }
             Self::LayerSelectionCreate
             | Self::LayerSelectionAdd
             | Self::LayerSelectionSubtract
@@ -406,7 +411,9 @@ impl Command {
             | Self::ToolBlend
             | Self::ToolHand
             | Self::ToolPicker => Category::Tools,
-            Self::BrushSmaller | Self::BrushLarger | Self::SubToolDetail => Category::Options,
+            Self::BrushSmaller | Self::BrushLarger | Self::SubToolDetail => {
+                Category::Options
+            }
             Self::ShortcutGuide | Self::Notices => Category::Help,
             _ => Category::View,
         }
@@ -420,8 +427,12 @@ impl Command {
         color: [u8; 3],
     ) -> Option<parfait_core::RasterConversion> {
         Some(match self {
-            Self::ConvertToDrawingColor => parfait_core::RasterConversion::DrawingColor(color),
-            Self::BrightnessToOpacity => parfait_core::RasterConversion::BrightnessToOpacity,
+            Self::ConvertToDrawingColor => {
+                parfait_core::RasterConversion::DrawingColor(color)
+            }
+            Self::BrightnessToOpacity => {
+                parfait_core::RasterConversion::BrightnessToOpacity
+            }
             _ => return None,
         })
     }
@@ -475,7 +486,10 @@ impl Command {
         self.is_tool()
             || matches!(
                 self,
-                Self::BrushSmaller | Self::BrushLarger | Self::HidePalettes | Self::ShortcutGuide
+                Self::BrushSmaller
+                    | Self::BrushLarger
+                    | Self::HidePalettes
+                    | Self::ShortcutGuide
             )
     }
     pub fn repeatable(self) -> bool {
@@ -514,7 +528,9 @@ impl Parfait {
             return;
         }
         match command {
-            command if command.is_pixel_selection() => self.execute_pixel_selection(command),
+            command if command.is_pixel_selection() => {
+                self.execute_pixel_selection(command)
+            }
             Command::NewDrawing => self.confirm_new = true,
             Command::OpenProject => self.open_project(),
             Command::SaveProject => self.save_project(false),
@@ -552,18 +568,24 @@ impl Parfait {
             | Command::LayerAlphaLock
             | Command::LayerReference
             | Command::LayerDraft
-            | Command::LayerClipping => self.execute_selected_layer_command(command),
+            | Command::LayerClipping => {
+                self.execute_selected_layer_command(command)
+            }
             Command::LayerDetails => self.open_layer_details(),
             Command::NewLayerFolder
             | Command::GroupLayersInFolder
-            | Command::UngroupLayerFolder => self.execute_folder_command(command),
+            | Command::UngroupLayerFolder => {
+                self.execute_folder_command(command)
+            }
             Command::RenameLayer
             | Command::MoveActiveLayerUp
             | Command::MoveActiveLayerDown
             | Command::MoveActiveLayerToTop
             | Command::MoveActiveLayerToBottom
             | Command::SelectLayerAbove
-            | Command::SelectLayerBelow => self.execute_layer_organization(command),
+            | Command::SelectLayerBelow => {
+                self.execute_layer_organization(command)
+            }
             Command::TransferLayerDown
             | Command::MergeLayerDown
             | Command::MergeSelectedLayers
@@ -579,12 +601,22 @@ impl Parfait {
             Command::ResetDisplay => self.view_command(ViewCommand::Reset),
             Command::RotateLeft => self.view_command(ViewCommand::RotateLeft),
             Command::RotateRight => self.view_command(ViewCommand::RotateRight),
-            Command::ResetRotation => self.view_command(ViewCommand::ResetRotation),
-            Command::ResetOrientation => self.view_command(ViewCommand::ResetOrientation),
-            Command::FlipHorizontal => self.view_command(ViewCommand::FlipHorizontal),
-            Command::FlipVertical => self.view_command(ViewCommand::FlipVertical),
+            Command::ResetRotation => {
+                self.view_command(ViewCommand::ResetRotation)
+            }
+            Command::ResetOrientation => {
+                self.view_command(ViewCommand::ResetOrientation)
+            }
+            Command::FlipHorizontal => {
+                self.view_command(ViewCommand::FlipHorizontal)
+            }
+            Command::FlipVertical => {
+                self.view_command(ViewCommand::FlipVertical)
+            }
             Command::RulerBar => self.display.rulers = !self.display.rulers,
-            Command::PixelGrid => self.display.pixel_grid = !self.display.pixel_grid,
+            Command::PixelGrid => {
+                self.display.pixel_grid = !self.display.pixel_grid
+            }
             Command::DisplaySettings => self.show_display_settings = true,
             Command::ShortcutSettings => self.open_shortcut_settings(),
             Command::HidePalettes => self.hide_panels = !self.hide_panels,
@@ -592,20 +624,28 @@ impl Parfait {
                 self.workspace = Default::default();
                 ctx.data_mut(|data| {
                     for dock in ["dock_left", "dock_right"] {
-                        data.remove::<egui::containers::panel::PanelState>(egui::Id::new(dock));
+                        data.remove::<egui::containers::panel::PanelState>(
+                            egui::Id::new(dock),
+                        );
                     }
                 });
             }
             Command::ToolInk => self.select_brush_group(BrushGroup::Ink),
             Command::ToolSketch => self.select_brush_group(BrushGroup::Sketch),
             Command::ToolPaint => self.select_brush_group(BrushGroup::Paint),
-            Command::ToolAirbrush => self.select_brush_group(BrushGroup::Airbrush),
+            Command::ToolAirbrush => {
+                self.select_brush_group(BrushGroup::Airbrush)
+            }
             Command::ToolEraser => self.select_brush_group(BrushGroup::Eraser),
             Command::ToolBlend => self.select_brush_group(BrushGroup::Blend),
             Command::ToolHand => self.navigation_tool = 1,
             Command::ToolPicker => self.navigation_tool = 2,
-            Command::BrushSmaller => self.brush.size = (self.brush.size / 1.2).max(1.),
-            Command::BrushLarger => self.brush.size = (self.brush.size * 1.2).min(512.),
+            Command::BrushSmaller => {
+                self.brush.size = (self.brush.size / 1.2).max(1.)
+            }
+            Command::BrushLarger => {
+                self.brush.size = (self.brush.size * 1.2).min(512.)
+            }
             Command::SubToolDetail => self.brush_details.open = true,
             Command::ShortcutGuide => self.show_help = true,
             Command::Notices => self.show_licenses = true,
@@ -657,7 +697,10 @@ impl Parfait {
             .inner;
         #[cfg(test)]
         ui.data_mut(|data| {
-            data.insert_temp(egui::Id::new(("menu_item", command.label())), response.rect)
+            data.insert_temp(
+                egui::Id::new(("menu_item", command.label())),
+                response.rect,
+            )
         });
         if response.clicked() {
             self.execute_command(command, ui.ctx());
@@ -670,7 +713,12 @@ impl Parfait {
         }
     }
 
-    pub fn command_toggle(&mut self, ui: &mut egui::Ui, command: Command, selected: bool) {
+    pub fn command_toggle(
+        &mut self,
+        ui: &mut egui::Ui,
+        command: Command,
+        selected: bool,
+    ) {
         self.command_toggle_named(ui, command, selected, command.label());
     }
 
@@ -684,12 +732,20 @@ impl Parfait {
         let reason = self.command_disabled_reason(command);
         let response = ui
             .add_enabled_ui(reason.is_none(), |ui| {
-                widgets::menu_toggle(ui, label, self.keymap.hint(command), selected)
+                widgets::menu_toggle(
+                    ui,
+                    label,
+                    self.keymap.hint(command),
+                    selected,
+                )
             })
             .inner;
         #[cfg(test)]
         ui.data_mut(|data| {
-            data.insert_temp(egui::Id::new(("command_toggle", command)), response.rect)
+            data.insert_temp(
+                egui::Id::new(("command_toggle", command)),
+                response.rect,
+            )
         });
         if response.clicked() {
             self.execute_command(command, ui.ctx());
@@ -701,7 +757,12 @@ impl Parfait {
         }
     }
 
-    pub fn command_icon(&mut self, ui: &mut egui::Ui, icon: widgets::Icon, command: Command) {
+    pub fn command_icon(
+        &mut self,
+        ui: &mut egui::Ui,
+        icon: widgets::Icon,
+        command: Command,
+    ) {
         let reason = self.command_disabled_reason(command);
         let response = ui
             .add_enabled_ui(reason.is_none(), |ui| {

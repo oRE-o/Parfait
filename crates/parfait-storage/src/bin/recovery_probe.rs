@@ -12,11 +12,7 @@ fn main() -> anyhow::Result<()> {
     Stroke::begin(
         &mut doc,
         Brush::default(),
-        Point {
-            x: 32.,
-            y: 32.,
-            pressure: 1.,
-        },
+        Point { x: 32., y: 32., pressure: 1. },
     );
     doc.layers[1].blend_mode = parfait_core::BlendMode::Multiply;
     doc.layers[1].reference = true;
@@ -33,7 +29,10 @@ fn main() -> anyhow::Result<()> {
     } else {
         doc.add_layer();
         doc.layers[1].mask.as_mut().unwrap().coverage =
-            parfait_core::MaskCoverage::Dense(std::sync::Arc::new(vec![127; 64 * 64]));
+            parfait_core::MaskCoverage::Dense(std::sync::Arc::new(vec![
+                127;
+                64 * 64
+            ]));
         doc.touch();
         store.save(&doc)?;
         std::fs::write(ready, "committed")?;

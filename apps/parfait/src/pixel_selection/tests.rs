@@ -23,8 +23,7 @@ fn readonly_selection_keeps_layer_checks_undo_redo_and_noop_identity() {
     let context = egui::Context::default();
     let original = app.doc.clone();
     assert!(
-        app.command_disabled_reason(Command::LayerSelectionCreate)
-            .is_none()
+        app.command_disabled_reason(Command::LayerSelectionCreate).is_none()
     );
     app.execute_command(Command::LayerSelectionCreate, &context);
     assert!(app.doc.selection.is_some());
@@ -54,7 +53,8 @@ fn readonly_selection_keeps_layer_checks_undo_redo_and_noop_identity() {
 }
 
 #[test]
-fn empty_derivation_clears_prior_selection_and_masks_without_selection_are_usable() {
+fn empty_derivation_clears_prior_selection_and_masks_without_selection_are_usable()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = Document::new(8, 4);
@@ -80,10 +80,9 @@ fn empty_derivation_clears_prior_selection_and_masks_without_selection_are_usabl
     app.undo();
     assert_eq!(app.doc.selection, Some(MaskCoverage::Uniform(255)));
     app.execute_command(Command::Deselect, &context);
-    for command in [
-        Command::LayerMaskOutsideSelection,
-        Command::LayerMaskSelection,
-    ] {
+    for command in
+        [Command::LayerMaskOutsideSelection, Command::LayerMaskSelection]
+    {
         let original = app.doc.clone();
         app.execute_command(command, &context);
         assert_eq!(
@@ -100,16 +99,16 @@ fn empty_derivation_clears_prior_selection_and_masks_without_selection_are_usabl
 }
 
 #[test]
-fn selection_masks_use_fractional_coverage_and_locked_targets_refuse_atomically() {
+fn selection_masks_use_fractional_coverage_and_locked_targets_refuse_atomically()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = drawing();
     let context = egui::Context::default();
     app.execute_command(Command::LayerSelectionCreate, &context);
-    for command in [
-        Command::LayerMaskOutsideSelection,
-        Command::LayerMaskSelection,
-    ] {
+    for command in
+        [Command::LayerMaskOutsideSelection, Command::LayerMaskSelection]
+    {
         let original = app.doc.clone();
         app.execute_command(command, &context);
         let coverage = &app.doc.layers[1].mask.as_ref().unwrap().coverage;
@@ -153,8 +152,10 @@ fn shortcuts_are_fresh_defaults_and_old_keymaps_are_not_injected() {
         .unwrap();
     app.persist_preferences(true);
     let path = directory.path().join("preferences.sqlite");
-    let mut legacy: serde_json::Value =
-        serde_json::from_str(&parfait_storage::load_preferences(&path).unwrap().unwrap()).unwrap();
+    let mut legacy: serde_json::Value = serde_json::from_str(
+        &parfait_storage::load_preferences(&path).unwrap().unwrap(),
+    )
+    .unwrap();
     legacy["version"] = 20.into();
     parfait_storage::save_preferences(&path, &legacy.to_string()).unwrap();
     let keys = app.keymap.clone();
@@ -169,7 +170,8 @@ fn shortcuts_are_fresh_defaults_and_old_keymaps_are_not_injected() {
 }
 
 #[test]
-fn checked_sources_and_folders_are_readonly_but_masks_require_one_unlocked_target() {
+fn checked_sources_and_folders_are_readonly_but_masks_require_one_unlocked_target()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = drawing();
@@ -183,18 +185,15 @@ fn checked_sources_and_folders_are_readonly_but_masks_require_one_unlocked_targe
     assert_eq!(app.doc.layers, original);
     assert_eq!(app.doc.selection_value(0), 160);
     assert_eq!(app.doc.selection_value(7), 64);
-    for command in [
-        Command::LayerMaskOutsideSelection,
-        Command::LayerMaskSelection,
-    ] {
+    for command in
+        [Command::LayerMaskOutsideSelection, Command::LayerMaskSelection]
+    {
         let before = app.doc.clone();
         assert!(app.command_disabled_reason(command).is_some());
         app.execute_command(command, &context);
         assert!(app.doc.same_edit_state(&before));
     }
-    app.doc
-        .group_layers_in_folder(6, "Source folder".into())
-        .unwrap();
+    app.doc.group_layers_in_folder(6, "Source folder".into()).unwrap();
     app.doc.layers[3].locked = true;
     app.doc.layers[3].visible = false;
     app.set_layer_selection(8, 3);
@@ -212,7 +211,8 @@ fn checked_sources_and_folders_are_readonly_but_masks_require_one_unlocked_targe
 }
 
 #[test]
-fn every_selection_command_refuses_owned_layout_and_modal_edits_without_history_changes() {
+fn every_selection_command_refuses_owned_layout_and_modal_edits_without_history_changes()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = drawing();
@@ -227,9 +227,8 @@ fn every_selection_command_refuses_owned_layout_and_modal_edits_without_history_
         }
         let before = app.doc.clone();
         let rows = app.history.rows().count();
-        for &command in Command::ALL
-            .iter()
-            .filter(|command| command.is_pixel_selection())
+        for &command in
+            Command::ALL.iter().filter(|command| command.is_pixel_selection())
         {
             assert!(app.command_disabled_reason(command).is_some());
             app.execute_command(command, &context);
@@ -244,14 +243,15 @@ fn every_selection_command_refuses_owned_layout_and_modal_edits_without_history_
 
 #[test]
 fn command_results_reopen_with_exact_layers_masks_and_selection() {
-    for &command in Command::ALL
-        .iter()
-        .filter(|command| command.is_pixel_selection())
+    for &command in
+        Command::ALL.iter().filter(|command| command.is_pixel_selection())
     {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
         app.doc = drawing();
-        if command != Command::SelectAll && command != Command::LayerSelectionCreate {
+        if command != Command::SelectAll
+            && command != Command::LayerSelectionCreate
+        {
             app.doc.set_selection(Some(MaskCoverage::Uniform(64)));
         }
         app.execute_command(command, &egui::Context::default());

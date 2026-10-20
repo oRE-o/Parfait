@@ -5,10 +5,8 @@ fn fixture(directory: &std::path::Path) -> Parfait {
     let mut app = Parfait::open(directory.to_owned()).unwrap();
     app.doc = Document::new(8, 8);
     app.doc.layers[1].opacity = 0.33333334;
-    app.doc.layers[1].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(128),
-    });
+    app.doc.layers[1].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(128) });
     app
 }
 
@@ -42,9 +40,8 @@ fn key(key: egui::Key) -> egui::Event {
 }
 
 fn click(app: &mut Parfait, context: &egui::Context, name: &str) {
-    let target: egui::Rect = context
-        .data(|data| data.get_temp(egui::Id::new(name)))
-        .unwrap();
+    let target: egui::Rect =
+        context.data(|data| data.get_temp(egui::Id::new(name))).unwrap();
     for pressed in [true, false] {
         frame(
             app,
@@ -87,7 +84,9 @@ fn draft_settings_apply_once_preserve_content_and_reopen() {
     assert!(!app.dialog_open());
     let layer = &app.doc.layers[1];
     assert_eq!(layer.name, "한글 이름");
-    assert!(layer.reference && layer.draft && layer.locked && layer.alpha_locked);
+    assert!(
+        layer.reference && layer.draft && layer.locked && layer.alpha_locked
+    );
     assert_eq!(layer.opacity, 0.42);
     assert_eq!(layer.blend_mode, BlendMode::Multiply);
     assert_eq!(layer.mask, before.layers[1].mask);
@@ -206,7 +205,10 @@ fn invalid_names_and_minimum_size_keep_actions_visible() {
         .unwrap();
     assert!(modal.contains_rect(accept));
     assert!(
-        modal.left() >= 0. && modal.right() <= 960. && modal.top() >= 0. && modal.bottom() <= 640.
+        modal.left() >= 0.
+            && modal.right() <= 960.
+            && modal.top() >= 0.
+            && modal.bottom() <= 640.
     );
 }
 
@@ -216,8 +218,7 @@ fn flags_are_independent_of_locks_and_recovery_does_not_clear_file_marker() {
     let mut app = fixture(directory.path());
     let context = egui::Context::default();
     app.doc.layers[1].locked = true;
-    app.save_project_to(directory.path().join("flags.parfait"))
-        .unwrap();
+    app.save_project_to(directory.path().join("flags.parfait")).unwrap();
     let before = app.doc.clone();
     app.execute_command(Command::LayerReference, &context);
     app.execute_command(Command::LayerDraft, &context);

@@ -1,9 +1,17 @@
 use super::*;
 
-fn frame(cache: &mut BoundaryCache, document: &Document, view: &View, context: &egui::Context) {
+fn frame(
+    cache: &mut BoundaryCache,
+    document: &Document,
+    view: &View,
+    context: &egui::Context,
+) {
     let mut output = context.run_ui(
         egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(800., 600.))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(800., 600.),
+            )),
             ..Default::default()
         },
         |ui| {
@@ -11,7 +19,10 @@ fn frame(cache: &mut BoundaryCache, document: &Document, view: &View, context: &
                 ui,
                 document,
                 view,
-                Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(760., 560.)),
+                Rect::from_min_size(
+                    egui::pos2(20., 20.),
+                    egui::vec2(760., 560.),
+                ),
             );
         },
     );
@@ -49,14 +60,12 @@ fn holes_are_outlined_and_meshes_survive_unrelated_pixel_edits() {
         .map(|vertex| view.document(vertex.pos, rect, egui::vec2(32., 32.)))
         .collect();
     assert!(
-        points
-            .iter()
-            .any(|point| (point.x - 12.).abs() < 0.2 && (12.2..19.8).contains(&point.y))
+        points.iter().any(|point| (point.x - 12.).abs() < 0.2
+            && (12.2..19.8).contains(&point.y))
     );
     assert!(
-        points
-            .iter()
-            .any(|point| (point.x - 4.).abs() < 0.2 && (4.2..27.8).contains(&point.y))
+        points.iter().any(|point| (point.x - 4.).abs() < 0.2
+            && (4.2..27.8).contains(&point.y))
     );
     assert!(cache.meshes[0].vertices.len() <= MAX_QUADS * 4);
     let meshes = cache.meshes.clone();
@@ -66,10 +75,8 @@ fn holes_are_outlined_and_meshes_survive_unrelated_pixel_edits() {
     assert_eq!(cache.rebuilds, 1);
     assert!(Arc::ptr_eq(&cache.meshes[0], &meshes[0]));
     assert!(Arc::ptr_eq(&cache.meshes[1], &meshes[1]));
-    for (first, second) in cache.meshes[0]
-        .vertices
-        .iter()
-        .zip(&cache.meshes[1].vertices)
+    for (first, second) in
+        cache.meshes[0].vertices.iter().zip(&cache.meshes[1].vertices)
     {
         assert_eq!(first.pos, second.pos);
         assert_ne!(first.color, second.color);
@@ -89,7 +96,9 @@ fn pan_rotate_flip_and_selection_replacement_invalidate_geometry_only() {
     frame(&mut cache, &document, &view, &context);
     assert_eq!(cache.rebuilds, 2);
     assert_eq!(original.vertices.len(), cache.meshes[0].vertices.len());
-    for (before, after) in original.vertices.iter().zip(&cache.meshes[0].vertices) {
+    for (before, after) in
+        original.vertices.iter().zip(&cache.meshes[0].vertices)
+    {
         assert!((before.pos + view.pan).distance(after.pos) < 0.001);
     }
     view.angle = 0.7;
@@ -108,13 +117,11 @@ fn checker_is_bounded_and_low_coverage_or_invalid_views_do_not_loop() {
     let mut document = Document::new(256, 256);
     document.set_selection(Some(MaskCoverage::Dense(Arc::new(
         (0..256 * 256)
-            .map(|index| {
-                if (index % 256 + index / 256) % 2 == 0 {
-                    255
-                } else {
-                    0
-                }
-            })
+            .map(
+                |index| {
+                    if (index % 256 + index / 256) % 2 == 0 { 255 } else { 0 }
+                },
+            )
             .collect(),
     ))));
     let context = egui::Context::default();
@@ -155,13 +162,9 @@ fn clipped_edges_use_document_coordinates_at_high_zoom_and_large_pan() {
     frame(&mut cache, &document, &view, &context);
     assert!(!cache.meshes[0].vertices.is_empty());
     let viewport = cache.key.unwrap().rect.expand(1.);
-    assert!(
-        cache
-            .meshes
-            .iter()
-            .flat_map(|mesh| &mesh.vertices)
-            .all(|vertex| { vertex.pos.is_finite() && viewport.contains(vertex.pos) })
-    );
+    assert!(cache.meshes.iter().flat_map(|mesh| &mesh.vertices).all(
+        |vertex| { vertex.pos.is_finite() && viewport.contains(vertex.pos) }
+    ));
     view.pan.x = 100000.;
     frame(&mut cache, &document, &view, &context);
     assert!(cache.meshes[0].vertices.is_empty());
@@ -174,7 +177,9 @@ fn clipped_edges_use_document_coordinates_at_high_zoom_and_large_pan() {
 #[ignore]
 fn selection_boundary_release_workload() {
     use std::{hint::black_box, time::Instant};
-    for (size, checker) in [(512, false), (512, true), (2048, false), (2048, true)] {
+    for (size, checker) in
+        [(512, false), (512, true), (2048, false), (2048, true)]
+    {
         let mut document = Document::new(size, size);
         document.set_selection(Some(MaskCoverage::Dense(Arc::new(
             (0..size * size)
@@ -220,7 +225,8 @@ fn selection_boundary_release_workload() {
             .meshes
             .iter()
             .map(|mesh| {
-                mesh.vertices.capacity() * std::mem::size_of::<egui::epaint::Vertex>()
+                mesh.vertices.capacity()
+                    * std::mem::size_of::<egui::epaint::Vertex>()
                     + mesh.indices.capacity() * std::mem::size_of::<u32>()
             })
             .sum();

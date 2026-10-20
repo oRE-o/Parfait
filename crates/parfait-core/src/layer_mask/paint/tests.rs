@@ -2,11 +2,7 @@ use super::*;
 use crate::{BrushTip, History, Stroke};
 
 fn point() -> Point {
-    Point {
-        x: 16.5,
-        y: 16.5,
-        pressure: 1.,
-    }
+    Point { x: 16.5, y: 16.5, pressure: 1. }
 }
 
 fn document(coverage: u8) -> Document {
@@ -16,21 +12,11 @@ fn document(coverage: u8) -> Document {
 }
 
 fn brush() -> Brush {
-    Brush {
-        size: 8.,
-        pressure: false,
-        smoothing: 0.,
-        ..Default::default()
-    }
+    Brush { size: 8., pressure: false, smoothing: 0., ..Default::default() }
 }
 
 fn center(document: &Document) -> u8 {
-    document.layers[1]
-        .mask
-        .as_ref()
-        .unwrap()
-        .coverage
-        .value(16 * 64 + 16)
+    document.layers[1].mask.as_ref().unwrap().coverage.value(16 * 64 + 16)
 }
 
 #[test]
@@ -40,30 +26,27 @@ fn scalar_deposition_is_color_independent_and_never_writes_content() {
             for opacity in [0., 0.1, 0.5, 1.] {
                 let mut document = document(initial);
                 let before = document.clone();
-                let options = Brush {
-                    opacity,
-                    erase,
-                    ..brush()
-                };
+                let options = Brush { opacity, erase, ..brush() };
                 let mut alternate = document.clone();
-                Stroke::begin_mask(&mut document, options.clone(), point()).unwrap();
+                Stroke::begin_mask(&mut document, options.clone(), point())
+                    .unwrap();
                 Stroke::begin_mask(
                     &mut alternate,
-                    Brush {
-                        color: [255, 255, 255],
-                        ..options
-                    },
+                    Brush { color: [255, 255, 255], ..options },
                     point(),
                 )
                 .unwrap();
                 let expected = if erase {
                     (f32::from(initial) * (1. - opacity)).round() as u8
                 } else {
-                    (f32::from(initial) + f32::from(255 - initial) * opacity).round() as u8
+                    (f32::from(initial) + f32::from(255 - initial) * opacity)
+                        .round() as u8
                 };
                 assert_eq!(center(&document), expected);
                 assert_eq!(document.layers, alternate.layers);
-                for (current, previous) in document.layers.iter().zip(&before.layers) {
+                for (current, previous) in
+                    document.layers.iter().zip(&before.layers)
+                {
                     assert!(Arc::ptr_eq(&current.pixels, &previous.pixels));
                 }
                 if expected == initial {
@@ -79,7 +62,8 @@ fn scalar_deposition_is_color_independent_and_never_writes_content() {
 }
 
 #[test]
-fn capped_mask_strokes_share_spacing_pressure_spray_and_independent_baselines() {
+fn capped_mask_strokes_share_spacing_pressure_spray_and_independent_baselines()
+{
     for erase in [false, true] {
         let initial = if erase { 255 } else { 0 };
         let mut document = document(initial);
@@ -93,17 +77,23 @@ fn capped_mask_strokes_share_spacing_pressure_spray_and_independent_baselines() 
             spray_rate: 120.,
             ..brush()
         };
-        let mut stroke = Stroke::begin_mask(&mut document, options.clone(), point()).unwrap();
+        let mut stroke =
+            Stroke::begin_mask(&mut document, options.clone(), point())
+                .unwrap();
         assert_eq!(center(&document), if erase { 230 } else { 26 });
         for _ in 0..40 {
             stroke.spray(&mut document, 0.1, 1.);
         }
         assert_eq!(center(&document), if erase { 153 } else { 102 });
-        assert!(stroke.scratch_capacity_bytes() <= 16_384 + std::mem::size_of::<usize>());
+        assert!(
+            stroke.scratch_capacity_bytes()
+                <= 16_384 + std::mem::size_of::<usize>()
+        );
         let revision = document.revision;
         stroke.spray(&mut document, 0.1, 1.);
         assert_eq!(document.revision, revision);
-        let mut stroke = Stroke::begin_mask(&mut document, options, point()).unwrap();
+        let mut stroke =
+            Stroke::begin_mask(&mut document, options, point()).unwrap();
         for _ in 0..40 {
             stroke.spray(&mut document, 0.1, 1.);
         }
@@ -111,28 +101,15 @@ fn capped_mask_strokes_share_spacing_pressure_spray_and_independent_baselines() 
     }
     let mut low = document(0);
     let mut high = low.clone();
-    let options = Brush {
-        pressure_opacity: true,
-        ..brush()
-    };
+    let options = Brush { pressure_opacity: true, ..brush() };
     Stroke::begin_mask(
         &mut low,
         options.clone(),
-        Point {
-            pressure: 0.1,
-            ..point()
-        },
+        Point { pressure: 0.1, ..point() },
     )
     .unwrap();
-    Stroke::begin_mask(
-        &mut high,
-        options,
-        Point {
-            pressure: 0.8,
-            ..point()
-        },
-    )
-    .unwrap();
+    Stroke::begin_mask(&mut high, options, Point { pressure: 0.8, ..point() })
+        .unwrap();
     assert!(center(&high) > center(&low));
 }
 
@@ -149,10 +126,7 @@ fn mask_strokes_keep_noop_dense_identity_and_history_future() {
             history.commit(&document);
             history.undo(&mut document);
             let before = document.clone();
-            let mut options = Brush {
-                opacity_mode: mode,
-                ..brush()
-            };
+            let mut options = Brush { opacity_mode: mode, ..brush() };
             let mut location = point();
             match case {
                 0 => options.opacity = 0.,
@@ -170,7 +144,8 @@ fn mask_strokes_keep_noop_dense_identity_and_history_future() {
                 }
             }
             history.begin(&document, "Mask");
-            let stroke = Stroke::begin_mask(&mut document, options, location).unwrap();
+            let stroke =
+                Stroke::begin_mask(&mut document, options, location).unwrap();
             assert_eq!(stroke.scratch_capacity_bytes(), 0);
             assert!(!history.commit(&document));
             assert!(history.can_redo());
@@ -209,18 +184,15 @@ fn mask_guards_reject_unsupported_targets_without_touching_content() {
 fn mask_stroke_damage_history_and_region_output_match_full_composition() {
     for mode in [OpacityMode::PerDab, OpacityMode::PerStroke] {
         let mut document = document(255);
-        document.layers[1].pixels = Arc::new([220, 70, 20, 255].repeat(64 * 48));
+        document.layers[1].pixels =
+            Arc::new([220, 70, 20, 255].repeat(64 * 48));
         document.layers[1].clipped = true;
         let before = document.clone();
         let mut history = History::default();
         history.begin(&document, "Mask brush");
         let mut stroke = Stroke::begin_mask(
             &mut document,
-            Brush {
-                erase: true,
-                opacity_mode: mode,
-                ..brush()
-            },
+            Brush { erase: true, opacity_mode: mode, ..brush() },
             point(),
         )
         .unwrap();
@@ -230,7 +202,8 @@ fn mask_stroke_damage_history_and_region_output_match_full_composition() {
         let region = document.composite_region(damage);
         for row in damage.y0..damage.y1 {
             let start = ((row * document.width + damage.x0) * 4) as usize;
-            let local = ((row - damage.y0) * (damage.x1 - damage.x0) * 4) as usize;
+            let local =
+                ((row - damage.y0) * (damage.x1 - damage.x0) * 4) as usize;
             assert_eq!(
                 &region[local..local + (damage.x1 - damage.x0) as usize * 4],
                 &full[start..start + (damage.x1 - damage.x0) as usize * 4]
@@ -255,11 +228,7 @@ fn split_mask_input_retains_dab_positions_and_dense_snapshot_independence() {
         let mut document = document(0);
         let mut stroke = Stroke::begin_mask(
             &mut document,
-            Brush {
-                flow: 0.3,
-                spacing: 0.25,
-                ..brush()
-            },
+            Brush { flow: 0.3, spacing: 0.25, ..brush() },
             point(),
         )
         .unwrap();
@@ -279,18 +248,8 @@ fn split_mask_input_retains_dab_positions_and_dense_snapshot_independence() {
         assert_eq!(single.layers, render(pieces).layers);
     }
     let before = single.clone();
-    Stroke::begin_mask(
-        &mut single,
-        Brush {
-            erase: true,
-            ..brush()
-        },
-        point(),
-    )
-    .unwrap();
+    Stroke::begin_mask(&mut single, Brush { erase: true, ..brush() }, point())
+        .unwrap();
     assert_ne!(single.layers[1].mask, before.layers[1].mask);
-    assert!(Arc::ptr_eq(
-        &single.layers[1].pixels,
-        &before.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&single.layers[1].pixels, &before.layers[1].pixels));
 }

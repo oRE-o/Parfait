@@ -58,7 +58,9 @@ pub struct Layer {
     pub parent: Option<LayerId>,
 }
 
-#[derive(Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
+#[derive(
+    Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug,
+)]
 #[serde(transparent)]
 pub struct LayerId(pub u64);
 
@@ -98,7 +100,11 @@ impl Document {
                     clipped: false,
                     opacity: 1.,
                     blend_mode: BlendMode::Normal,
-                    pixels: Arc::new(if paper { Vec::new() } else { vec![255; len] }),
+                    pixels: Arc::new(if paper {
+                        Vec::new()
+                    } else {
+                        vec![255; len]
+                    }),
                     mask: None,
                     reference: false,
                     draft: false,
@@ -140,15 +146,12 @@ impl Document {
             && self.layers.len() <= 64
             && self.active < self.layers.len()
             && self.folder_layout().is_some()
-            && self
-                .selection
-                .as_ref()
-                .is_none_or(|coverage| match coverage {
-                    crate::MaskCoverage::Uniform(_) => true,
-                    crate::MaskCoverage::Dense(values) => {
-                        values.len() == self.width as usize * self.height as usize
-                    }
-                })
+            && self.selection.as_ref().is_none_or(|coverage| match coverage {
+                crate::MaskCoverage::Uniform(_) => true,
+                crate::MaskCoverage::Dense(values) => {
+                    values.len() == self.width as usize * self.height as usize
+                }
+            })
             && self.layers.iter().enumerate().all(|(index, layer)| {
                 layer.id.0 > 0
                     && layer.id.0 < self.next_layer_id
@@ -161,11 +164,18 @@ impl Document {
                 (match l.kind {
                     crate::LayerKind::Raster => {
                         l.blend_mode != BlendMode::Through
-                            && l.pixels.len() == self.width as usize * self.height as usize * 4
+                            && l.pixels.len()
+                                == self.width as usize
+                                    * self.height as usize
+                                    * 4
                     }
-                    crate::LayerKind::Folder => l.pixels.is_empty() && !l.alpha_locked,
+                    crate::LayerKind::Folder => {
+                        l.pixels.is_empty() && !l.alpha_locked
+                    }
                     crate::LayerKind::Fill(_) => {
-                        l.pixels.is_empty() && !l.alpha_locked && l.blend_mode != BlendMode::Through
+                        l.pixels.is_empty()
+                            && !l.alpha_locked
+                            && l.blend_mode != BlendMode::Through
                     }
                     crate::LayerKind::Paper(_) => {
                         index == 0
@@ -182,7 +192,8 @@ impl Document {
                 }) && l.mask.as_ref().is_none_or(|mask| match &mask.coverage {
                     crate::MaskCoverage::Uniform(_) => true,
                     crate::MaskCoverage::Dense(values) => {
-                        values.len() == self.width as usize * self.height as usize
+                        values.len()
+                            == self.width as usize * self.height as usize
                     }
                 }) && l.opacity.is_finite()
                     && (0.0..=1.0).contains(&l.opacity)
@@ -197,15 +208,14 @@ impl Document {
             && self.name == other.name
             && match (&self.selection, &other.selection) {
                 (None, None) => true,
-                (Some(current), Some(previous)) => current.same_edit_state(previous),
+                (Some(current), Some(previous)) => {
+                    current.same_edit_state(previous)
+                }
                 _ => false,
             }
             && self.layers.len() == other.layers.len()
-            && self
-                .layers
-                .iter()
-                .zip(&other.layers)
-                .all(|(current, previous)| {
+            && self.layers.iter().zip(&other.layers).all(
+                |(current, previous)| {
                     current.id == previous.id
                         && current.kind == previous.kind
                         && current.parent == previous.parent
@@ -222,12 +232,15 @@ impl Document {
                             (None, None) => true,
                             (Some(current), Some(previous)) => {
                                 current.enabled == previous.enabled
-                                    && current.coverage.same_edit_state(&previous.coverage)
+                                    && current
+                                        .coverage
+                                        .same_edit_state(&previous.coverage)
                             }
                             _ => false,
                         }
                         && Arc::ptr_eq(&current.pixels, &previous.pixels)
-                })
+                },
+            )
     }
     pub fn layer_at(&self, column: u32, row: u32) -> Option<usize> {
         if column >= self.width || row >= self.height {
@@ -237,21 +250,17 @@ impl Document {
             return self.folder_layer_at(column, row);
         }
         let alpha = ((row * self.width + column) * 4 + 3) as usize;
-        self.layers
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(index, layer)| {
-                let base = self.clipping_base(index)?;
-                let base = &self.layers[base];
-                (layer.visible
-                    && layer.opacity > 0.
-                    && layer.effective_alpha(alpha / 4) > 0
-                    && base.visible
-                    && base.opacity > 0.
-                    && base.effective_alpha(alpha / 4) > 0)
-                    .then_some(index)
-            })
+        self.layers.iter().enumerate().rev().find_map(|(index, layer)| {
+            let base = self.clipping_base(index)?;
+            let base = &self.layers[base];
+            (layer.visible
+                && layer.opacity > 0.
+                && layer.effective_alpha(alpha / 4) > 0
+                && base.visible
+                && base.opacity > 0.
+                && base.effective_alpha(alpha / 4) > 0)
+                .then_some(index)
+        })
     }
     pub fn clipping_base(&self, index: usize) -> Option<usize> {
         if !self.layers.get(index)?.clipped {
@@ -260,16 +269,24 @@ impl Document {
             self.layer_clipping_base_below(index, 0)
         }
     }
-    pub fn layer_clipping_base_below(&self, index: usize, excluded: u64) -> Option<usize> {
+    pub fn layer_clipping_base_below(
+        &self,
+        index: usize,
+        excluded: u64,
+    ) -> Option<usize> {
         let parent = self.layers.get(index)?.parent;
         self.layers[..index]
             .iter()
             .enumerate()
             .rfind(|(below, layer)| {
-                layer.parent == parent && !layer.clipped && excluded & (1 << below) == 0
+                layer.parent == parent
+                    && !layer.clipped
+                    && excluded & (1 << below) == 0
             })
             .map(|(below, _)| below)
-            .filter(|below| self.layers[*below].blend_mode != BlendMode::Through)
+            .filter(|below| {
+                self.layers[*below].blend_mode != BlendMode::Through
+            })
     }
     pub fn add_layer(&mut self) {
         let Some(active) = self.layers.get(self.active) else {
@@ -308,7 +325,12 @@ impl Document {
             }),
             opacity: 1.,
             blend_mode: BlendMode::Normal,
-            pixels: Arc::new(vec![0; self.width as usize * self.height as usize * 4]),
+            pixels: Arc::new(vec![
+                0;
+                self.width as usize
+                    * self.height as usize
+                    * 4
+            ]),
             mask: None,
             reference: false,
             draft: false,
@@ -325,7 +347,8 @@ impl Document {
         self.layers.iter().position(|layer| layer.id == id)
     }
     pub fn can_allocate_layers(&self, count: usize) -> bool {
-        self.next_layer_id > 0 && self.next_layer_id.checked_add(count as u64).is_some()
+        self.next_layer_id > 0
+            && self.next_layer_id.checked_add(count as u64).is_some()
     }
     pub fn allocate_layer_id(&mut self) -> Option<LayerId> {
         let next = self.next_layer_id.checked_add(1)?;
@@ -348,7 +371,11 @@ impl Document {
     pub fn composite_region(&self, rect: PixelRect) -> Vec<u8> {
         self.composite_region_layers(rect, u64::MAX)
     }
-    pub(crate) fn composite_region_layers(&self, rect: PixelRect, mask: u64) -> Vec<u8> {
+    pub(crate) fn composite_region_layers(
+        &self,
+        rect: PixelRect,
+        mask: u64,
+    ) -> Vec<u8> {
         if self.has_non_raster_layers() {
             return self.composite_folder_region(rect, mask);
         }
@@ -359,26 +386,39 @@ impl Document {
             return out;
         }
         let mut clipped_row = Vec::<[u8; 4]>::new();
-        for (index, layer) in self.layers.iter().enumerate().filter(|(index, layer)| {
-            mask & (1 << index) != 0 && !layer.clipped && layer.visible && layer.opacity > 0.
-        }) {
+        for (index, layer) in
+            self.layers.iter().enumerate().filter(|(index, layer)| {
+                mask & (1 << index) != 0
+                    && !layer.clipped
+                    && layer.visible
+                    && layer.opacity > 0.
+            })
+        {
             let end = self.layers[index + 1..]
                 .iter()
                 .position(|layer| !layer.clipped)
                 .map_or(self.layers.len(), |offset| index + 1 + offset);
             let mut clips = [layer; 64];
             let mut clip_count = 0;
-            for (offset, clip) in self.layers[index + 1..end].iter().enumerate() {
-                if mask & (1 << (index + 1 + offset)) != 0 && clip.visible && clip.opacity > 0. {
+            for (offset, clip) in self.layers[index + 1..end].iter().enumerate()
+            {
+                if mask & (1 << (index + 1 + offset)) != 0
+                    && clip.visible
+                    && clip.opacity > 0.
+                {
                     clips[clip_count] = clip;
                     clip_count += 1;
                 }
             }
             if clip_count == 0 {
-                for (row_index, row) in out.chunks_exact_mut(stride).enumerate() {
-                    let start =
-                        ((r.y0 as usize + row_index) * self.width as usize + r.x0 as usize) * 4;
-                    let source_row = layer.pixels[start..start + stride].as_chunks::<4>().0;
+                for (row_index, row) in out.chunks_exact_mut(stride).enumerate()
+                {
+                    let start = ((r.y0 as usize + row_index)
+                        * self.width as usize
+                        + r.x0 as usize)
+                        * 4;
+                    let source_row =
+                        layer.pixels[start..start + stride].as_chunks::<4>().0;
                     match layer
                         .mask
                         .as_ref()
@@ -401,19 +441,27 @@ impl Document {
                                     source_row,
                                     layer.opacity,
                                     layer.blend_mode,
-                                    |_, alpha| crate::layer_mask::masked_alpha(alpha, *coverage),
+                                    |_, alpha| {
+                                        crate::layer_mask::masked_alpha(
+                                            alpha, *coverage,
+                                        )
+                                    },
                                 );
                             }
                         }
                         Some(crate::MaskCoverage::Dense(values)) => {
-                            let mask_row = &values[start / 4..(start + stride) / 4];
+                            let mask_row =
+                                &values[start / 4..(start + stride) / 4];
                             composite_flat_row(
                                 row,
                                 source_row,
                                 layer.opacity,
                                 layer.blend_mode,
                                 |column, alpha| {
-                                    crate::layer_mask::masked_alpha(alpha, mask_row[column])
+                                    crate::layer_mask::masked_alpha(
+                                        alpha,
+                                        mask_row[column],
+                                    )
                                 },
                             );
                         }
@@ -423,7 +471,9 @@ impl Document {
             }
             clipped_row.resize(stride / 4, [0; 4]);
             let clips = &clips[..clip_count];
-            if layer.has_effective_mask() || clips.iter().any(|clip| clip.has_effective_mask()) {
+            if layer.has_effective_mask()
+                || clips.iter().any(|clip| clip.has_effective_mask())
+            {
                 composite_clipped_rows::<true>(
                     layer,
                     clips,
@@ -457,11 +507,14 @@ fn composite_clipped_rows<const MASKED: bool>(
 ) {
     let stride = (bounds.x1 - bounds.x0) as usize * 4;
     for (row_index, row) in output.chunks_exact_mut(stride).enumerate() {
-        let start = ((bounds.y0 as usize + row_index) * width as usize + bounds.x0 as usize) * 4;
+        let start = ((bounds.y0 as usize + row_index) * width as usize
+            + bounds.x0 as usize)
+            * 4;
         let source_row = layer.pixels[start..start + stride].as_chunks::<4>().0;
         clipped_row.fill([0; 4]);
         for clip in clips {
-            let clip_row = clip.pixels[start..start + stride].as_chunks::<4>().0;
+            let clip_row =
+                clip.pixels[start..start + stride].as_chunks::<4>().0;
             for (column, (((color, source), base), backdrop)) in clipped_row
                 .iter_mut()
                 .zip(clip_row)
@@ -484,18 +537,21 @@ fn composite_clipped_rows<const MASKED: bool>(
                 }
                 if color[3] == 0 {
                     *color = [base[0], base[1], base[2], 255];
-                    if layer.blend_mode != BlendMode::Normal && backdrop[3] > 0 {
+                    if layer.blend_mode != BlendMode::Normal && backdrop[3] > 0
+                    {
                         let backdrop_alpha = backdrop[3] as f32 / 255.;
                         for channel in 0..3 {
                             let source = base[channel] as f32 / 255.;
-                            let blended = layer
-                                .blend_mode
-                                .channel(backdrop[channel] as f32 / 255., source);
+                            let blended = layer.blend_mode.channel(
+                                backdrop[channel] as f32 / 255.,
+                                source,
+                            );
                             color[channel] = ((source * (1. - backdrop_alpha)
                                 + blended * backdrop_alpha)
                                 * 255.)
                                 .round()
-                                .clamp(0., 255.) as u8;
+                                .clamp(0., 255.)
+                                as u8;
                         }
                     }
                 }
@@ -507,12 +563,8 @@ fn composite_clipped_rows<const MASKED: bool>(
                 );
             }
         }
-        for (column, (destination, source)) in row
-            .as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .zip(source_row)
-            .enumerate()
+        for (column, (destination, source)) in
+            row.as_chunks_mut::<4>().0.iter_mut().zip(source_row).enumerate()
         {
             let alpha = if MASKED {
                 layer.mask_alpha(start / 4 + column, source[3])
@@ -549,12 +601,8 @@ pub(crate) fn composite_flat_row(
     mode: BlendMode,
     alpha: impl Fn(usize, u8) -> u8,
 ) {
-    for (column, (destination, source)) in row
-        .as_chunks_mut::<4>()
-        .0
-        .iter_mut()
-        .zip(source_row)
-        .enumerate()
+    for (column, (destination, source)) in
+        row.as_chunks_mut::<4>().0.iter_mut().zip(source_row).enumerate()
     {
         let alpha = alpha(column, source[3]);
         if alpha == 0 {
@@ -586,7 +634,8 @@ pub fn composite_over(dst: &mut [u8], rgb: [u8; 3], alpha: f32) {
     let da = dst[3] as f32 / 255.;
     let a = sa + da * (1. - sa);
     for i in 0..3 {
-        dst[i] = ((rgb[i] as f32 * sa + dst[i] as f32 * da * (1. - sa)) / a).round() as u8;
+        dst[i] = ((rgb[i] as f32 * sa + dst[i] as f32 * da * (1. - sa)) / a)
+            .round() as u8;
     }
     dst[3] = (a * 255.).round() as u8;
 }
@@ -596,7 +645,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hit_testing_uses_visible_effective_alpha_but_allows_locked_layer_selection() {
+    fn hit_testing_uses_visible_effective_alpha_but_allows_locked_layer_selection()
+     {
         let mut document = Document::new(2, 2);
         assert_eq!(document.layer_at(0, 0), Some(0));
         Arc::make_mut(&mut document.layers[1].pixels)[3] = 1;

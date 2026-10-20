@@ -6,7 +6,11 @@ use crate::{
 use eframe::egui;
 
 impl Parfait {
-    pub(crate) fn history_palette(&mut self, ui: &mut egui::Ui, body_height: f32) {
+    pub(crate) fn history_palette(
+        &mut self,
+        ui: &mut egui::Ui,
+        body_height: f32,
+    ) {
         ui.horizontal(|ui| {
             let undo = ui.add_enabled_ui(self.stroke.is_none() && self.history.can_undo(), |ui| {
                 widgets::flat_icon(ui, Icon::Undo, false, self.keymap.tooltip(Command::Undo), 24.)
@@ -29,11 +33,13 @@ impl Parfait {
                     let mut has_rows = false;
                     for row in self.history.rows() {
                         has_rows = true;
-                        let text = egui::RichText::new(row.label).color(if row.future {
-                            ui.visuals().weak_text_color()
-                        } else {
-                            ui.visuals().text_color()
-                        });
+                        let text = egui::RichText::new(row.label).color(
+                            if row.future {
+                                ui.visuals().weak_text_color()
+                            } else {
+                                ui.visuals().text_color()
+                            },
+                        );
                         let response = ui
                             .push_id(row.id, |ui| {
                                 ui.add_sized(
@@ -47,7 +53,10 @@ impl Parfait {
                             .on_hover_text(row.label);
                         #[cfg(test)]
                         ui.data_mut(|data| {
-                            data.insert_temp(egui::Id::new(("history_row", row.id)), response.rect)
+                            data.insert_temp(
+                                egui::Id::new(("history_row", row.id)),
+                                response.rect,
+                            )
                         });
                         if response.clicked() {
                             selected = Some(row.id);
@@ -74,7 +83,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rows_and_commands_restore_one_cursor_and_preserve_future_until_new_edit() {
+    fn rows_and_commands_restore_one_cursor_and_preserve_future_until_new_edit()
+    {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         app.doc = parfait_core::Document::new(4, 4);
@@ -107,7 +117,12 @@ mod tests {
         assert!(app.history.rows().last().unwrap().future);
         let click = |app: &mut Parfait, id| {
             let rect = ctx
-                .data(|data| data.get_temp::<egui::Rect>(egui::Id::new(("history_row", id))))
+                .data(|data| {
+                    data.get_temp::<egui::Rect>(egui::Id::new((
+                        "history_row",
+                        id,
+                    )))
+                })
                 .unwrap();
             assert!(rect.right() <= 180.1);
             let event = |pressed| egui::Event::PointerButton {

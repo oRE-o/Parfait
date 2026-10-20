@@ -46,15 +46,20 @@ struct Contours<'a> {
     quads: usize,
 }
 
-fn same_source(first: &Option<MaskCoverage>, second: &Option<MaskCoverage>) -> bool {
+fn same_source(
+    first: &Option<MaskCoverage>,
+    second: &Option<MaskCoverage>,
+) -> bool {
     match (first, second) {
         (None, None) => true,
-        (Some(MaskCoverage::Uniform(first)), Some(MaskCoverage::Uniform(second))) => {
-            first == second
-        }
-        (Some(MaskCoverage::Dense(first)), Some(MaskCoverage::Dense(second))) => {
-            Arc::ptr_eq(first, second)
-        }
+        (
+            Some(MaskCoverage::Uniform(first)),
+            Some(MaskCoverage::Uniform(second)),
+        ) => first == second,
+        (
+            Some(MaskCoverage::Dense(first)),
+            Some(MaskCoverage::Dense(second)),
+        ) => Arc::ptr_eq(first, second),
         _ => false,
     }
 }
@@ -97,24 +102,28 @@ impl Contours<'_> {
         {
             return false;
         }
-        let column = (column + self.step / 2).min(self.document.width as i32 - 1) as usize;
-        let row = (row + self.step / 2).min(self.document.height as i32 - 1) as usize;
+        let column = (column + self.step / 2)
+            .min(self.document.width as i32 - 1) as usize;
+        let row =
+            (row + self.step / 2).min(self.document.height as i32 - 1) as usize;
         self.document
             .selection_value(row * self.document.width as usize + column)
             >= 128
     }
 
-    fn segment(&mut self, horizontal: bool, major: i32, first: i32, last: i32) -> bool {
-        let limit = if horizontal {
-            self.document.width
-        } else {
-            self.document.height
-        } as i32;
-        let cross_limit = if horizontal {
-            self.document.height
-        } else {
-            self.document.width
-        } as i32;
+    fn segment(
+        &mut self,
+        horizontal: bool,
+        major: i32,
+        first: i32,
+        last: i32,
+    ) -> bool {
+        let limit =
+            if horizontal { self.document.width } else { self.document.height }
+                as i32;
+        let cross_limit =
+            if horizontal { self.document.height } else { self.document.width }
+                as i32;
         let first = first.clamp(0, limit) as f32;
         let last = last.clamp(0, limit) as f32;
         let major = major.clamp(0, cross_limit) as f32;
@@ -128,12 +137,14 @@ impl Contours<'_> {
         };
         let start = self.view.screen(points[0], self.viewport, self.size);
         let end = self.view.screen(points[1], self.viewport, self.size);
-        let Some((start, end, offset)) = clipped(start, end, self.viewport) else {
+        let Some((start, end, offset)) = clipped(start, end, self.viewport)
+        else {
             return true;
         };
         let length = start.distance(end);
         let phase = first * self.view.zoom + offset;
-        let count = ((length + phase.rem_euclid(DASH)) / DASH).ceil() as usize + 1;
+        let count =
+            ((length + phase.rem_euclid(DASH)) / DASH).ceil() as usize + 1;
         if self.quads.saturating_add(count) > MAX_QUADS {
             return false;
         }
@@ -144,15 +155,15 @@ impl Contours<'_> {
 
     fn trace(&mut self, horizontal: bool) -> bool {
         let (major_axis, minor_axis) = if horizontal { (1, 0) } else { (0, 1) };
-        for major in (self.first[major_axis]..=self.last[major_axis]).step_by(self.step as usize) {
+        for major in (self.first[major_axis]..=self.last[major_axis])
+            .step_by(self.step as usize)
+        {
             let mut run = None;
-            for minor in (self.first[minor_axis]..self.last[minor_axis]).step_by(self.step as usize)
+            for minor in (self.first[minor_axis]..self.last[minor_axis])
+                .step_by(self.step as usize)
             {
-                let (column, row) = if horizontal {
-                    (minor, major)
-                } else {
-                    (major, minor)
-                };
+                let (column, row) =
+                    if horizontal { (minor, major) } else { (major, minor) };
                 let previous = if horizontal {
                     self.selected(column, row - self.step)
                 } else {
@@ -168,7 +179,12 @@ impl Contours<'_> {
                 }
             }
             if let Some(first) = run
-                && !self.segment(horizontal, major, first, self.last[minor_axis])
+                && !self.segment(
+                    horizontal,
+                    major,
+                    first,
+                    self.last[minor_axis],
+                )
             {
                 return false;
             }
@@ -188,9 +204,11 @@ impl Contours<'_> {
                 continue;
             }
             let direction = (segment.end - segment.start) / length;
-            let normal = egui::vec2(-direction.y, direction.x) * 0.5 / pixels_per_point;
+            let normal =
+                egui::vec2(-direction.y, direction.x) * 0.5 / pixels_per_point;
             let initial = DASH - segment.phase.rem_euclid(DASH);
-            let count = ((length + segment.phase.rem_euclid(DASH)) / DASH).ceil() as usize;
+            let count = ((length + segment.phase.rem_euclid(DASH)) / DASH)
+                .ceil() as usize;
             let initial_parity = (segment.phase / DASH).floor() as usize;
             for dash in 0..count {
                 let offset = if dash == 0 {
@@ -212,15 +230,26 @@ impl Contours<'_> {
                         Color32::WHITE
                     };
                     let index = mesh.vertices.len() as u32;
-                    for pos in [start - normal, start + normal, end + normal, end - normal] {
+                    for pos in [
+                        start - normal,
+                        start + normal,
+                        end + normal,
+                        end - normal,
+                    ] {
                         mesh.vertices.push(egui::epaint::Vertex {
                             pos,
                             uv: egui::epaint::WHITE_UV,
                             color,
                         });
                     }
-                    mesh.indices
-                        .extend([index, index + 1, index + 2, index, index + 2, index + 3]);
+                    mesh.indices.extend([
+                        index,
+                        index + 1,
+                        index + 2,
+                        index,
+                        index + 2,
+                        index + 3,
+                    ]);
                 }
             }
         }
@@ -267,7 +296,8 @@ impl BoundaryCache {
         let extent = bounds.size().min(size) + Vec2::splat(4.);
         let mut step = 1_u32;
         while (step as f32) * view.zoom < 1.
-            || (extent.x / step as f32 + 4.) * (extent.y / step as f32 + 4.) > MAX_CELLS
+            || (extent.x / step as f32 + 4.) * (extent.y / step as f32 + 4.)
+                > MAX_CELLS
         {
             step *= 2;
         }
@@ -276,10 +306,12 @@ impl BoundaryCache {
             return;
         }
         loop {
-            let first = [overlap.left(), overlap.top()]
-                .map(|value| ((value / step as f32).floor() as i32 - 1) * step as i32);
-            let last = [overlap.right(), overlap.bottom()]
-                .map(|value| ((value / step as f32).ceil() as i32 + 1) * step as i32);
+            let first = [overlap.left(), overlap.top()].map(|value| {
+                ((value / step as f32).floor() as i32 - 1) * step as i32
+            });
+            let last = [overlap.right(), overlap.bottom()].map(|value| {
+                ((value / step as f32).ceil() as i32 + 1) * step as i32
+            });
             let mut contours = Contours {
                 document,
                 view,
@@ -304,7 +336,13 @@ impl BoundaryCache {
         }
     }
 
-    pub(crate) fn paint(&mut self, ui: &egui::Ui, document: &Document, view: &View, rect: Rect) {
+    pub(crate) fn paint(
+        &mut self,
+        ui: &egui::Ui,
+        document: &Document,
+        view: &View,
+        rect: Rect,
+    ) {
         let key = GeometryKey {
             rect,
             dimensions: [document.width, document.height],
@@ -314,7 +352,9 @@ impl BoundaryCache {
             flips: [view.flip_horizontal, view.flip_vertical],
             pixels_per_point: ui.ctx().pixels_per_point(),
         };
-        if self.key != Some(key) || !same_source(&self.source, &document.selection) {
+        if self.key != Some(key)
+            || !same_source(&self.source, &document.selection)
+        {
             self.rebuild(document, view, key);
             self.source = document.selection.clone();
             self.key = Some(key);
@@ -332,16 +372,20 @@ impl BoundaryCache {
             painter.add(egui::Shape::Mesh(self.meshes[phase].clone()));
             ui.ctx().request_repaint_after(Duration::from_millis(200));
         }
-        let text = if matches!(document.selection, Some(MaskCoverage::Uniform(0))) {
-            "빈 선택 영역 — 선택 해제로 다시 그릴 수 있습니다"
-        } else if self.step > 1 {
-            "선택 영역 — 경계선 간략 표시"
-        } else {
-            "선택 영역"
-        };
+        let text =
+            if matches!(document.selection, Some(MaskCoverage::Uniform(0))) {
+                "빈 선택 영역 — 선택 해제로 다시 그릴 수 있습니다"
+            } else if self.step > 1 {
+                "선택 영역 — 경계선 간략 표시"
+            } else {
+                "선택 영역"
+            };
         let position = rect.left_top() + egui::vec2(8., 8.);
-        let galley =
-            painter.layout_no_wrap(text.into(), egui::FontId::proportional(11.), Color32::WHITE);
+        let galley = painter.layout_no_wrap(
+            text.into(),
+            egui::FontId::proportional(11.),
+            Color32::WHITE,
+        );
         painter.rect_filled(
             Rect::from_min_size(
                 position - egui::vec2(4., 2.),

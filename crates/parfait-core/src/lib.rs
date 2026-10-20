@@ -11,7 +11,9 @@ mod raster_conversion;
 mod selection;
 mod smudge;
 mod wash;
-pub use brush::{Brush, BrushOperation, BrushTip, GapMode, OpacityMode, Point, Stroke};
+pub use brush::{
+    Brush, BrushOperation, BrushTip, GapMode, OpacityMode, Point, Stroke,
+};
 pub use document::{Document, Layer, LayerId, PixelRect, composite_over};
 pub use history::{History, HistoryRow};
 pub use layer_folders::LayerKind;
@@ -29,6 +31,6 @@ pub use blend::BlendMode;
 
 mod response_curve;
 pub use response_curve::{
-    MAX_CURVE_POINTS, ResponseCurve, automatic_curve_controls, reconcile_curve_controls,
-    sample_bezier_response, sample_response,
+    MAX_CURVE_POINTS, ResponseCurve, automatic_curve_controls,
+    reconcile_curve_controls, sample_bezier_response, sample_response,
 };

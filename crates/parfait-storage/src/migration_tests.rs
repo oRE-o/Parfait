@@ -44,17 +44,15 @@ fn exact_version_six_preserves_roles_masks_ids_and_migrates_to_root_rasters() {
         .serialize_into(&mut raw, &old)
         .unwrap();
     insert_raw(&store, old.revision, &raw);
-    store
-        .connection
-        .pragma_update(None, "user_version", 6)
-        .unwrap();
+    store.connection.pragma_update(None, "user_version", 6).unwrap();
     assert_eq!(store.load().unwrap().unwrap().document, expected);
     expected.touch();
     store.save(&expected).unwrap();
     assert_eq!(
         store
             .connection
-            .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                .get(0))
             .unwrap(),
         10
     );
@@ -158,11 +156,10 @@ fn exact_version_five_masks_migrate_without_inventing_layer_flags() {
         let mut expected = Document::new(2, 1);
         expected.layers[1].alpha_locked = true;
         expected.layers[1].clipped = true;
-        expected.layers[1].mask = coverage.map(|coverage| LayerMask {
-            enabled: false,
-            coverage,
-        });
-        expected.layers[1].pixels = Arc::new(vec![30, 60, 90, 180, 90, 60, 30, 128]);
+        expected.layers[1].mask =
+            coverage.map(|coverage| LayerMask { enabled: false, coverage });
+        expected.layers[1].pixels =
+            Arc::new(vec![30, 60, 90, 180, 90, 60, 30, 128]);
         let legacy = legacy_v5::LegacyDocument {
             width: expected.width,
             height: expected.height,
@@ -193,10 +190,7 @@ fn exact_version_five_masks_migrate_without_inventing_layer_flags() {
             .serialize_into(&mut raw, &legacy)
             .unwrap();
         insert_raw(&store, expected.revision, &raw);
-        store
-            .connection
-            .pragma_update(None, "user_version", 5)
-            .unwrap();
+        store.connection.pragma_update(None, "user_version", 5).unwrap();
         assert_eq!(store.load().unwrap().unwrap().document, expected);
         expected.layers[1].reference = true;
         expected.layers[1].draft = true;
@@ -205,18 +199,14 @@ fn exact_version_five_masks_migrate_without_inventing_layer_flags() {
         assert_eq!(
             store
                 .connection
-                .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+                .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                    .get(0))
                 .unwrap(),
             10
         );
         drop(store);
         assert_eq!(
-            Store::open(&path)
-                .unwrap()
-                .load()
-                .unwrap()
-                .unwrap()
-                .document,
+            Store::open(&path).unwrap().load().unwrap().unwrap().document,
             expected
         );
     }
@@ -253,7 +243,8 @@ fn current_flags_roundtrip_and_corrupt_head_falls_back() {
 }
 
 #[test]
-fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_version_six() {
+fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_version_six()
+ {
     for mode in BlendMode::ALL {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("v4.parfait");
@@ -296,10 +287,7 @@ fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_ver
             .serialize_into(&mut raw, &old)
             .unwrap();
         insert_raw(&store, 12, &raw);
-        store
-            .connection
-            .pragma_update(None, "user_version", 4)
-            .unwrap();
+        store.connection.pragma_update(None, "user_version", 4).unwrap();
         let mut document = store.load().unwrap().unwrap().document;
         assert_eq!(document.next_layer_id, 81);
         assert_eq!(document.active, 1);
@@ -314,7 +302,8 @@ fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_ver
         assert_eq!(
             store
                 .connection
-                .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+                .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                    .get(0))
                 .unwrap(),
             10
         );
@@ -326,17 +315,23 @@ fn exact_version_four_clipping_identity_alpha_migrate_without_masks_and_save_ver
 }
 
 #[test]
-fn malformed_dense_masks_fall_back_to_valid_generation_without_changing_original_buffers() {
+fn malformed_dense_masks_fall_back_to_valid_generation_without_changing_original_buffers()
+ {
     for length in [0, 5, 7] {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open(&directory.path().join("mask-recovery.parfait")).unwrap();
+        let mut store =
+            Store::open(&directory.path().join("mask-recovery.parfait"))
+                .unwrap();
         let mut document = Document::new(3, 2);
         assert!(document.create_layer_mask(1, 128));
         store.save(&document).unwrap();
         let before = document.clone();
         document.layers[1].mask = Some(parfait_core::LayerMask {
             enabled: false,
-            coverage: parfait_core::MaskCoverage::Dense(Arc::new(vec![255; length])),
+            coverage: parfait_core::MaskCoverage::Dense(Arc::new(vec![
+                255;
+                length
+            ])),
         });
         document.touch();
         assert!(!document.validate());
@@ -391,7 +386,8 @@ fn version_two(mode: BlendMode) -> Vec<u8> {
 }
 
 #[test]
-fn exact_version_three_preserves_identity_high_water_alpha_and_pixels_then_saves_clipping() {
+fn exact_version_three_preserves_identity_high_water_alpha_and_pixels_then_saves_clipping()
+ {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("v3.parfait");
     let mut store = Store::open(&path).unwrap();
@@ -419,10 +415,7 @@ fn exact_version_three_preserves_identity_high_water_alpha_and_pixels_then_saves
         .serialize_into(&mut raw, &old)
         .unwrap();
     insert_raw(&store, 9, &raw);
-    store
-        .connection
-        .pragma_update(None, "user_version", 3)
-        .unwrap();
+    store.connection.pragma_update(None, "user_version", 3).unwrap();
     let mut document = store.load().unwrap().unwrap().document;
     assert_eq!(document.layers[0].id, LayerId(72));
     assert_eq!(document.next_layer_id, 93);
@@ -436,34 +429,23 @@ fn exact_version_three_preserves_identity_high_water_alpha_and_pixels_then_saves
     store.save(&document).unwrap();
     drop(store);
     assert_eq!(
-        Store::open(&path)
-            .unwrap()
-            .load()
-            .unwrap()
-            .unwrap()
-            .document,
+        Store::open(&path).unwrap().load().unwrap().unwrap().document,
         document
     );
 }
 
 #[test]
-fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity() {
+fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity()
+ {
     for mode in BlendMode::ALL {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("upgrade.parfait");
         let mut store = Store::open(&path).unwrap();
         insert_raw(&store, 1, &version_two(mode));
-        store
-            .connection
-            .pragma_update(None, "user_version", 2)
-            .unwrap();
+        store.connection.pragma_update(None, "user_version", 2).unwrap();
         let mut document = store.load().unwrap().unwrap().document;
         assert_eq!(
-            document
-                .layers
-                .iter()
-                .map(|layer| layer.id)
-                .collect::<Vec<_>>(),
+            document.layers.iter().map(|layer| layer.id).collect::<Vec<_>>(),
             [LayerId(1), LayerId(2)]
         );
         assert_eq!(document.next_layer_id, 3);
@@ -481,7 +463,8 @@ fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity
         assert_eq!(
             store
                 .connection
-                .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+                .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                    .get(0))
                 .unwrap(),
             10
         );
@@ -497,7 +480,8 @@ fn exact_version_two_layout_upgrades_all_blends_without_losing_pixels_or_opacity
 fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
     for invalid in 0..3 {
         let dir = tempfile::tempdir().unwrap();
-        let mut store = Store::open(&dir.path().join("recovery.parfait")).unwrap();
+        let mut store =
+            Store::open(&dir.path().join("recovery.parfait")).unwrap();
         insert_raw(&store, 1, &version_two(BlendMode::Screen));
         let mut document = store.load().unwrap().unwrap().document;
         document.touch();
@@ -515,10 +499,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
             .serialize_into(&mut raw, &document)
             .unwrap();
         insert_raw(&store, 2, &raw);
-        store
-            .connection
-            .pragma_update(None, "user_version", 3)
-            .unwrap();
+        store.connection.pragma_update(None, "user_version", 3).unwrap();
         let recovered = store.load().unwrap().unwrap();
         assert!(recovered.fell_back);
         assert_eq!(recovered.document.revision, 3);
@@ -536,15 +517,14 @@ fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("future.parfait");
         let connection = Connection::open(&path).unwrap();
-        connection
-            .pragma_update(None, "user_version", version)
-            .unwrap();
+        connection.pragma_update(None, "user_version", version).unwrap();
         drop(connection);
         assert!(Store::open(&path).is_err());
         let connection = Connection::open(&path).unwrap();
         assert_eq!(
             connection
-                .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+                .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                    .get(0))
                 .unwrap(),
             version
         );
@@ -567,14 +547,19 @@ fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
     assert_eq!(
         store
             .connection
-            .query_row::<i64, _, _>("SELECT COUNT(*) FROM snapshots", [], |row| row.get(0))
+            .query_row::<i64, _, _>(
+                "SELECT COUNT(*) FROM snapshots",
+                [],
+                |row| row.get(0)
+            )
             .unwrap(),
         1
     );
 }
 
 #[test]
-fn identity_exhaustion_and_alpha_flags_roundtrip_and_size_matches_exact_serialization() {
+fn identity_exhaustion_and_alpha_flags_roundtrip_and_size_matches_exact_serialization()
+ {
     let dir = tempfile::tempdir().unwrap();
     let mut store = Store::open(&dir.path().join("identity.parfait")).unwrap();
     let mut document = Document::new(3, 2);

@@ -33,18 +33,8 @@ fn main() {
         }
         let full = document.composite();
         for rect in [
-            PixelRect {
-                x0: 0,
-                y0: 0,
-                x1: 1024,
-                y1: 768,
-            },
-            PixelRect {
-                x0: 301,
-                y0: 251,
-                x1: 429,
-                y1: 379,
-            },
+            PixelRect { x0: 0, y0: 0, x1: 1024, y1: 768 },
+            PixelRect { x0: 301, y0: 251, x1: 429, y1: 379 },
         ] {
             let expected: Vec<_> = (rect.y0..rect.y1)
                 .flat_map(|row| {
@@ -59,8 +49,9 @@ fn main() {
             let mut checksum = 0u64;
             for _ in 0..20 {
                 let pixels = document.composite_region(black_box(rect));
-                checksum =
-                    checksum.wrapping_add(pixels.iter().map(|byte| u64::from(*byte)).sum::<u64>());
+                checksum = checksum.wrapping_add(
+                    pixels.iter().map(|byte| u64::from(*byte)).sum::<u64>(),
+                );
                 black_box(pixels);
             }
             println!(

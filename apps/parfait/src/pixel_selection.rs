@@ -4,7 +4,10 @@ mod boundary;
 pub(crate) use boundary::BoundaryCache;
 
 impl Parfait {
-    pub(crate) fn pixel_selection_reason(&self, command: Command) -> Option<&'static str> {
+    pub(crate) fn pixel_selection_reason(
+        &self,
+        command: Command,
+    ) -> Option<&'static str> {
         if self.stroke.is_some()
             || self.layer_list.owns_pointer()
             || self.dialog_open()
@@ -31,12 +34,18 @@ impl Parfait {
             if self.selected_layer_mask().count_ones() != 1 {
                 return Some("마스크를 만들 레이어 하나를 선택해 주세요.");
             }
-            return parfait_storage::layer_mask_creation_error(&self.doc, self.doc.active);
+            return parfait_storage::layer_mask_creation_error(
+                &self.doc,
+                self.doc.active,
+            );
         }
         if command == Command::Deselect {
             return None;
         }
-        parfait_storage::selection_update_error(&self.doc, command != Command::SelectAll)
+        parfait_storage::selection_update_error(
+            &self.doc,
+            command != Command::SelectAll,
+        )
     }
 
     pub(crate) fn execute_pixel_selection(&mut self, command: Command) {
@@ -59,7 +68,8 @@ impl Parfait {
                     Command::InvertSelection => {
                         document.invert_pixel_selection();
                     }
-                    Command::LayerMaskOutsideSelection | Command::LayerMaskSelection => {
+                    Command::LayerMaskOutsideSelection
+                    | Command::LayerMaskSelection => {
                         document.create_mask_from_selection(
                             document.active,
                             command == Command::LayerMaskOutsideSelection,

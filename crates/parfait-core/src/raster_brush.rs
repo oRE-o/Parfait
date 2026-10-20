@@ -47,7 +47,9 @@ impl Scratch {
                     horizontal: Vec::with_capacity(side * (side + halo)),
                 })
             }
-            BrushOperation::Smudge => Self::Smudge(crate::smudge::Patch::new(side)),
+            BrushOperation::Smudge => {
+                Self::Smudge(crate::smudge::Patch::new(side))
+            }
             _ => Self::None,
         }
     }
@@ -56,7 +58,8 @@ impl Scratch {
             Self::None => 0,
             Self::Wash(wash) => wash.capacity_bytes(),
             Self::Blur(scratch) => {
-                scratch.source.capacity() * 4 + scratch.horizontal.capacity() * 8
+                scratch.source.capacity() * 4
+                    + scratch.horizontal.capacity() * 8
             }
             Self::Smudge(patch) => patch.capacity_bytes(),
             Self::Mask(mask) => mask.capacity_bytes(),
@@ -73,8 +76,14 @@ fn premultiplied(pixel: &[u8]) -> [f32; 4] {
         alpha,
     ]
 }
-pub(crate) fn interpolate(first: [f32; 4], second: [f32; 4], amount: f32) -> [f32; 4] {
-    std::array::from_fn(|channel| first[channel] * (1. - amount) + second[channel] * amount)
+pub(crate) fn interpolate(
+    first: [f32; 4],
+    second: [f32; 4],
+    amount: f32,
+) -> [f32; 4] {
+    std::array::from_fn(|channel| {
+        first[channel] * (1. - amount) + second[channel] * amount
+    })
 }
 pub(crate) fn apply(pixel: &mut [u8], sample: [f32; 4], amount: f32) -> bool {
     if amount <= 0. {
@@ -112,7 +121,8 @@ pub(crate) fn apply_locked(
     if sample[3] <= 0. {
         return false;
     }
-    let color = [sample[0], sample[1], sample[2]].map(|value| (value / sample[3]).round() as u8);
+    let color = [sample[0], sample[1], sample[2]]
+        .map(|value| (value / sample[3]).round() as u8);
     recolor_locked(pixel, color, amount * sample[3])
 }
 
@@ -164,7 +174,8 @@ fn blend_selected<const SELECTED: bool>(
         return None;
     }
     let alpha_locked = doc.layers[doc.active].alpha_locked;
-    let mut destination = Destination::Shared(&mut doc.layers[doc.active].pixels);
+    let mut destination =
+        Destination::Shared(&mut doc.layers[doc.active].pixels);
     let mut changed = false;
     for row in dab.bounds.y0..dab.bounds.y1 {
         for column in dab.bounds.x0..dab.bounds.x1 {
@@ -252,20 +263,16 @@ fn blur_selected<const SELECTED: bool>(
         );
     }
     if scratch.source.iter().all(|pixel| pixel[3] == 0)
-        || scratch
-            .source
-            .iter()
-            .all(|pixel| *pixel == scratch.source[0])
+        || scratch.source.iter().all(|pixel| *pixel == scratch.source[0])
     {
         return None;
     }
-    scratch
-        .horizontal
-        .resize(target_width * source_height, [0; 4]);
+    scratch.horizontal.resize(target_width * source_height, [0; 4]);
     for row in 0..source_height {
         let read = |column: u32| {
             integer_premultiplied(
-                scratch.source[row * source_width + (column - source_bounds.x0) as usize],
+                scratch.source
+                    [row * source_width + (column - source_bounds.x0) as usize],
             )
         };
         let mut left = dab.bounds.x0.saturating_sub(radius);
@@ -279,7 +286,8 @@ fn blur_selected<const SELECTED: bool>(
         }
         for column in dab.bounds.x0..dab.bounds.x1 {
             let count = right - left;
-            scratch.horizontal[row * target_width + (column - dab.bounds.x0) as usize] =
+            scratch.horizontal
+                [row * target_width + (column - dab.bounds.x0) as usize] =
                 sum.map(|component| ((component + count / 2) / count) as u16);
             let next_left = (column + 1).saturating_sub(radius);
             let next_right = (column + radius + 2).min(doc.width);
@@ -300,7 +308,8 @@ fn blur_selected<const SELECTED: bool>(
         }
     }
     let alpha_locked = doc.layers[doc.active].alpha_locked;
-    let mut destination = Destination::Shared(&mut doc.layers[doc.active].pixels);
+    let mut destination =
+        Destination::Shared(&mut doc.layers[doc.active].pixels);
     let mut changed = false;
     for column in dab.bounds.x0..dab.bounds.x1 {
         let read = |row: u32| {
@@ -394,7 +403,8 @@ mod tests {
         let radius = brush.blur_radius_pixels(dab.radius) as u32;
         let source = document.layers[document.active].pixels.clone();
         let mut changed = false;
-        let pixels = Arc::make_mut(&mut document.layers[document.active].pixels);
+        let pixels =
+            Arc::make_mut(&mut document.layers[document.active].pixels);
         for row in dab.bounds.y0..dab.bounds.y1 {
             for column in dab.bounds.x0..dab.bounds.x1 {
                 let left = column.saturating_sub(radius);
@@ -405,16 +415,20 @@ mod tests {
                 for source_row in top..bottom {
                     let mut horizontal = [0u32; 4];
                     for source_column in left..right {
-                        let index = ((source_row * document.width + source_column) * 4) as usize;
-                        let sample =
-                            integer_premultiplied(source[index..index + 4].try_into().unwrap());
+                        let index = ((source_row * document.width
+                            + source_column)
+                            * 4) as usize;
+                        let sample = integer_premultiplied(
+                            source[index..index + 4].try_into().unwrap(),
+                        );
                         for channel in 0..4 {
                             horizontal[channel] += sample[channel];
                         }
                     }
                     let count = right - left;
                     for channel in 0..4 {
-                        sum[channel] += (horizontal[channel] + count / 2) / count;
+                        sum[channel] +=
+                            (horizontal[channel] + count / 2) / count;
                     }
                 }
                 let count = (bottom - top) as f32;
@@ -468,16 +482,16 @@ mod tests {
                         blur_radius: radius,
                         ..Default::default()
                     };
-                    let point = Point {
-                        x: center[0],
-                        y: center[1],
-                        pressure: 0.6,
-                    };
+                    let point =
+                        Point { x: center[0], y: center[1], pressure: 0.6 };
                     let mut actual = fixture();
                     let mut expected = actual.clone();
                     Stroke::begin(&mut actual, brush.clone(), point);
                     reference_blur(&mut expected, &brush, point);
-                    assert_eq!(actual, expected, "radius={radius}, center={center:?}");
+                    assert_eq!(
+                        actual, expected,
+                        "radius={radius}, center={center:?}"
+                    );
                 }
             }
         }
@@ -489,13 +503,12 @@ mod tests {
         for row in 0..16 {
             for column in 0..40 {
                 let index = ((row * 40 + column) * 4) as usize;
-                Arc::make_mut(&mut original.layers[1].pixels)[index..index + 4].copy_from_slice(
-                    if column < 12 {
+                Arc::make_mut(&mut original.layers[1].pixels)[index..index + 4]
+                    .copy_from_slice(if column < 12 {
                         &[255, 0, 0, 255]
                     } else {
                         &[0, 0, 255, 255]
-                    },
-                );
+                    });
             }
         }
         let paint = |stretch, color| {
@@ -511,28 +524,20 @@ mod tests {
                     pressure: false,
                     ..Default::default()
                 },
-                Point {
-                    x: 4.,
-                    y: 8.,
-                    pressure: 1.,
-                },
+                Point { x: 4., y: 8., pressure: 1. },
             );
             assert_eq!(document, original);
             assert!(stroke.take_damage().is_none());
-            stroke.extend(
-                &mut document,
-                Point {
-                    x: 34.,
-                    y: 8.,
-                    pressure: 1.,
-                },
-            );
+            stroke.extend(&mut document, Point { x: 34., y: 8., pressure: 1. });
             document
         };
         let retained = paint(1., [0, 255, 0]);
         let local = paint(0., [0, 255, 0]);
         let index = (8 * 40 + 31) * 4;
-        assert!(retained.layers[1].pixels[index] > local.layers[1].pixels[index] + 40);
+        assert!(
+            retained.layers[1].pixels[index]
+                > local.layers[1].pixels[index] + 40
+        );
         assert_eq!(retained, paint(1., [255, 255, 0]));
         assert!(
             retained.layers[1]
@@ -553,11 +558,8 @@ mod tests {
             .iter_mut()
             .enumerate()
         {
-            *pixel = if index % 32 < 16 {
-                [0, 0, 255, 255]
-            } else {
-                [255, 0, 0, 0]
-            };
+            *pixel =
+                if index % 32 < 16 { [0, 0, 255, 255] } else { [255, 0, 0, 0] };
         }
         let blur = |radius| {
             let mut document = original.clone();
@@ -571,11 +573,7 @@ mod tests {
                     blur_radius: radius,
                     ..Default::default()
                 },
-                Point {
-                    x: 16.,
-                    y: 8.,
-                    pressure: 1.,
-                },
+                Point { x: 16., y: 8., pressure: 1. },
             );
             document
         };
@@ -588,7 +586,8 @@ mod tests {
     }
 
     #[test]
-    fn blending_respects_layer_state_and_empty_strokes_do_not_change_revisions_or_buffers() {
+    fn blending_respects_layer_state_and_empty_strokes_do_not_change_revisions_or_buffers()
+     {
         for operation in [BrushOperation::Blend, BrushOperation::Blur] {
             for blocked in 0..4 {
                 let mut document = if blocked == 0 {
@@ -606,19 +605,11 @@ mod tests {
                         opacity: if blocked == 3 { 0. } else { 1. },
                         ..Default::default()
                     },
-                    Point {
-                        x: 5.,
-                        y: 5.,
-                        pressure: 1.,
-                    },
+                    Point { x: 5., y: 5., pressure: 1. },
                 );
                 stroke.extend(
                     &mut document,
-                    Point {
-                        x: 12.,
-                        y: 8.,
-                        pressure: 1.,
-                    },
+                    Point { x: 12., y: 8., pressure: 1. },
                 );
                 assert_eq!(document, original);
                 assert!(Arc::ptr_eq(
@@ -649,20 +640,9 @@ mod tests {
                         pressure: true,
                         ..Default::default()
                     },
-                    Point {
-                        x: 3.,
-                        y: 6.,
-                        pressure,
-                    },
+                    Point { x: 3., y: 6., pressure },
                 );
-                stroke.extend(
-                    &mut document,
-                    Point {
-                        x: 13.,
-                        y: 6.,
-                        pressure,
-                    },
-                );
+                stroke.extend(&mut document, Point { x: 13., y: 6., pressure });
                 document
             };
             assert!(render(0.1, 1.).layers != render(1., 1.).layers);
@@ -676,12 +656,8 @@ mod tests {
         assert_eq!(brush.blur_radius_pixels(100.), 10);
         assert_eq!(brush.blur_radius_pixels(5.), 1);
         assert_eq!(
-            Brush {
-                blur_automatic: false,
-                blur_radius: 17.,
-                ..brush
-            }
-            .blur_radius_pixels(5.),
+            Brush { blur_automatic: false, blur_radius: 17., ..brush }
+                .blur_radius_pixels(5.),
             17
         );
         assert_eq!(
@@ -715,11 +691,7 @@ mod tests {
                     blur_radius: 32.,
                     ..Default::default()
                 },
-                Point {
-                    x: 320.,
-                    y: 320.,
-                    pressure: 1.,
-                },
+                Point { x: 320., y: 320., pressure: 1. },
             );
             let capacity = stroke.scratch_capacity_bytes();
             if operation == BrushOperation::Blur {
@@ -729,30 +701,17 @@ mod tests {
             }
             stroke.extend(
                 &mut document,
-                Point {
-                    x: 500.,
-                    y: 400.,
-                    pressure: 1.,
-                },
+                Point { x: 500., y: 400., pressure: 1. },
             );
             assert_eq!(stroke.scratch_capacity_bytes(), capacity);
         }
         for invalid in [f32::NAN, f32::INFINITY, -1., 2.] {
             assert!(
-                !Brush {
-                    color_stretch: invalid,
-                    ..Default::default()
-                }
-                .validate()
+                !Brush { color_stretch: invalid, ..Default::default() }
+                    .validate()
             );
         }
-        assert!(
-            !Brush {
-                blur_radius: 33.,
-                ..Default::default()
-            }
-            .validate()
-        );
+        assert!(!Brush { blur_radius: 33., ..Default::default() }.validate());
     }
 
     #[test]
@@ -769,11 +728,7 @@ mod tests {
                 continuous_spray: true,
                 ..Default::default()
             };
-            let begin = Point {
-                x: 2.,
-                y: 6.,
-                pressure: 1.,
-            };
+            let begin = Point { x: 2., y: 6., pressure: 1. };
             let mut history = History::default();
             history.checkpoint(&whole);
             let mut first = Stroke::begin(&mut whole, brush.clone(), begin);
@@ -782,10 +737,7 @@ mod tests {
             for column in 3..=14 {
                 second.extend(
                     &mut segmented,
-                    Point {
-                        x: column as f32,
-                        ..begin
-                    },
+                    Point { x: column as f32, ..begin },
                 );
             }
             first.spray(&mut whole, 0.1, 1.);

@@ -1,4 +1,6 @@
-use crate::{app::Parfait, editing::LayerEditKind, shortcuts::Command, widgets::Icon};
+use crate::{
+    app::Parfait, editing::LayerEditKind, shortcuts::Command, widgets::Icon,
+};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense};
 use parfait_core::LayerId;
 
@@ -34,18 +36,14 @@ impl LayerList {
 impl Parfait {
     pub(crate) fn reset_layer_selection_view(&mut self) {
         let collapsed = std::mem::take(&mut self.layer_list.collapsed);
-        self.layer_list = LayerList {
-            collapsed,
-            ..Default::default()
-        };
+        self.layer_list = LayerList { collapsed, ..Default::default() };
     }
 
     pub(crate) fn reveal_layer(&mut self, index: usize) {
-        let mut parent = self.doc.layers.get(index).and_then(|layer| layer.parent);
+        let mut parent =
+            self.doc.layers.get(index).and_then(|layer| layer.parent);
         while let Some(id) = parent {
-            self.layer_list
-                .collapsed
-                .retain(|collapsed| *collapsed != id);
+            self.layer_list.collapsed.retain(|collapsed| *collapsed != id);
             parent = self
                 .doc
                 .layer_index(id)
@@ -85,13 +83,13 @@ impl Parfait {
                 .fold(0, |mask, (index, _)| mask | (1 << index));
         }
         if modifiers.alt {
-            folders = self
-                .doc
-                .layer_selection_subtrees(folders)
-                .unwrap_or(folders);
+            folders =
+                self.doc.layer_selection_subtrees(folders).unwrap_or(folders);
         }
         for (index, layer) in self.doc.layers.iter().enumerate() {
-            if folders & (1 << index) != 0 && layer.kind == parfait_core::LayerKind::Folder {
+            if folders & (1 << index) != 0
+                && layer.kind == parfait_core::LayerKind::Folder
+            {
                 self.layer_list.collapsed.retain(|id| *id != layer.id);
                 if close {
                     self.layer_list.collapsed.push(layer.id);
@@ -120,7 +118,9 @@ impl Parfait {
         if self.doc.has_non_raster_layers()
             && matches!(
                 command,
-                Command::DeleteLayer | Command::MoveLayerUp | Command::MoveLayerDown
+                Command::DeleteLayer
+                    | Command::MoveLayerUp
+                    | Command::MoveLayerDown
             )
         {
             self.execute_tree_collection(command, mask);
@@ -188,7 +188,8 @@ impl Parfait {
                     !self.doc.layers[self.doc.active].visible
                 };
                 self.edit_named(command.label(), |document| {
-                    for (index, layer) in document.layers.iter_mut().enumerate() {
+                    for (index, layer) in document.layers.iter_mut().enumerate()
+                    {
                         if mask & (1 << index) != 0 {
                             if command == Command::LayerLock {
                                 layer.locked = value;
@@ -213,7 +214,10 @@ impl Parfait {
     }
     pub(crate) fn duplicate_selected_layers(&mut self) {
         if self.doc.has_non_raster_layers() {
-            self.execute_tree_collection(Command::DuplicateLayer, self.selected_layer_mask());
+            self.execute_tree_collection(
+                Command::DuplicateLayer,
+                self.selected_layer_mask(),
+            );
             return;
         }
         let mask = self.selected_layer_mask();
@@ -221,17 +225,18 @@ impl Parfait {
             self.duplicate_layer();
             return;
         }
-        if self
-            .command_disabled_reason(Command::DuplicateLayer)
-            .is_some()
-        {
+        if self.command_disabled_reason(Command::DuplicateLayer).is_some() {
             return;
         }
         let mut selected = 0;
         self.edit_named("Duplicate layers", |document| {
             let active = document.active;
-            let mut layers = Vec::with_capacity(document.layers.len() + mask.count_ones() as usize);
-            for (index, layer) in std::mem::take(&mut document.layers).into_iter().enumerate() {
+            let mut layers = Vec::with_capacity(
+                document.layers.len() + mask.count_ones() as usize,
+            );
+            for (index, layer) in
+                std::mem::take(&mut document.layers).into_iter().enumerate()
+            {
                 let copy = (mask & (1 << index) != 0).then(|| {
                     let mut copy = layer.clone();
                     copy.id = document.allocate_layer_id().unwrap();
@@ -257,46 +262,48 @@ impl Parfait {
         if self.layer_list.active != self.doc.layers[self.doc.active].id {
             return active;
         }
-        if self
-            .layer_list
-            .ids
+        if self.layer_list.ids.iter().copied().eq(self
+            .doc
+            .layers
             .iter()
-            .copied()
-            .eq(self.doc.layers.iter().map(|layer| layer.id))
+            .map(|layer| layer.id))
         {
             return self.layer_list.mask | active;
         }
-        self.doc
-            .layers
-            .iter()
-            .enumerate()
-            .fold(active, |mask, (index, layer)| {
-                if self
-                    .layer_list
-                    .ids
-                    .iter()
-                    .enumerate()
-                    .any(|(previous, id)| {
-                        *id == layer.id && self.layer_list.mask & (1 << previous) != 0
-                    })
-                {
+        self.doc.layers.iter().enumerate().fold(
+            active,
+            |mask, (index, layer)| {
+                if self.layer_list.ids.iter().enumerate().any(
+                    |(previous, id)| {
+                        *id == layer.id
+                            && self.layer_list.mask & (1 << previous) != 0
+                    },
+                ) {
                     mask | (1 << index)
                 } else {
                     mask
                 }
-            })
+            },
+        )
     }
     pub(crate) fn set_layer_selection(&mut self, mask: u64, anchor: usize) {
-        self.layer_list.mask =
-            (mask & (u64::MAX >> (64 - self.doc.layers.len()))) | (1 << self.doc.active);
+        self.layer_list.mask = (mask
+            & (u64::MAX >> (64 - self.doc.layers.len())))
+            | (1 << self.doc.active);
         self.layer_list.active = self.doc.layers[self.doc.active].id;
         self.layer_list.ids.clear();
         self.layer_list
             .ids
             .extend(self.doc.layers.iter().map(|layer| layer.id));
-        self.layer_list.anchor = self.doc.layers[anchor.min(self.doc.layers.len() - 1)].id;
+        self.layer_list.anchor =
+            self.doc.layers[anchor.min(self.doc.layers.len() - 1)].id;
     }
-    pub(crate) fn layer_click(&mut self, layer: usize, modifiers: egui::Modifiers, check: bool) {
+    pub(crate) fn layer_click(
+        &mut self,
+        layer: usize,
+        modifiers: egui::Modifiers,
+        check: bool,
+    ) {
         if layer >= self.doc.layers.len() {
             return;
         }
@@ -307,8 +314,8 @@ impl Parfait {
             .unwrap_or(self.doc.active);
         let mut active = layer;
         if modifiers.shift && !check {
-            mask =
-                (anchor.min(layer)..=anchor.max(layer)).fold(0, |bits, index| bits | (1 << index));
+            mask = (anchor.min(layer)..=anchor.max(layer))
+                .fold(0, |bits, index| bits | (1 << index));
         } else if check || modifiers.command || modifiers.ctrl {
             mask ^= 1 << layer;
             if mask == 0 {
@@ -323,12 +330,17 @@ impl Parfait {
             mask = 1 << layer;
         }
         self.select_layer(active);
-        self.set_layer_selection(mask, if modifiers.shift { anchor } else { layer });
+        self.set_layer_selection(
+            mask,
+            if modifiers.shift { anchor } else { layer },
+        );
     }
     pub(crate) fn prepare_layer_list(&mut self, ctx: &egui::Context) {
         self.layer_list.owned = self.layer_list.drag.is_some();
         let shown = self.workspace.panels.iter().any(|panel| {
-            panel.palette == crate::workspace::Palette::Layers && panel.visible && !panel.collapsed
+            panel.palette == crate::workspace::Palette::Layers
+                && panel.visible
+                && !panel.collapsed
         });
         if self.layer_list.rename.is_some()
             && (!ctx.input(|input| input.focused)
@@ -368,7 +380,12 @@ impl Parfait {
         self.layer_list.rename_focus = true;
         self.layer_list.drag = None;
     }
-    fn layer_name_editor(&mut self, ui: &mut egui::Ui, layer: usize, rect: Rect) {
+    fn layer_name_editor(
+        &mut self,
+        ui: &mut egui::Ui,
+        layer: usize,
+        rect: Rect,
+    ) {
         let mut name = self.doc.layers[layer].name.clone();
         let response = ui.put(
             rect,
@@ -377,16 +394,20 @@ impl Parfait {
                 .char_limit(128),
         );
         #[cfg(test)]
-        ui.data_mut(|data| data.insert_temp(egui::Id::new("layer_name"), response.rect));
+        ui.data_mut(|data| {
+            data.insert_temp(egui::Id::new("layer_name"), response.rect)
+        });
         if self.layer_list.rename_focus {
             response.request_focus();
-            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
-                state
-                    .cursor
-                    .set_char_range(Some(egui::text::CCursorRange::two(
+            if let Some(mut state) =
+                egui::TextEdit::load_state(ui.ctx(), response.id)
+            {
+                state.cursor.set_char_range(Some(
+                    egui::text::CCursorRange::two(
                         egui::text::CCursor::new(0),
                         egui::text::CCursor::new(name.chars().count()),
-                    )));
+                    ),
+                ));
                 state.store(ui.ctx(), response.id);
             }
             self.layer_list.rename_focus = false;
@@ -399,7 +420,8 @@ impl Parfait {
         self.layer_edit_response(LayerEditKind::Name, &response);
         if response.lost_focus()
             || ui.input(|input| {
-                input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Escape)
+                input.key_pressed(egui::Key::Enter)
+                    || input.key_pressed(egui::Key::Escape)
             })
         {
             self.finish_layer_edit();
@@ -423,7 +445,11 @@ impl Parfait {
         #[cfg(test)]
         ui.data_mut(|data| {
             data.insert_temp(
-                egui::Id::new(("layer_checkbox", Command::LayerVisibility, layer)),
+                egui::Id::new((
+                    "layer_checkbox",
+                    Command::LayerVisibility,
+                    layer,
+                )),
                 rect,
             )
         });
@@ -452,7 +478,11 @@ impl Parfait {
         if let Some(flags) = previous {
             self.edit_named("Restore layer visibility", |document| {
                 for target in &mut document.layers {
-                    target.visible = flags.iter().find(|(id, _)| *id == target.id).unwrap().1;
+                    target.visible = flags
+                        .iter()
+                        .find(|(id, _)| *id == target.id)
+                        .unwrap()
+                        .1;
                 }
             });
         } else {
@@ -463,9 +493,12 @@ impl Parfait {
                 .map(|target| (target.id, target.visible))
                 .collect();
             self.edit_named("Solo layer", |document| {
-                let mut visible = document.layer_subtree_mask(layer).unwrap_or(1 << layer);
+                let mut visible =
+                    document.layer_subtree_mask(layer).unwrap_or(1 << layer);
                 let mut parent = document.layers[layer].parent;
-                while let Some(index) = parent.and_then(|id| document.layer_index(id)) {
+                while let Some(index) =
+                    parent.and_then(|id| document.layer_index(id))
+                {
                     visible |= 1 << index;
                     parent = document.layers[index].parent;
                 }
@@ -476,11 +509,15 @@ impl Parfait {
             self.layer_list.solo = Some(flags);
         }
     }
-    pub(crate) fn layer_rows(&mut self, ui: &mut egui::Ui, available_height: f32) {
+    pub(crate) fn layer_rows(
+        &mut self,
+        ui: &mut egui::Ui,
+        available_height: f32,
+    ) {
         self.layer_list.collapsed.retain(|id| {
-            self.doc
-                .layer_index(*id)
-                .is_some_and(|index| self.doc.layers[index].kind == parfait_core::LayerKind::Folder)
+            self.doc.layer_index(*id).is_some_and(|index| {
+                self.doc.layers[index].kind == parfait_core::LayerKind::Folder
+            })
         });
         self.layer_list.owned = self.layer_list.drag.is_some();
         let selected = self.selected_layer_mask();
@@ -501,8 +538,10 @@ impl Parfait {
                     if hidden {
                         continue;
                     }
-                    let (rect, _) = ui
-                        .allocate_exact_size(egui::vec2(ui.available_width(), 42.), Sense::hover());
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), 42.),
+                        Sense::hover(),
+                    );
                     let clip = rect.intersect(ui.clip_rect());
                     let chosen = self.selected_layer_mask() & (1 << layer) != 0;
                     ui.painter().rect_filled(
@@ -519,12 +558,14 @@ impl Parfait {
                         rect.bottom(),
                         egui::Stroke::new(1., Color32::from_gray(40)),
                     );
-                    let eye = Rect::from_min_size(rect.min, egui::vec2(22., 42.));
+                    let eye =
+                        Rect::from_min_size(rect.min, egui::vec2(22., 42.));
                     self.layer_eye(ui, layer, eye);
                     let status = eye.translate(egui::vec2(22., 0.));
                     let check = ui.interact(
                         status,
-                        ui.id().with(("layer_check", self.doc.layers[layer].id)),
+                        ui.id()
+                            .with(("layer_check", self.doc.layers[layer].id)),
                         Sense::click(),
                     );
                     check.widget_info(|| {
@@ -536,19 +577,36 @@ impl Parfait {
                         )
                     });
                     if layer == self.doc.active {
-                        paint_icon(ui, status, Icon::Pen, Color32::from_gray(220));
+                        paint_icon(
+                            ui,
+                            status,
+                            Icon::Pen,
+                            Color32::from_gray(220),
+                        );
                     } else if chosen {
-                        paint_icon(ui, status, Icon::Check, Color32::from_gray(220));
+                        paint_icon(
+                            ui,
+                            status,
+                            Icon::Check,
+                            Color32::from_gray(220),
+                        );
                     } else {
                         ui.painter().rect_stroke(
-                            Rect::from_center_size(status.center(), egui::vec2(11., 11.)),
+                            Rect::from_center_size(
+                                status.center(),
+                                egui::vec2(11., 11.),
+                            ),
                             2.,
                             egui::Stroke::new(1., Color32::from_gray(43)),
                             egui::StrokeKind::Inside,
                         );
                     }
                     if check.clicked() {
-                        self.layer_click(layer, ui.input(|input| input.modifiers), true);
+                        self.layer_click(
+                            layer,
+                            ui.input(|input| input.modifiers),
+                            true,
+                        );
                         ui.ctx().request_repaint();
                     }
                     check.on_hover_text("Add / remove layer selection");
@@ -561,13 +619,24 @@ impl Parfait {
                     } else {
                         thumbnail_size + 6.
                     };
-                    let indent = (depth as f32 * 14.)
-                        .min((rect.width() - 47. - content_width - controls_width - 36.).max(0.));
+                    let indent = (depth as f32 * 14.).min(
+                        (rect.width()
+                            - 47.
+                            - content_width
+                            - controls_width
+                            - 36.)
+                            .max(0.),
+                    );
                     let thumbnail = Rect::from_min_size(
-                        rect.min + egui::vec2(47. + indent, (rect.height() - thumbnail_size) * 0.5),
+                        rect.min
+                            + egui::vec2(
+                                47. + indent,
+                                (rect.height() - thumbnail_size) * 0.5,
+                            ),
                         egui::Vec2::splat(thumbnail_size),
                     );
-                    let folder = self.doc.layers[layer].kind == parfait_core::LayerKind::Folder;
+                    let folder = self.doc.layers[layer].kind
+                        == parfait_core::LayerKind::Folder;
                     if folder {
                         let arrow = Rect::from_center_size(
                             thumbnail.left_center() + egui::vec2(5., 0.),
@@ -575,7 +644,10 @@ impl Parfait {
                         );
                         let response = ui.interact(
                             arrow,
-                            ui.id().with(("folder_fold", self.doc.layers[layer].id)),
+                            ui.id().with((
+                                "folder_fold",
+                                self.doc.layers[layer].id,
+                            )),
                             Sense::click(),
                         );
                         let closed = self
@@ -611,19 +683,23 @@ impl Parfait {
                         #[cfg(test)]
                         ui.data_mut(|data| {
                             data.insert_temp(
-                                egui::Id::new(("folder_fold", self.doc.layers[layer].id)),
+                                egui::Id::new((
+                                    "folder_fold",
+                                    self.doc.layers[layer].id,
+                                )),
                                 arrow,
                             )
                         });
                         if response.clicked() {
-                            self.toggle_folder_view(layer, ui.input(|input| input.modifiers));
+                            self.toggle_folder_view(
+                                layer,
+                                ui.input(|input| input.modifiers),
+                            );
                             ui.ctx().request_repaint();
                         }
-                        let icon = thumbnail.translate(egui::vec2(6., 0.)).shrink(if compact {
-                            6.
-                        } else {
-                            8.
-                        });
+                        let icon = thumbnail
+                            .translate(egui::vec2(6., 0.))
+                            .shrink(if compact { 6. } else { 8. });
                         crate::widgets::paint_flat_icon(
                             ui,
                             icon,
@@ -633,14 +709,18 @@ impl Parfait {
                         );
                         let folder_select = ui.interact(
                             icon,
-                            ui.id().with(("folder_select", self.doc.layers[layer].id)),
+                            ui.id().with((
+                                "folder_select",
+                                self.doc.layers[layer].id,
+                            )),
                             Sense::click(),
                         );
                         folder_select.widget_info(|| {
                             egui::WidgetInfo::selected(
                                 egui::WidgetType::Button,
                                 ui.is_enabled(),
-                                self.doc.active == layer && !self.editing_layer_mask(),
+                                self.doc.active == layer
+                                    && !self.editing_layer_mask(),
                                 "폴더 선택",
                             )
                         });
@@ -648,7 +728,8 @@ impl Parfait {
                             self.select_layer_target(layer, false);
                         }
                         folder_select.on_hover_text("폴더 선택");
-                    } else if let Some(texture) = self.layer_previews.get(layer) {
+                    } else if let Some(texture) = self.layer_previews.get(layer)
+                    {
                         ui.painter().image(
                             texture.id(),
                             thumbnail,
@@ -656,11 +737,16 @@ impl Parfait {
                             Color32::WHITE,
                         );
                     } else {
-                        ui.painter()
-                            .rect_filled(thumbnail, 0., Color32::from_gray(115));
+                        ui.painter().rect_filled(
+                            thumbnail,
+                            0.,
+                            Color32::from_gray(115),
+                        );
                     }
                     if !folder {
-                        self.layer_target_thumbnail(ui, layer, thumbnail, false);
+                        self.layer_target_thumbnail(
+                            ui, layer, thumbnail, false,
+                        );
                     }
                     if self.doc.layers[layer].draft {
                         ui.painter().rect_filled(
@@ -677,15 +763,25 @@ impl Parfait {
                             thumbnail.right_top() - egui::vec2(18., 0.),
                             egui::Vec2::splat(18.),
                         );
-                        ui.painter()
-                            .rect_filled(badge, 1., Color32::from_black_alpha(200));
-                        crate::widgets::paint_flat_icon(ui, badge, Icon::Reference, true, 18.);
+                        ui.painter().rect_filled(
+                            badge,
+                            1.,
+                            Color32::from_black_alpha(200),
+                        );
+                        crate::widgets::paint_flat_icon(
+                            ui,
+                            badge,
+                            Icon::Reference,
+                            true,
+                            18.,
+                        );
                     }
                     if has_mask {
                         self.layer_target_thumbnail(
                             ui,
                             layer,
-                            thumbnail.translate(egui::vec2(thumbnail_size + 6., 0.)),
+                            thumbnail
+                                .translate(egui::vec2(thumbnail_size + 6., 0.)),
                             true,
                         );
                     }
@@ -729,7 +825,9 @@ impl Parfait {
                     let text = format!(
                         "{:.0}%  {}{}{}",
                         self.doc.layers[layer].opacity * 100.,
-                        crate::layer_controls::blend_label(self.doc.layers[layer].blend_mode),
+                        crate::layer_controls::blend_label(
+                            self.doc.layers[layer].blend_mode
+                        ),
                         if self.doc.layers[layer].reference {
                             "  참조"
                         } else {
@@ -747,7 +845,8 @@ impl Parfait {
                         &text,
                         11.,
                         name.right() - name.left(),
-                        if self.doc.layers[layer].blend_mode == parfait_core::BlendMode::Through
+                        if self.doc.layers[layer].blend_mode
+                            == parfait_core::BlendMode::Through
                             && self.doc.layers[layer].clipped
                         {
                             crate::layer_controls::SUPPRESSED_BLEND
@@ -755,7 +854,8 @@ impl Parfait {
                             ui.visuals().text_color()
                         },
                     );
-                    if self.layer_list.rename == Some(self.doc.layers[layer].id) {
+                    if self.layer_list.rename == Some(self.doc.layers[layer].id)
+                    {
                         self.layer_name_editor(ui, layer, name);
                     } else {
                         clipped_text(
@@ -785,26 +885,40 @@ impl Parfait {
                         )
                     });
                     if self.doc.layers[layer].locked {
-                        paint_icon(ui, lock, Icon::Lock, Color32::from_gray(195));
+                        paint_icon(
+                            ui,
+                            lock,
+                            Icon::Lock,
+                            Color32::from_gray(195),
+                        );
                     } else if locked.hovered() {
-                        paint_icon(ui, lock, Icon::Unlock, Color32::from_gray(140));
+                        paint_icon(
+                            ui,
+                            lock,
+                            Icon::Unlock,
+                            Color32::from_gray(140),
+                        );
                     }
                     if locked.clicked() {
                         self.execute_layer_command(Command::LayerLock, layer);
                         ui.ctx().request_repaint();
                     }
-                    locked.on_hover_text(self.keymap.tooltip(Command::LayerLock));
+                    locked
+                        .on_hover_text(self.keymap.tooltip(Command::LayerLock));
                     let alpha_rect = if compact {
                         Rect::from_min_size(lock.min, egui::Vec2::ZERO)
                     } else {
                         lock.translate(egui::vec2(-22., 0.))
                     };
-                    let alpha_enabled =
-                        !compact && self.doc.layers[layer].kind == parfait_core::LayerKind::Raster;
+                    let alpha_enabled = !compact
+                        && self.doc.layers[layer].kind
+                            == parfait_core::LayerKind::Raster;
                     let alpha = ui.interact(
                         alpha_rect,
-                        ui.id()
-                            .with(("layer_alpha_lock", self.doc.layers[layer].id)),
+                        ui.id().with((
+                            "layer_alpha_lock",
+                            self.doc.layers[layer].id,
+                        )),
                         if alpha_enabled {
                             Sense::click()
                         } else {
@@ -819,29 +933,60 @@ impl Parfait {
                             "Lock transparent pixels",
                         )
                     });
-                    if alpha_enabled && (self.doc.layers[layer].alpha_locked || alpha.hovered()) {
-                        widgets_alpha_icon(ui, alpha_rect, self.doc.layers[layer].alpha_locked);
+                    if alpha_enabled
+                        && (self.doc.layers[layer].alpha_locked
+                            || alpha.hovered())
+                    {
+                        widgets_alpha_icon(
+                            ui,
+                            alpha_rect,
+                            self.doc.layers[layer].alpha_locked,
+                        );
                     }
                     if alpha.clicked() {
-                        self.execute_layer_command(Command::LayerAlphaLock, layer);
+                        self.execute_layer_command(
+                            Command::LayerAlphaLock,
+                            layer,
+                        );
                         ui.ctx().request_repaint();
                     }
-                    alpha.on_hover_text(self.keymap.tooltip(Command::LayerAlphaLock));
+                    alpha.on_hover_text(
+                        self.keymap.tooltip(Command::LayerAlphaLock),
+                    );
                     #[cfg(test)]
                     ui.data_mut(|data| {
                         data.insert_temp(
-                            egui::Id::new(("layer_checkbox", Command::LayerLock, layer)),
+                            egui::Id::new((
+                                "layer_checkbox",
+                                Command::LayerLock,
+                                layer,
+                            )),
                             lock,
                         );
-                        data.insert_temp(egui::Id::new(("layer_row", layer)), info);
-                        data.insert_temp(egui::Id::new(("layer_check", layer)), status);
-                        data.insert_temp(egui::Id::new(("layer_label", layer)), name);
                         data.insert_temp(
-                            egui::Id::new(("layer_checkbox", Command::LayerAlphaLock, layer)),
+                            egui::Id::new(("layer_row", layer)),
+                            info,
+                        );
+                        data.insert_temp(
+                            egui::Id::new(("layer_check", layer)),
+                            status,
+                        );
+                        data.insert_temp(
+                            egui::Id::new(("layer_label", layer)),
+                            name,
+                        );
+                        data.insert_temp(
+                            egui::Id::new((
+                                "layer_checkbox",
+                                Command::LayerAlphaLock,
+                                layer,
+                            )),
                             alpha_rect,
                         );
                     });
-                    if response.double_clicked() && self.layer_list.rename.is_none() {
+                    if response.double_clicked()
+                        && self.layer_list.rename.is_none()
+                    {
                         self.begin_layer_rename(layer);
                         ui.ctx().request_repaint();
                     }
@@ -867,7 +1012,9 @@ impl Parfait {
                         }
                         ui.separator();
                         self.layer_operations_menu(ui);
-                        ui.menu_button("Layer mask", |ui| self.layer_mask_menu(ui));
+                        ui.menu_button("Layer mask", |ui| {
+                            self.layer_mask_menu(ui)
+                        });
                         ui.separator();
                         self.command_toggle(
                             ui,
@@ -908,11 +1055,14 @@ impl Parfait {
             });
         let viewport = scroll.inner_rect;
         #[cfg(test)]
-        ui.data_mut(|data| data.insert_temp(egui::Id::new("layer_list_viewport"), viewport));
+        ui.data_mut(|data| {
+            data.insert_temp(egui::Id::new("layer_list_viewport"), viewport)
+        });
         self.layer_drag_events(ui, &targets, viewport);
         if let Some(drag) = &self.layer_list.drag
             && drag.moved
-            && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
+            && let Some(pointer) =
+                ui.input(|input| input.pointer.interact_pos())
         {
             if let Some((boundary, y)) = if self.doc.has_non_raster_layers() {
                 self.tree_drop_target(&targets, viewport, pointer).map(
@@ -950,7 +1100,12 @@ impl Parfait {
                     },
                 )
             } else {
-                drop_boundary(&targets, viewport, pointer, self.doc.layers.len())
+                drop_boundary(
+                    &targets,
+                    viewport,
+                    pointer,
+                    self.doc.layers.len(),
+                )
             } {
                 let color = if boundary <= self.doc.layers.len() {
                     crate::theme::ACCENT
@@ -974,7 +1129,9 @@ impl Parfait {
                 let mut state = scroll.state;
                 let previous_offset = state.offset.y;
                 state.offset.y = (state.offset.y
-                    + direction * 300. * ui.input(|input| input.stable_dt).min(0.05))
+                    + direction
+                        * 300.
+                        * ui.input(|input| input.stable_dt).min(0.05))
                 .clamp(0., (scroll.content_size.y - viewport.height()).max(0.));
                 state.store(ui.ctx(), scroll.id);
                 if state.offset.y != previous_offset {
@@ -999,7 +1156,12 @@ impl Parfait {
                     && pointer.y > rect.top() + 10.
                     && pointer.y < rect.bottom() - 10.
                 {
-                    return Some((*index, Some(layer.id), rect.center().y, true));
+                    return Some((
+                        *index,
+                        Some(layer.id),
+                        rect.center().y,
+                        true,
+                    ));
                 }
                 if pointer.y < rect.center().y {
                     return Some((index + 1, layer.parent, rect.top(), false));
@@ -1036,7 +1198,9 @@ impl Parfait {
             .drag
             .as_ref()
             .is_some_and(|drag| drag.revision != self.doc.revision)
-            || ui.input(|input| !input.focused || input.key_pressed(egui::Key::Escape))
+            || ui.input(|input| {
+                !input.focused || input.key_pressed(egui::Key::Escape)
+            })
             || !ui.is_enabled()
         {
             self.layer_list.drag = None;
@@ -1057,10 +1221,13 @@ impl Parfait {
                     if let Some((layer, _, _)) =
                         targets.iter().find(|(_, info, _)| info.contains(pos))
                     {
-                        let selected = self.selected_layer_mask() & (1 << layer) != 0;
-                        let collapse =
-                            (selected && !modifiers.shift && !modifiers.command && !modifiers.ctrl)
-                                .then_some(*layer);
+                        let selected =
+                            self.selected_layer_mask() & (1 << layer) != 0;
+                        let collapse = (selected
+                            && !modifiers.shift
+                            && !modifiers.command
+                            && !modifiers.ctrl)
+                            .then_some(*layer);
                         if collapse.is_none() {
                             self.layer_click(*layer, modifiers, false);
                         }
@@ -1089,14 +1256,19 @@ impl Parfait {
                         drag.moved |= drag.origin.distance(pos) > 4.;
                         if drag.moved {
                             if self.doc.has_non_raster_layers() {
-                                if let Some((boundary, parent, _, _)) =
-                                    self.tree_drop_target(targets, viewport, pos)
+                                if let Some((boundary, parent, _, _)) = self
+                                    .tree_drop_target(targets, viewport, pos)
                                 {
-                                    self.move_tree_selection(drag.mask, boundary, parent);
+                                    self.move_tree_selection(
+                                        drag.mask, boundary, parent,
+                                    );
                                 }
-                            } else if let Some((boundary, _)) =
-                                drop_boundary(targets, viewport, pos, self.doc.layers.len())
-                            {
+                            } else if let Some((boundary, _)) = drop_boundary(
+                                targets,
+                                viewport,
+                                pos,
+                                self.doc.layers.len(),
+                            ) {
                                 self.reorder_layer_mask(drag.mask, boundary);
                             }
                         } else if let Some(layer) = drag.collapse {
@@ -1104,31 +1276,40 @@ impl Parfait {
                         }
                     }
                 }
-                egui::Event::PointerGone | egui::Event::WindowFocused(false) => {
+                egui::Event::PointerGone
+                | egui::Event::WindowFocused(false) => {
                     self.layer_list.drag = None;
                 }
                 _ => {}
             }
         }
-        if selection_before != self.selected_layer_mask() || revision_before != self.doc.revision {
+        if selection_before != self.selected_layer_mask()
+            || revision_before != self.doc.revision
+        {
             ui.ctx().request_repaint();
         }
     }
     pub(crate) fn reorder_layer_mask(&mut self, mask: u64, boundary: usize) {
         if self.doc.has_non_raster_layers() {
-            self.move_tree_selection(mask, boundary, self.doc.layers[self.doc.active].parent);
+            self.move_tree_selection(
+                mask,
+                boundary,
+                self.doc.layers[self.doc.active].parent,
+            );
             return;
         }
         let count = self.doc.layers.len();
-        if boundary > count || mask == 0 || self.stroke.is_some() || self.dialog_open() {
+        if boundary > count
+            || mask == 0
+            || self.stroke.is_some()
+            || self.dialog_open()
+        {
             return;
         }
-        let mut order: Vec<_> = (0..count)
-            .filter(|index| mask & (1 << index) == 0)
-            .collect();
-        let insertion = (0..boundary)
-            .filter(|index| mask & (1 << index) == 0)
-            .count();
+        let mut order: Vec<_> =
+            (0..count).filter(|index| mask & (1 << index) == 0).collect();
+        let insertion =
+            (0..boundary).filter(|index| mask & (1 << index) == 0).count();
         order.splice(
             insertion..insertion,
             (0..count).filter(|index| mask & (1 << index) != 0),
@@ -1138,14 +1319,17 @@ impl Parfait {
     pub(crate) fn apply_layer_order(&mut self, order: Vec<usize>, mask: u64) {
         self.apply_layer_order_named(order, mask, "Reorder layers");
     }
-    pub(crate) fn apply_layer_order_named(&mut self, order: Vec<usize>, mask: u64, label: &str) {
+    pub(crate) fn apply_layer_order_named(
+        &mut self,
+        order: Vec<usize>,
+        mask: u64,
+        label: &str,
+    ) {
         if order.iter().copied().eq(0..self.doc.layers.len()) {
             return;
         }
-        let active = order
-            .iter()
-            .position(|index| *index == self.doc.active)
-            .unwrap();
+        let active =
+            order.iter().position(|index| *index == self.doc.active).unwrap();
         let selected = order
             .iter()
             .enumerate()
@@ -1207,7 +1391,14 @@ fn paint_icon(ui: &egui::Ui, rect: Rect, icon: Icon, color: Color32) {
         color,
     );
 }
-fn clipped_text(ui: &egui::Ui, origin: Pos2, text: &str, size: f32, width: f32, color: Color32) {
+fn clipped_text(
+    ui: &egui::Ui,
+    origin: Pos2,
+    text: &str,
+    size: f32,
+    width: f32,
+    color: Color32,
+) {
     let galley = ui.painter().layout(
         text.to_owned(),
         egui::FontId::proportional(size),

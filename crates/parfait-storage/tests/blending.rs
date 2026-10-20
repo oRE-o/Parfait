@@ -15,11 +15,9 @@ fn blended_pixels_survive_reopen_and_corrupt_snapshot_fallback() {
     {
         pixel.copy_from_slice(&[(index % 255) as u8, 90, 220, 180]);
     }
-    for operation in [
-        BrushOperation::Blend,
-        BrushOperation::Blur,
-        BrushOperation::Smudge,
-    ] {
+    for operation in
+        [BrushOperation::Blend, BrushOperation::Blur, BrushOperation::Smudge]
+    {
         let mut stroke = Stroke::begin(
             &mut document,
             Brush {
@@ -28,20 +26,9 @@ fn blended_pixels_survive_reopen_and_corrupt_snapshot_fallback() {
                 pressure: false,
                 ..Default::default()
             },
-            Point {
-                x: 12.,
-                y: 25.,
-                pressure: 1.,
-            },
+            Point { x: 12., y: 25., pressure: 1. },
         );
-        stroke.extend(
-            &mut document,
-            Point {
-                x: 80.,
-                y: 30.,
-                pressure: 1.,
-            },
-        );
+        stroke.extend(&mut document, Point { x: 80., y: 30., pressure: 1. });
     }
     let expected = document.clone();
     let mut store = Store::open(&path).unwrap();

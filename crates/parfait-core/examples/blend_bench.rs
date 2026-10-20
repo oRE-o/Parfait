@@ -20,19 +20,9 @@ fn main() {
         }
         for partial in [false, true] {
             let rect = if partial {
-                PixelRect {
-                    x0: 100,
-                    y0: 100,
-                    x1: 132,
-                    y1: 132,
-                }
+                PixelRect { x0: 100, y0: 100, x1: 132, y1: 132 }
             } else {
-                PixelRect {
-                    x0: 0,
-                    y0: 0,
-                    x1: 1024,
-                    y1: 768,
-                }
+                PixelRect { x0: 0, y0: 0, x1: 1024, y1: 768 }
             };
             black_box(doc.composite_region(rect));
             let start = Instant::now();

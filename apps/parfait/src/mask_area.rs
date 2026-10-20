@@ -7,8 +7,10 @@ fn tint_pixel(pixel: &mut [u8], alpha: u16) {
         return;
     }
     for (target, color) in pixel[..3].iter_mut().zip(TINT) {
-        *target =
-            ((u16::from(*target) * (255 - alpha) + u16::from(color) * alpha + 127) / 255) as u8;
+        *target = ((u16::from(*target) * (255 - alpha)
+            + u16::from(color) * alpha
+            + 127)
+            / 255) as u8;
     }
 }
 
@@ -46,10 +48,17 @@ pub(crate) fn tint_mask_area(
             if values.len() != width as usize * height as usize {
                 return false;
             }
-            for (row_index, row) in pixels.chunks_exact_mut(region_width * 4).enumerate() {
-                let offset = (row_index + region.y0 as usize) * width as usize + region.x0 as usize;
-                for (column, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                    let alpha = (u16::from(255 - values[offset + column]) * 128 + 127) / 255;
+            for (row_index, row) in
+                pixels.chunks_exact_mut(region_width * 4).enumerate()
+            {
+                let offset = (row_index + region.y0 as usize) * width as usize
+                    + region.x0 as usize;
+                for (column, pixel) in
+                    row.as_chunks_mut::<4>().0.iter_mut().enumerate()
+                {
+                    let alpha =
+                        (u16::from(255 - values[offset + column]) * 128 + 127)
+                            / 255;
                     tint_pixel(pixel, alpha);
                 }
             }
@@ -65,12 +74,7 @@ mod tests {
 
     #[test]
     fn tint_matches_independent_integer_reference_and_preserves_alpha() {
-        let region = PixelRect {
-            x0: 0,
-            y0: 0,
-            x1: 256,
-            y1: 1,
-        };
+        let region = PixelRect { x0: 0, y0: 0, x1: 256, y1: 1 };
         for coverage in 0..=255 {
             let original: Vec<u8> = (0..=255)
                 .flat_map(|value| [value, 255 - value, value / 2, value])
@@ -111,8 +115,9 @@ mod tests {
 
     #[test]
     fn dense_partial_tint_matches_full_image_at_nonzero_origin() {
-        let coverage =
-            MaskCoverage::Dense(Arc::new((0..35).map(|index| (index * 31) as u8).collect()));
+        let coverage = MaskCoverage::Dense(Arc::new(
+            (0..35).map(|index| (index * 31) as u8).collect(),
+        ));
         let original: Vec<u8> = (0..35)
             .flat_map(|index| [index as u8 * 7, 120, 240, 255])
             .collect();
@@ -121,19 +126,9 @@ mod tests {
             &mut full,
             [7, 5],
             &coverage,
-            PixelRect {
-                x0: 0,
-                y0: 0,
-                x1: 7,
-                y1: 5
-            }
+            PixelRect { x0: 0, y0: 0, x1: 7, y1: 5 }
         ));
-        let region = PixelRect {
-            x0: 2,
-            y0: 1,
-            x1: 6,
-            y1: 4,
-        };
+        let region = PixelRect { x0: 2, y0: 1, x1: 6, y1: 4 };
         let mut partial = Vec::new();
         let mut expected = Vec::new();
         for row in 1..4 {
@@ -150,12 +145,7 @@ mod tests {
         for case in 0..5 {
             let mut pixels = vec![180; 16];
             let before = pixels.clone();
-            let mut region = PixelRect {
-                x0: 0,
-                y0: 0,
-                x1: 2,
-                y1: 2,
-            };
+            let mut region = PixelRect { x0: 0, y0: 0, x1: 2, y1: 2 };
             let mut dimensions = [2, 2];
             let mut mask = MaskCoverage::Uniform(0);
             match case {

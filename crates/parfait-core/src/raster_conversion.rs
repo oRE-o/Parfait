@@ -13,14 +13,17 @@ impl RasterConversion {
             return pixel;
         }
         match self {
-            Self::DrawingColor(color) => [color[0], color[1], color[2], pixel[3]],
+            Self::DrawingColor(color) => {
+                [color[0], color[1], color[2], pixel[3]]
+            }
             Self::BrightnessToOpacity => {
                 let brightness = (u32::from(pixel[0]) * 299
                     + u32::from(pixel[1]) * 587
                     + u32::from(pixel[2]) * 114
                     + 500)
                     / 1000;
-                let alpha = (u32::from(pixel[3]) * (255 - brightness) + 127) / 255;
+                let alpha =
+                    (u32::from(pixel[3]) * (255 - brightness) + 127) / 255;
                 [0, 0, 0, alpha as u8]
             }
         }
@@ -45,13 +48,21 @@ impl Document {
         if !self.layer_ancestors_unlocked(layer) {
             return Some("Unlock the layer before converting its pixels.");
         }
-        if conversion == RasterConversion::BrightnessToOpacity && target.alpha_locked {
-            return Some("Unlock transparent pixels before converting brightness to opacity.");
+        if conversion == RasterConversion::BrightnessToOpacity
+            && target.alpha_locked
+        {
+            return Some(
+                "Unlock transparent pixels before converting brightness to opacity.",
+            );
         }
         None
     }
 
-    pub fn convert_layer_pixels(&mut self, layer: usize, conversion: RasterConversion) -> bool {
+    pub fn convert_layer_pixels(
+        &mut self,
+        layer: usize,
+        conversion: RasterConversion,
+    ) -> bool {
         if self.raster_conversion_reason(layer, conversion).is_some() {
             return false;
         }
@@ -60,9 +71,11 @@ impl Document {
             let converted = conversion.pixel(pixel);
             match &self.selection {
                 None => converted,
-                Some(coverage) => {
-                    crate::selection::interpolate_pixel(pixel, converted, coverage.value(index))
-                }
+                Some(coverage) => crate::selection::interpolate_pixel(
+                    pixel,
+                    converted,
+                    coverage.value(index),
+                ),
             }
         };
         let Some(first) = source

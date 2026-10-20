@@ -1,16 +1,21 @@
-use parfait_core::{BlendMode, Brush, Document, History, LayerCombine, PixelRect, Point, Stroke};
+use parfait_core::{
+    BlendMode, Brush, Document, History, LayerCombine, PixelRect, Point, Stroke,
+};
 use std::sync::Arc;
 
 fn sample() -> Document {
     let mut document = Document::new(3, 1);
     document.layers.remove(0);
     document.active = 0;
-    document.layers[0].pixels = Arc::new(vec![80, 120, 200, 128, 80, 120, 200, 128, 0, 0, 0, 0]);
+    document.layers[0].pixels =
+        Arc::new(vec![80, 120, 200, 128, 80, 120, 200, 128, 0, 0, 0, 0]);
     document.add_layer();
-    document.layers[1].pixels = Arc::new(vec![255, 32, 48, 255, 0, 0, 0, 0, 255, 32, 48, 255]);
+    document.layers[1].pixels =
+        Arc::new(vec![255, 32, 48, 255, 0, 0, 0, 0, 255, 32, 48, 255]);
     document.layers[1].clipped = true;
     document.add_layer();
-    document.layers[2].pixels = Arc::new(vec![0, 0, 0, 0, 16, 220, 64, 255, 16, 220, 64, 255]);
+    document.layers[2].pixels =
+        Arc::new(vec![0, 0, 0, 0, 16, 220, 64, 255, 16, 220, 64, 255]);
     document.layers[2].clipped = true;
     document
 }
@@ -105,10 +110,7 @@ fn insertion_inherits_clipping_and_history_restores_flags_and_shared_pixels() {
     assert!(document.same_edit_state(&before));
     assert!(history.redo(&mut document));
     assert!(!document.layers[2].clipped);
-    assert!(Arc::ptr_eq(
-        &document.layers[2].pixels,
-        &before.layers[2].pixels
-    ));
+    assert!(Arc::ptr_eq(&document.layers[2].pixels, &before.layers[2].pixels));
 }
 
 #[test]
@@ -125,11 +127,7 @@ fn clipping_does_not_restrict_raw_brush_writes() {
             color: [255, 0, 0],
             ..Default::default()
         },
-        Point {
-            x: 8.,
-            y: 8.,
-            pressure: 1.,
-        },
+        Point { x: 8., y: 8., pressure: 1. },
     );
     assert!(
         document.layers[2]
@@ -169,7 +167,8 @@ fn base_blend_does_not_reapply_to_normal_clipping_color() {
 }
 
 #[test]
-fn complete_chain_combinations_bake_the_display_and_incomplete_subsets_are_atomic() {
+fn complete_chain_combinations_bake_the_display_and_incomplete_subsets_are_atomic()
+ {
     for action in [
         LayerCombine::MergeVisible,
         LayerCombine::Flatten,
@@ -180,7 +179,9 @@ fn complete_chain_combinations_bake_the_display_and_incomplete_subsets_are_atomi
             let mut document = sample();
             document.layers[2].blend_mode = mode;
             let expected = document.composite();
-            if action == LayerCombine::MergeSelected && mode != BlendMode::Normal {
+            if action == LayerCombine::MergeSelected
+                && mode != BlendMode::Normal
+            {
                 continue;
             }
             assert!(document.combine_layers(action, 7), "{action:?} {mode:?}");
@@ -220,7 +221,8 @@ fn complete_chain_combinations_bake_the_display_and_incomplete_subsets_are_atomi
 }
 
 #[test]
-fn partial_composition_matches_full_for_every_mode_and_sixty_four_layer_chains() {
+fn partial_composition_matches_full_for_every_mode_and_sixty_four_layer_chains()
+{
     let mut document = Document::new(13, 9);
     while document.layers.len() < 64 {
         document.add_layer();
@@ -249,30 +251,17 @@ fn partial_composition_matches_full_for_every_mode_and_sixty_four_layer_chains()
         }
         let full = document.composite();
         for rect in [
-            PixelRect {
-                x0: 2,
-                y0: 3,
-                x1: 12,
-                y1: 8,
-            },
-            PixelRect {
-                x0: 12,
-                y0: 8,
-                x1: 90,
-                y1: 90,
-            },
-            PixelRect {
-                x0: 50,
-                y0: 30,
-                x1: 70,
-                y1: 80,
-            },
+            PixelRect { x0: 2, y0: 3, x1: 12, y1: 8 },
+            PixelRect { x0: 12, y0: 8, x1: 90, y1: 90 },
+            PixelRect { x0: 50, y0: 30, x1: 70, y1: 80 },
         ] {
             let clipped = rect.clipped(document.width, document.height);
             let expected: Vec<_> = (clipped.y0..clipped.y1)
                 .flat_map(|row| {
-                    let start = ((row * document.width + clipped.x0) * 4) as usize;
-                    full[start..start + ((clipped.x1 - clipped.x0) * 4) as usize]
+                    let start =
+                        ((row * document.width + clipped.x0) * 4) as usize;
+                    full[start
+                        ..start + ((clipped.x1 - clipped.x0) * 4) as usize]
                         .iter()
                         .copied()
                 })

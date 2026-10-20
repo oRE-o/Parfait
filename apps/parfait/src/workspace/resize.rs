@@ -16,25 +16,31 @@ pub(super) fn handle(
     label: &str,
     initial: [f32; 4],
 ) -> Option<Drag> {
-    let response = ui
-        .interact(rect, id, egui::Sense::drag())
-        .on_hover_cursor(cursor);
-    response
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, ui.is_enabled(), label));
+    let response =
+        ui.interact(rect, id, egui::Sense::drag()).on_hover_cursor(cursor);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Other,
+            ui.is_enabled(),
+            label,
+        )
+    });
     #[cfg(test)]
-    ui.data_mut(|data| data.insert_temp(Id::new(("resize_target", label)), rect));
+    ui.data_mut(|data| {
+        data.insert_temp(Id::new(("resize_target", label)), rect)
+    });
     let state_id = id.with("resize_origin");
     let mut state = ui.data(|data| data.get_temp::<Drag>(state_id));
     let enabled = ui.is_enabled() && ui.input(|input| input.focused);
-    let layer_matches = ui
-        .input(|input| input.pointer.press_origin())
-        .is_none_or(|position| {
+    let layer_matches =
+        ui.input(|input| input.pointer.press_origin()).is_none_or(|position| {
             ui.ctx()
                 .layer_id_at(position)
                 .is_none_or(|layer| layer == ui.layer_id())
         });
     let transform = ui.ctx().layer_transform_from_global(ui.layer_id());
-    let local = |position| transform.map_or(position, |transform| transform * position);
+    let local =
+        |position| transform.map_or(position, |transform| transform * position);
     if !enabled {
         state = None;
     }
@@ -77,7 +83,8 @@ pub(super) fn handle(
                         state = None;
                     }
                 }
-                egui::Event::PointerGone | egui::Event::WindowFocused(false) => {
+                egui::Event::PointerGone
+                | egui::Event::WindowFocused(false) => {
                     state = None;
                     result = None;
                 }
@@ -96,8 +103,7 @@ pub(super) fn handle(
         }
     });
     if response.hovered() || state.is_some() {
-        ui.painter()
-            .rect_filled(rect, 0., Color32::from_white_alpha(28));
+        ui.painter().rect_filled(rect, 0., Color32::from_white_alpha(28));
     }
     if state.is_some() {
         ui.ctx().set_dragged_id(id);
@@ -133,16 +139,20 @@ impl Workspace {
                 .filter_map(|palette| {
                     self.panels
                         .iter()
-                        .find(|placement| placement.palette == *palette && !placement.collapsed)
+                        .find(|placement| {
+                            placement.palette == *palette
+                                && !placement.collapsed
+                        })
                         .map(|placement| placement.height)
                 })
                 .reduce(f32::max);
             if let Some(height) = height {
                 let next = rows.iter().skip(row_index + 1).find(|row| {
                     row.iter().any(|palette| {
-                        self.panels
-                            .iter()
-                            .any(|placement| placement.palette == *palette && !placement.collapsed)
+                        self.panels.iter().any(|placement| {
+                            placement.palette == *palette
+                                && !placement.collapsed
+                        })
                     })
                 });
                 let next_height = next.map(|row| {
@@ -151,7 +161,8 @@ impl Workspace {
                             self.panels
                                 .iter()
                                 .find(|placement| {
-                                    placement.palette == *palette && !placement.collapsed
+                                    placement.palette == *palette
+                                        && !placement.collapsed
                                 })
                                 .map(|placement| placement.height)
                         })
@@ -184,10 +195,14 @@ impl Workspace {
                         },
                     );
                     for placement in &mut self.panels {
-                        if !placement.collapsed && row.contains(&placement.palette) {
+                        if !placement.collapsed
+                            && row.contains(&placement.palette)
+                        {
                             placement.height = drag.initial[0] + delta;
                         } else if !placement.collapsed
-                            && next.is_some_and(|row| row.contains(&placement.palette))
+                            && next.is_some_and(|row| {
+                                row.contains(&placement.palette)
+                            })
                         {
                             placement.height = drag.initial[1] - delta;
                         }
@@ -243,7 +258,11 @@ impl Workspace {
                     .find(|placement| placement.palette == pair[1])
                     .unwrap()
                     .width_weight;
-                let label = format!("Resize between {} and {}", pair[0].title(), pair[1].title());
+                let label = format!(
+                    "Resize between {} and {}",
+                    pair[0].title(),
+                    pair[1].title()
+                );
                 if let Some(drag) = handle(
                     ui,
                     ui.id().with(("column_resize", pair[0], pair[1])),
@@ -260,15 +279,17 @@ impl Workspace {
                     self.resizing = true;
                     let extra = drag.initial[0] + drag.initial[1] - 360.;
                     if extra > 0.001 {
-                        let fraction =
-                            (drag.initial[0] - 180. + drag.delta.x).clamp(0., extra) / extra;
+                        let fraction = (drag.initial[0] - 180. + drag.delta.x)
+                            .clamp(0., extra)
+                            / extra;
                         let weight = drag.initial[2] + drag.initial[3];
                         for placement in &mut self.panels {
                             if placement.palette == pair[0] {
                                 placement.width_weight = weight * fraction;
                             }
                             if placement.palette == pair[1] {
-                                placement.width_weight = weight * (1. - fraction);
+                                placement.width_weight =
+                                    weight * (1. - fraction);
                             }
                         }
                     }
@@ -277,7 +298,12 @@ impl Workspace {
         }
     }
 
-    pub(super) fn floating_resize(&mut self, ui: &mut egui::Ui, palette: Palette, rect: Rect) {
+    pub(super) fn floating_resize(
+        &mut self,
+        ui: &mut egui::Ui,
+        palette: Palette,
+        rect: Rect,
+    ) {
         let collapsed = self
             .panels
             .iter()
@@ -353,11 +379,14 @@ impl Workspace {
                 [rect.left(), rect.top(), rect.width(), rect.height()],
             ) {
                 self.resizing = true;
-                let width = (drag.initial[2] + drag.delta.x * horizontal as f32).clamp(180., 800.);
+                let width = (drag.initial[2]
+                    + drag.delta.x * horizontal as f32)
+                    .clamp(180., 800.);
                 let height = if collapsed {
                     23.
                 } else {
-                    (drag.initial[3] + drag.delta.y * vertical as f32).clamp(89., 2029.)
+                    (drag.initial[3] + drag.delta.y * vertical as f32)
+                        .clamp(89., 2029.)
                 };
                 let placement = self
                     .panels
@@ -365,17 +394,9 @@ impl Workspace {
                     .find(|placement| placement.palette == palette)
                     .unwrap();
                 placement.rect[0] = drag.initial[0]
-                    + if horizontal < 0 {
-                        drag.initial[2] - width
-                    } else {
-                        0.
-                    };
+                    + if horizontal < 0 { drag.initial[2] - width } else { 0. };
                 placement.rect[1] = drag.initial[1]
-                    + if vertical < 0 {
-                        drag.initial[3] - height
-                    } else {
-                        0.
-                    };
+                    + if vertical < 0 { drag.initial[3] - height } else { 0. };
                 placement.rect[2] = width;
                 if !collapsed {
                     placement.height = height - 29.;
@@ -403,23 +424,23 @@ mod tests {
             app.doc = parfait_core::Document::new(32, 24);
             let ctx = egui::Context::default();
             crate::theme::apply(&ctx);
-            Self {
-                app,
-                ctx,
-                directory,
-            }
+            Self { app, ctx, directory }
         }
 
         fn frame(&mut self, events: Vec<egui::Event>) {
             let mut output = self.ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1440., 1000.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1440., 1000.),
+                    )),
                     events,
                     ..Default::default()
                 },
                 |ui| {
                     self.app.workspace_ui(ui);
-                    egui::CentralPanel::default().show(ui, |ui| self.app.canvas(ui));
+                    egui::CentralPanel::default()
+                        .show(ui, |ui| self.app.canvas(ui));
                 },
             );
             output.textures_delta.clear();
@@ -452,8 +473,13 @@ mod tests {
                     button(start + delta, false),
                 ]);
             } else {
-                self.frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
-                self.frame(vec![egui::Event::PointerMoved(start + delta * 0.5)]);
+                self.frame(vec![
+                    egui::Event::PointerMoved(start),
+                    button(start, true),
+                ]);
+                self.frame(vec![egui::Event::PointerMoved(
+                    start + delta * 0.5,
+                )]);
                 self.frame(vec![button(start + delta, false)]);
             }
             self.frame(vec![]);
@@ -470,15 +496,24 @@ mod tests {
     }
 
     #[test]
-    fn row_splitters_share_height_and_retain_final_release_for_fast_and_slow_drags() {
+    fn row_splitters_share_height_and_retain_final_release_for_fast_and_slow_drags()
+     {
         for batched in [false, true] {
             let mut fixture = Fixture::new();
             let artwork = fixture.app.doc.clone();
             let collapsed = fixture.placement(Palette::Sizes).height;
-            fixture.drag("Resize row below 보조 도구", egui::vec2(0., 70.), batched);
+            fixture.drag(
+                "Resize row below 보조 도구",
+                egui::vec2(0., 70.),
+                batched,
+            );
             assert_eq!(fixture.placement(Palette::Brushes).height, 320.);
             assert_eq!(fixture.placement(Palette::Properties).height, 195.);
-            fixture.drag("Resize row below 도구 속성", egui::vec2(0., -40.), batched);
+            fixture.drag(
+                "Resize row below 도구 속성",
+                egui::vec2(0., -40.),
+                batched,
+            );
             assert_eq!(fixture.placement(Palette::Properties).height, 155.);
             assert_eq!(fixture.placement(Palette::Color).height, 230.);
             assert_eq!(fixture.placement(Palette::Sizes).height, collapsed);
@@ -489,7 +524,8 @@ mod tests {
     }
 
     #[test]
-    fn adjacent_columns_keep_total_width_and_persist_weights_with_legacy_defaults() {
+    fn adjacent_columns_keep_total_width_and_persist_weights_with_legacy_defaults()
+     {
         let mut fixture = Fixture::new();
         fixture.app.workspace.left_width = 600.;
         fixture.app.workspace.dock_to(
@@ -551,14 +587,17 @@ mod tests {
             180.
         );
         fixture.app.persist_preferences(true);
-        let saved =
-            parfait_storage::load_preferences(&fixture.directory.path().join("preferences.sqlite"))
-                .unwrap()
-                .unwrap();
-        let saved: crate::preferences::Preferences = serde_json::from_str(&saved).unwrap();
+        let saved = parfait_storage::load_preferences(
+            &fixture.directory.path().join("preferences.sqlite"),
+        )
+        .unwrap()
+        .unwrap();
+        let saved: crate::preferences::Preferences =
+            serde_json::from_str(&saved).unwrap();
         assert!(saved.workspace.same_preferences(&fixture.app.workspace));
         let encoded = serde_json::to_value(&fixture.app.workspace).unwrap();
-        let restored: Workspace = serde_json::from_value(encoded.clone()).unwrap();
+        let restored: Workspace =
+            serde_json::from_value(encoded.clone()).unwrap();
         assert!(restored.same_preferences(&fixture.app.workspace));
         let mut legacy = encoded;
         for placement in legacy["panels"].as_array_mut().unwrap() {
@@ -566,20 +605,19 @@ mod tests {
         }
         let legacy: Workspace = serde_json::from_value(legacy).unwrap();
         assert!(
-            legacy
-                .panels
-                .iter()
-                .all(|placement| placement.width_weight == 1.)
+            legacy.panels.iter().all(|placement| placement.width_weight == 1.)
         );
         assert!(legacy.validate());
         let original = fixture.app.workspace.clone();
         drop(fixture.app);
-        let restored = Parfait::open(fixture.directory.path().to_owned()).unwrap();
+        let restored =
+            Parfait::open(fixture.directory.path().to_owned()).unwrap();
         assert!(restored.workspace.same_preferences(&original));
     }
 
     #[test]
-    fn dock_edges_and_floating_axes_resize_without_paint_or_unwanted_axis_changes() {
+    fn dock_edges_and_floating_axes_resize_without_paint_or_unwanted_axis_changes()
+     {
         let mut fixture = Fixture::new();
         let artwork = fixture.app.doc.clone();
         fixture.drag("Resize left dock", egui::vec2(65., 0.), true);
@@ -623,12 +661,15 @@ mod tests {
         fixture.frame(vec![]);
         fixture.frame(vec![]);
         let start = fixture.target("Resize row below 보조 도구").center();
-        fixture.frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
+        fixture
+            .frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
         fixture.frame(vec![egui::Event::PointerMoved(
             start + egui::vec2(0., 1000.),
         )]);
         assert_eq!(fixture.placement(Palette::Properties).height, 60.);
-        fixture.frame(vec![egui::Event::PointerMoved(start + egui::vec2(0., 30.))]);
+        fixture.frame(vec![egui::Event::PointerMoved(
+            start + egui::vec2(0., 30.),
+        )]);
         assert_eq!(fixture.placement(Palette::Brushes).height, 280.);
         fixture.frame(vec![egui::Event::WindowFocused(false)]);
         fixture.frame(vec![

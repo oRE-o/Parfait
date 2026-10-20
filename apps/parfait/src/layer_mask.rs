@@ -7,7 +7,9 @@ impl Parfait {
         self.doc
             .layers
             .get(self.doc.active)
-            .filter(|layer| self.mask_overlay == Some(layer.id) && layer.mask.is_some())
+            .filter(|layer| {
+                self.mask_overlay == Some(layer.id) && layer.mask.is_some()
+            })
             .map(|layer| layer.id)
     }
 
@@ -18,18 +20,25 @@ impl Parfait {
         rect: egui::Rect,
         mask: bool,
     ) {
-        let selected = layer == self.doc.active && self.editing_layer_mask() == mask;
+        let selected =
+            layer == self.doc.active && self.editing_layer_mask() == mask;
         if mask {
             if let Some(Some(texture)) = self.mask_previews.get(layer) {
                 ui.painter().image(
                     texture.id(),
                     rect,
-                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                    egui::Rect::from_min_max(
+                        egui::Pos2::ZERO,
+                        egui::pos2(1., 1.),
+                    ),
                     egui::Color32::WHITE,
                 );
             } else {
-                ui.painter()
-                    .rect_filled(rect, 0., egui::Color32::from_gray(115));
+                ui.painter().rect_filled(
+                    rect,
+                    0.,
+                    egui::Color32::from_gray(115),
+                );
             }
             if self.doc.layers[layer]
                 .mask
@@ -37,11 +46,16 @@ impl Parfait {
                 .is_some_and(|mask| !mask.enabled)
             {
                 let inset = rect.shrink(3.);
-                let stroke = egui::Stroke::new(2., egui::Color32::from_rgb(235, 96, 96));
-                ui.painter()
-                    .line_segment([inset.left_top(), inset.right_bottom()], stroke);
-                ui.painter()
-                    .line_segment([inset.right_top(), inset.left_bottom()], stroke);
+                let stroke =
+                    egui::Stroke::new(2., egui::Color32::from_rgb(235, 96, 96));
+                ui.painter().line_segment(
+                    [inset.left_top(), inset.right_bottom()],
+                    stroke,
+                );
+                ui.painter().line_segment(
+                    [inset.right_top(), inset.left_bottom()],
+                    stroke,
+                );
             }
         }
         ui.painter().rect_stroke(
@@ -59,8 +73,7 @@ impl Parfait {
         );
         let response = ui.interact(
             rect,
-            ui.id()
-                .with(("layer_target", self.doc.layers[layer].id, mask)),
+            ui.id().with(("layer_target", self.doc.layers[layer].id, mask)),
             egui::Sense::click(),
         );
         response.widget_info(|| {
@@ -68,11 +81,7 @@ impl Parfait {
                 egui::WidgetType::SelectableLabel,
                 ui.is_enabled(),
                 selected,
-                if mask {
-                    "Edit layer mask"
-                } else {
-                    "Edit layer content"
-                },
+                if mask { "Edit layer mask" } else { "Edit layer content" },
             )
         });
         if response.clicked() {
@@ -80,7 +89,9 @@ impl Parfait {
             ui.ctx().request_repaint();
         }
         #[cfg(test)]
-        ui.data_mut(|data| data.insert_temp(egui::Id::new(("layer_target", layer, mask)), rect));
+        ui.data_mut(|data| {
+            data.insert_temp(egui::Id::new(("layer_target", layer, mask)), rect)
+        });
         response.on_hover_text(if mask {
             "Edit layer mask: Paint restores coverage; Erase hides it. Drawing color is ignored. Enable a disabled mask before drawing. Blend, blur and smudge are not supported on masks."
         } else {
@@ -89,10 +100,9 @@ impl Parfait {
     }
 
     pub(crate) fn editing_layer_mask(&self) -> bool {
-        self.doc
-            .layers
-            .get(self.doc.active)
-            .is_some_and(|layer| self.mask_target == Some(layer.id) && layer.mask.is_some())
+        self.doc.layers.get(self.doc.active).is_some_and(|layer| {
+            self.mask_target == Some(layer.id) && layer.mask.is_some()
+        })
     }
 
     pub(crate) fn select_layer_target(&mut self, layer: usize, mask: bool) {
@@ -121,14 +131,17 @@ impl Parfait {
             command,
             Command::LayerMaskRevealAll | Command::LayerMaskHideAll
         ) {
-            return parfait_storage::layer_mask_creation_error(&self.doc, layer);
+            return parfait_storage::layer_mask_creation_error(
+                &self.doc, layer,
+            );
         }
         if target.mask.is_none() {
             return Some("This layer has no mask.");
         }
         if command == Command::ClearLayerMask
             && self.doc.selection.is_some()
-            && let Some(reason) = parfait_storage::mask_edit_error(&self.doc, layer)
+            && let Some(reason) =
+                parfait_storage::mask_edit_error(&self.doc, layer)
         {
             return Some(reason);
         }
@@ -137,15 +150,22 @@ impl Parfait {
         {
             return Some("Unlock the layer before changing its mask.");
         }
-        if command == Command::ApplyLayerMask && target.kind == parfait_core::LayerKind::Folder {
-            return Some("폴더 마스크 적용은 래스터화 기능을 연결한 뒤 지원합니다.");
+        if command == Command::ApplyLayerMask
+            && target.kind == parfait_core::LayerKind::Folder
+        {
+            return Some(
+                "폴더 마스크 적용은 래스터화 기능을 연결한 뒤 지원합니다.",
+            );
         }
         if command == Command::ApplyLayerMask && target.alpha_locked {
             return Some("Unlock transparent pixels before applying the mask.");
         }
         if command == Command::ClearLayerMask
             && target.mask.as_ref().is_some_and(|mask| {
-                matches!(mask.coverage, parfait_core::MaskCoverage::Uniform(255))
+                matches!(
+                    mask.coverage,
+                    parfait_core::MaskCoverage::Uniform(255)
+                )
             })
         {
             return Some("This mask already reveals the entire layer.");
@@ -188,7 +208,8 @@ impl Parfait {
                 document.apply_layer_mask(layer);
             }
             Command::LayerMaskEnabled => {
-                let enabled = !document.layers[layer].mask.as_ref().unwrap().enabled;
+                let enabled =
+                    !document.layers[layer].mask.as_ref().unwrap().enabled;
                 document.set_layer_mask_enabled(layer, enabled);
             }
             Command::ClearLayerMask => {
@@ -201,14 +222,19 @@ impl Parfait {
             Command::LayerMaskRevealAll | Command::LayerMaskHideAll
         ) {
             self.mask_target = Some(self.doc.layers[layer].id);
-        } else if matches!(command, Command::DeleteLayerMask | Command::ApplyLayerMask) {
+        } else if matches!(
+            command,
+            Command::DeleteLayerMask | Command::ApplyLayerMask
+        ) {
             self.mask_target = None;
             self.mask_overlay = None;
         }
     }
 
     pub(crate) fn mask_brush_disabled_reason(&self) -> Option<&'static str> {
-        if let Some(reason) = parfait_storage::mask_edit_error(&self.doc, self.doc.active) {
+        if let Some(reason) =
+            parfait_storage::mask_edit_error(&self.doc, self.doc.active)
+        {
             return Some(reason);
         }
         let target = &self.doc.layers[self.doc.active];
@@ -229,7 +255,8 @@ impl Parfait {
     pub(crate) fn begin_canvas_stroke(&mut self, point: Point) -> bool {
         if self.stroke.is_some()
             || self.dialog_open()
-            || (self.doc.layers[self.doc.active].kind != parfait_core::LayerKind::Raster
+            || (self.doc.layers[self.doc.active].kind
+                != parfait_core::LayerKind::Raster
                 && !self.editing_layer_mask())
             || !self.doc.layer_ancestors_allow_edit(self.doc.active)
         {
@@ -261,7 +288,8 @@ impl Parfait {
     }
 
     pub(crate) fn layer_mask_menu(&mut self, ui: &mut egui::Ui) {
-        for command in [Command::LayerMaskRevealAll, Command::LayerMaskHideAll] {
+        for command in [Command::LayerMaskRevealAll, Command::LayerMaskHideAll]
+        {
             self.command_menu_item(ui, command);
         }
         ui.separator();

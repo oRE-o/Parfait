@@ -12,12 +12,21 @@ fn sample(directory: &std::path::Path) -> Parfait {
         layer.name = format!("Layer {index}");
         layer.locked = index % 2 == 0;
         layer.visible = index % 2 == 1;
-        Arc::make_mut(&mut layer.pixels)[..4].copy_from_slice(&[index as u8, 80, 120, 128]);
+        Arc::make_mut(&mut layer.pixels)[..4].copy_from_slice(&[
+            index as u8,
+            80,
+            120,
+            128,
+        ]);
     }
     app
 }
 
-fn key(key: egui::Key, modifiers: egui::Modifiers, repeat: bool) -> egui::Event {
+fn key(
+    key: egui::Key,
+    modifiers: egui::Modifiers,
+    repeat: bool,
+) -> egui::Event {
     egui::Event::Key {
         key,
         physical_key: None,
@@ -27,7 +36,11 @@ fn key(key: egui::Key, modifiers: egui::Modifiers, repeat: bool) -> egui::Event 
     }
 }
 
-fn frame(app: &mut Parfait, context: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+fn frame(
+    app: &mut Parfait,
+    context: &egui::Context,
+    events: Vec<egui::Event>,
+) -> egui::FullOutput {
     context.run_ui(
         egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -76,7 +89,8 @@ fn click(app: &mut Parfait, context: &egui::Context, name: &str) {
 }
 
 #[test]
-fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_undo() {
+fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_undo()
+ {
     for (command, destination) in [
         (Command::MoveActiveLayerUp, 3),
         (Command::MoveActiveLayerDown, 1),
@@ -90,22 +104,20 @@ fn active_ordering_preserves_other_selection_relative_order_ids_pixels_and_one_u
         app.doc.layers[3].clipped = true;
         let before = app.doc.clone();
         let active = before.layers[2].id;
-        let mut expected: Vec<_> = before.layers.iter().map(|layer| layer.id).collect();
+        let mut expected: Vec<_> =
+            before.layers.iter().map(|layer| layer.id).collect();
         expected.remove(2);
         expected.insert(destination, active);
         app.execute_command(command, &egui::Context::default());
         assert_eq!(
-            app.doc
-                .layers
-                .iter()
-                .map(|layer| layer.id)
-                .collect::<Vec<_>>(),
+            app.doc.layers.iter().map(|layer| layer.id).collect::<Vec<_>>(),
             expected
         );
         assert_eq!(app.doc.active, destination);
         assert_eq!(app.history.rows().count(), 2);
         for layer in &app.doc.layers {
-            let original = &before.layers[before.layer_index(layer.id).unwrap()];
+            let original =
+                &before.layers[before.layer_index(layer.id).unwrap()];
             assert_eq!(layer, original);
             assert!(Arc::ptr_eq(&layer.pixels, &original.pixels));
         }
@@ -149,7 +161,8 @@ fn selected_moves_remain_distinct_and_boundary_commands_are_true_no_ops() {
 }
 
 #[test]
-fn cyclic_navigation_clears_additional_selection_without_uploads_history_or_brush_changes() {
+fn cyclic_navigation_clears_additional_selection_without_uploads_history_or_brush_changes()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = sample(directory.path());
     let context = egui::Context::default();
@@ -206,15 +219,8 @@ fn organization_guards_and_one_layer_or_sixty_four_layer_boundaries() {
         if blocker == 2 {
             app.stroke = Some(Stroke::begin(
                 &mut app.doc,
-                Brush {
-                    opacity: 0.,
-                    ..Default::default()
-                },
-                Point {
-                    x: 2.,
-                    y: 2.,
-                    pressure: 1.,
-                },
+                Brush { opacity: 0., ..Default::default() },
+                Point { x: 2., y: 2., pressure: 1. },
             ));
         }
         let before = app.doc.clone();
@@ -330,11 +336,7 @@ fn rename_cancel_no_op_blank_and_backdrop_preserve_document_and_redo() {
             click(
                 &mut app,
                 &context,
-                if exit == "unchanged" {
-                    "rename_accept"
-                } else {
-                    exit
-                },
+                if exit == "unchanged" { "rename_accept" } else { exit },
             );
         }
         assert!(app.rename_layer.is_none());
@@ -387,10 +389,7 @@ fn rename_is_bounded_target_checked_and_ime_enter_does_not_commit_preedit() {
     crate::theme::apply(&context);
     app.doc.layers[4].name = "가".repeat(5000);
     app.execute_command(Command::RenameLayer, &context);
-    assert_eq!(
-        app.rename_layer.as_ref().unwrap().draft.chars().count(),
-        128
-    );
+    assert_eq!(app.rename_layer.as_ref().unwrap().draft.chars().count(), 128);
     assert!(app.rename_layer.as_ref().unwrap().draft.len() <= 512);
     assert!(app.rename_layer.as_ref().unwrap().error().is_some());
     settle(&mut app, &context);
@@ -451,14 +450,14 @@ fn rename_layout_stays_inside_minimum_window_and_rejects_stale_revision() {
         .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("rename_modal")))
         .unwrap();
     assert!(
-        modal.left() >= 0. && modal.top() >= 0. && modal.right() <= 960. && modal.bottom() <= 640.
+        modal.left() >= 0.
+            && modal.top() >= 0.
+            && modal.right() <= 960.
+            && modal.bottom() <= 640.
     );
-    for name in [
-        "rename_field",
-        "rename_accept",
-        "rename_cancel",
-        "rename_close",
-    ] {
+    for name in
+        ["rename_field", "rename_accept", "rename_cancel", "rename_close"]
+    {
         let rect = context
             .data(|data| data.get_temp::<egui::Rect>(egui::Id::new(name)))
             .unwrap();
@@ -472,23 +471,22 @@ fn rename_layout_stays_inside_minimum_window_and_rejects_stale_revision() {
 }
 
 #[test]
-fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fifteen() {
+fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fifteen()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = sample(directory.path());
     app.persist_preferences(true);
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
     legacy["version"] = 14.into();
-    legacy["keymap"]["bindings"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|binding| {
-            !matches!(
-                binding["command"].as_str(),
-                Some("select_layer_above" | "select_layer_below")
-            )
-        });
-    let expected: crate::preferences::Preferences = serde_json::from_value(legacy.clone()).unwrap();
+    legacy["keymap"]["bindings"].as_array_mut().unwrap().retain(|binding| {
+        !matches!(
+            binding["command"].as_str(),
+            Some("select_layer_above" | "select_layer_below")
+        )
+    });
+    let expected: crate::preferences::Preferences =
+        serde_json::from_value(legacy.clone()).unwrap();
     parfait_storage::save_preferences(
         &directory.path().join("preferences.sqlite"),
         &legacy.to_string(),
@@ -509,7 +507,10 @@ fn version_fourteen_keys_are_preserved_and_new_assignments_reopen_in_version_fif
         .unwrap();
     app.persist_preferences(true);
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
+        serde_json::from_str::<serde_json::Value>(
+            &app.saved_preferences_json()
+        )
+        .unwrap()["version"],
         21
     );
     drop(app);

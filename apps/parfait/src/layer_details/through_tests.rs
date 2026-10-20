@@ -2,7 +2,12 @@ use crate::{app::Parfait, shortcuts::Command};
 use eframe::egui;
 use parfait_core::{BlendMode, Document};
 
-fn frame(app: &mut Parfait, context: &egui::Context, time: &mut f64, events: Vec<egui::Event>) {
+fn frame(
+    app: &mut Parfait,
+    context: &egui::Context,
+    time: &mut f64,
+    events: Vec<egui::Event>,
+) {
     *time += 0.03;
     let mut output = context.run_ui(
         egui::RawInput {
@@ -18,11 +23,12 @@ fn frame(app: &mut Parfait, context: &egui::Context, time: &mut f64, events: Vec
             app.prepare_layer_list(ui.ctx());
             app.shortcuts(ui.ctx());
             ui.add_enabled_ui(!app.dialog_open(), |ui| {
-                egui::Panel::left("through_layers")
-                    .exact_size(320.)
-                    .show(ui, |ui| {
+                egui::Panel::left("through_layers").exact_size(320.).show(
+                    ui,
+                    |ui| {
                         app.palette(ui, crate::workspace::Palette::Layers, 700.)
-                    });
+                    },
+                );
             });
             app.layer_details_ui(ui.ctx());
             app.settle_layer_edit(ui.ctx());
@@ -35,7 +41,12 @@ fn rect(context: &egui::Context, name: &str) -> Option<egui::Rect> {
     context.data(|data| data.get_temp(egui::Id::new(name)))
 }
 
-fn click(app: &mut Parfait, context: &egui::Context, time: &mut f64, target: egui::Rect) {
+fn click(
+    app: &mut Parfait,
+    context: &egui::Context,
+    time: &mut f64,
+    target: egui::Rect,
+) {
     for pressed in [true, false] {
         frame(
             app,
@@ -56,7 +67,8 @@ fn click(app: &mut Parfait, context: &egui::Context, time: &mut f64, target: egu
 }
 
 #[test]
-fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losing_redo() {
+fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losing_redo()
+ {
     for folder in [false, true] {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
@@ -136,7 +148,8 @@ fn actual_blend_popup_is_folder_only_and_shares_draft_cancellation_without_losin
 }
 
 #[test]
-fn through_clipping_guards_keep_suppressed_settings_reversible_and_orphans_unlinkable() {
+fn through_clipping_guards_keep_suppressed_settings_reversible_and_orphans_unlinkable()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = Document::new(8, 8);
@@ -145,18 +158,12 @@ fn through_clipping_guards_keep_suppressed_settings_reversible_and_orphans_unlin
     app.doc.layers[2].blend_mode = BlendMode::Through;
     app.select_layer(3);
     let context = egui::Context::default();
-    assert!(
-        app.command_disabled_reason(Command::LayerClipping)
-            .is_some()
-    );
+    assert!(app.command_disabled_reason(Command::LayerClipping).is_some());
     let before = app.doc.clone();
     app.execute_command(Command::LayerClipping, &context);
     assert!(app.doc.same_edit_state(&before));
     app.select_layer(2);
-    assert!(
-        app.command_disabled_reason(Command::LayerClipping)
-            .is_none()
-    );
+    assert!(app.command_disabled_reason(Command::LayerClipping).is_none());
     app.execute_command(Command::LayerClipping, &context);
     assert!(app.doc.layers[2].clipped);
     assert_eq!(app.doc.layers[2].blend_mode, BlendMode::Through);
@@ -167,10 +174,7 @@ fn through_clipping_guards_keep_suppressed_settings_reversible_and_orphans_unlin
     app.select_layer(3);
     app.doc.layers[3].clipped = true;
     app.doc.touch();
-    assert!(
-        app.command_disabled_reason(Command::LayerClipping)
-            .is_none()
-    );
+    assert!(app.command_disabled_reason(Command::LayerClipping).is_none());
     app.execute_command(Command::LayerClipping, &context);
     assert!(!app.doc.layers[3].clipped);
     assert!(app.doc.validate());

@@ -1,8 +1,11 @@
-use parfait_core::{Brush, BrushOperation, Document, OpacityMode, Point, Stroke};
+use parfait_core::{
+    Brush, BrushOperation, Document, OpacityMode, Point, Stroke,
+};
 use std::{hint::black_box, sync::Arc, time::Instant};
 
 fn main() {
-    let alpha_locked = std::env::args().any(|argument| argument == "--alpha-lock");
+    let alpha_locked =
+        std::env::args().any(|argument| argument == "--alpha-lock");
     if alpha_locked {
         println!("alpha_locked=true");
     }
@@ -11,11 +14,12 @@ fn main() {
             for opacity_mode in [OpacityMode::PerDab, OpacityMode::PerStroke] {
                 let mut document = Document::new(1024, 768);
                 document.layers[1].alpha_locked = alpha_locked;
-                for (index, pixel) in Arc::make_mut(&mut document.layers[1].pixels)
-                    .as_chunks_mut::<4>()
-                    .0
-                    .iter_mut()
-                    .enumerate()
+                for (index, pixel) in
+                    Arc::make_mut(&mut document.layers[1].pixels)
+                        .as_chunks_mut::<4>()
+                        .0
+                        .iter_mut()
+                        .enumerate()
                 {
                     *pixel = [(index % 251) as u8, 90, 210, 180];
                 }
@@ -33,11 +37,7 @@ fn main() {
                 let mut stroke = Stroke::begin(
                     &mut document,
                     brush,
-                    Point {
-                        x: 256.,
-                        y: 300.,
-                        pressure: 1.,
-                    },
+                    Point { x: 256., y: 300., pressure: 1. },
                 );
                 let first_ms = start.elapsed().as_secs_f64() * 1000.;
                 let mut timings = [0.; 120];

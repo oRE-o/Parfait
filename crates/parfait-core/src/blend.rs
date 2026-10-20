@@ -1,7 +1,9 @@
 //! Separable blend functions on stored (sRGB-encoded) RGB, with straight-alpha source-over.
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize,
+)]
 pub enum BlendMode {
     #[default]
     Normal,
@@ -58,11 +60,7 @@ impl BlendMode {
     }
     pub(crate) fn channel(self, b: f32, s: f32) -> f32 {
         let hard = |b: f32, s: f32| {
-            if s <= 0.5 {
-                2. * b * s
-            } else {
-                1. - 2. * (1. - b) * (1. - s)
-            }
+            if s <= 0.5 { 2. * b * s } else { 1. - 2. * (1. - b) * (1. - s) }
         };
         match self {
             Self::Normal | Self::Through => s,
@@ -109,7 +107,12 @@ impl BlendMode {
         }
     }
 }
-pub(crate) fn composite_blend(dst: &mut [u8], rgb: [u8; 3], alpha: f32, mode: BlendMode) {
+pub(crate) fn composite_blend(
+    dst: &mut [u8],
+    rgb: [u8; 3],
+    alpha: f32,
+    mode: BlendMode,
+) {
     if mode == BlendMode::Normal || dst[3] == 0 {
         crate::composite_over(dst, rgb, alpha);
         return;
@@ -123,12 +126,19 @@ pub(crate) fn composite_blend(dst: &mut [u8], rgb: [u8; 3], alpha: f32, mode: Bl
     for i in 0..3 {
         let b = dst[i] as f32 / 255.;
         let s = rgb[i] as f32 / 255.;
-        let c = sa * (1. - da) * s + sa * da * mode.channel(b, s) + (1. - sa) * da * b;
+        let c = sa * (1. - da) * s
+            + sa * da * mode.channel(b, s)
+            + (1. - sa) * da * b;
         dst[i] = (c / a * 255.).round().clamp(0., 255.) as u8;
     }
     dst[3] = (a * 255.).round() as u8;
 }
-pub(crate) fn composite_opaque(dst: &mut [u8; 4], rgb: [u8; 3], alpha: f32, mode: BlendMode) {
+pub(crate) fn composite_opaque(
+    dst: &mut [u8; 4],
+    rgb: [u8; 3],
+    alpha: f32,
+    mode: BlendMode,
+) {
     debug_assert_eq!(dst[3], 255);
     let source_alpha = alpha.clamp(0., 1.);
     if source_alpha == 0. {
@@ -148,8 +158,8 @@ pub(crate) fn composite_opaque(dst: &mut [u8; 4], rgb: [u8; 3], alpha: f32, mode
         for channel in 0..3 {
             let backdrop = dst[channel] as f32 / 255.;
             let source = rgb[channel] as f32 / 255.;
-            let color =
-                source_alpha * mode.channel(backdrop, source) + (1. - source_alpha) * backdrop;
+            let color = source_alpha * mode.channel(backdrop, source)
+                + (1. - source_alpha) * backdrop;
             dst[channel] = (color * 255.).round().clamp(0., 255.) as u8;
         }
     }
@@ -161,7 +171,8 @@ mod tests {
     #[test]
     fn known_channels_and_alpha_edges() {
         let expected = [
-            0.75, 0.1875, 0.8125, 0.375, 0.25, 0.75, 1., 0., 0.625, 0.375, 0.5, 0.625, 1., 0.,
+            0.75, 0.1875, 0.8125, 0.375, 0.25, 0.75, 1., 0., 0.625, 0.375, 0.5,
+            0.625, 1., 0.,
         ];
         for (mode, expected) in BlendMode::ALL.into_iter().zip(expected) {
             assert!(
@@ -183,7 +194,8 @@ mod tests {
     }
 
     #[test]
-    fn opaque_specialization_matches_general_blending_for_byte_pairs_and_opacity_edges() {
+    fn opaque_specialization_matches_general_blending_for_byte_pairs_and_opacity_edges()
+     {
         for mode in BlendMode::ALL {
             for backdrop in 0..=255u8 {
                 for source in 0..=255u8 {
@@ -197,12 +209,16 @@ mod tests {
                         1.,
                         0.7,
                     ] {
-                        let mut expected = [backdrop, source, 255 - backdrop, 255];
+                        let mut expected =
+                            [backdrop, source, 255 - backdrop, 255];
                         let mut actual = expected;
                         let rgb = [source, 255 - backdrop, backdrop];
                         composite_blend(&mut expected, rgb, alpha, mode);
                         composite_opaque(&mut actual, rgb, alpha, mode);
-                        assert_eq!(actual, expected, "{mode:?} {backdrop} {source} {alpha}");
+                        assert_eq!(
+                            actual, expected,
+                            "{mode:?} {backdrop} {source} {alpha}"
+                        );
                     }
                 }
             }

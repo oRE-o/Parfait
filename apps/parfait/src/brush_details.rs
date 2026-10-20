@@ -16,17 +16,16 @@ pub struct PropertyLayout {
 impl Default for PropertyLayout {
     fn default() -> Self {
         Self {
-            visible: [true, true, true, true, false, false, false, false, false],
+            visible: [
+                true, true, true, true, false, false, false, false, false,
+            ],
             blending_visible: [false; 2],
         }
     }
 }
 impl PropertyLayout {
     pub fn blending(blur: bool) -> Self {
-        Self {
-            blending_visible: [!blur, blur],
-            ..Default::default()
-        }
+        Self { blending_visible: [!blur, blur], ..Default::default() }
     }
     fn visibility(&self, property: Property) -> bool {
         if (property as usize) < 9 {
@@ -160,7 +159,10 @@ impl Property {
                 brush.operation(),
                 BrushOperation::Blend | BrushOperation::Smudge
             ),
-            Self::BlurRadius => brush.operation() == BrushOperation::Blur && !brush.blur_automatic,
+            Self::BlurRadius => {
+                brush.operation() == BrushOperation::Blur
+                    && !brush.blur_automatic
+            }
             _ => true,
         }
     }
@@ -322,7 +324,10 @@ fn property_control(
                     #[cfg(test)]
                     ui.data_mut(|data| {
                         data.insert_temp(
-                            egui::Id::new(("brush_property_pin", property as usize)),
+                            egui::Id::new((
+                                "brush_property_pin",
+                                property as usize,
+                            )),
                             response.rect,
                         )
                     });
@@ -338,7 +343,8 @@ fn property_control(
                             label: property.label(),
                             range: bounds,
                             decimals: usize::from(
-                                property == Property::Size || property == Property::Angle,
+                                property == Property::Size
+                                    || property == Property::Angle,
                             ),
                             unit,
                             logarithmic: property == Property::Size,
@@ -390,7 +396,9 @@ impl Parfait {
             });
         });
         if !supported {
-            ui.weak("Blending uses per-dab strength; the saved mode is retained.");
+            ui.weak(
+                "Blending uses per-dab strength; the saved mode is retained.",
+            );
         }
     }
     fn brush_operation_ui(&mut self, ui: &mut egui::Ui) {
@@ -415,11 +423,18 @@ impl Parfait {
                         BrushOperation::Blur,
                         BrushOperation::Smudge,
                     ] {
-                        let response = ui.selectable_value(&mut operation, choice, label(choice));
+                        let response = ui.selectable_value(
+                            &mut operation,
+                            choice,
+                            label(choice),
+                        );
                         #[cfg(test)]
                         ui.data_mut(|data| {
                             data.insert_temp(
-                                egui::Id::new(("operation_choice", label(choice))),
+                                egui::Id::new((
+                                    "operation_choice",
+                                    label(choice),
+                                )),
                                 response.rect,
                             )
                         });
@@ -428,7 +443,10 @@ impl Parfait {
                 });
             #[cfg(test)]
             ui.data_mut(|data| {
-                data.insert_temp(egui::Id::new("operation_combo"), combo.response.rect)
+                data.insert_temp(
+                    egui::Id::new("operation_combo"),
+                    combo.response.rect,
+                )
             });
             let _ = combo;
         });
@@ -438,7 +456,12 @@ impl Parfait {
             self.brush_details.help = None;
         }
     }
-    fn brush_preview(&mut self, ui: &mut egui::Ui, height: f32, show_name: bool) {
+    fn brush_preview(
+        &mut self,
+        ui: &mut egui::Ui,
+        height: f32,
+        show_name: bool,
+    ) {
         let changed = self
             .brush_details
             .preview
@@ -467,11 +490,7 @@ impl Parfait {
                 let name = format!(
                     "{}{}",
                     self.tip_name,
-                    if self.preset_modified() {
-                        " · Modified"
-                    } else {
-                        ""
-                    },
+                    if self.preset_modified() { " · Modified" } else { "" },
                 );
                 let mut job = egui::text::LayoutJob::simple_singleline(
                     name,
@@ -488,7 +507,11 @@ impl Parfait {
                 );
                 let painter = ui.painter().with_clip_rect(preview.rect);
                 painter.rect_filled(label, 1., Color32::from_gray(93));
-                painter.galley(label.min + egui::vec2(3., 1.), galley, Color32::WHITE);
+                painter.galley(
+                    label.min + egui::vec2(3., 1.),
+                    galley,
+                    Color32::WHITE,
+                );
             }
         }
     }
@@ -521,17 +544,21 @@ impl Parfait {
             }
         }
         if !self.brush_details.properties.visible.contains(&true)
-            && !self
-                .brush_details
-                .properties
-                .blending_visible
-                .contains(&true)
+            && !self.brush_details.properties.blending_visible.contains(&true)
         {
             ui.weak("Use the eyes in Details to show properties here.");
         }
         ui.separator();
         widgets::action_row(ui, |ui| {
-            if widgets::flat_icon(ui, Icon::Settings, false, "Sub tool detail", 24.).clicked() {
+            if widgets::flat_icon(
+                ui,
+                Icon::Settings,
+                false,
+                "Sub tool detail",
+                24.,
+            )
+            .clicked()
+            {
                 self.brush_details.open = true;
             }
             let restorable = self.preset_modified()
@@ -574,7 +601,8 @@ impl Parfait {
         let mut open = true;
         let mut close = false;
         let calibration_open = self.calibration_dialog.is_some();
-        let controls_height = (ctx.content_rect().height() - 350.).clamp(100., 240.);
+        let controls_height =
+            (ctx.content_rect().height() - 350.).clamp(100., 240.);
         #[cfg(test)]
         self.brush_details.pin_targets.clear();
         #[cfg(test)]
@@ -883,7 +911,9 @@ impl Parfait {
                 });
             });
         if self.calibration_dialog.is_none()
-            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            && ctx.input_mut(|input| {
+                input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
+            })
         {
             close = true;
         }
@@ -944,8 +974,10 @@ mod tests {
                     |ui| app.brush_details_ui(ui.ctx()),
                 );
                 output.textures_delta.clear();
-                ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("detail_close")))
-                    .unwrap()
+                ctx.data(|data| {
+                    data.get_temp::<egui::Rect>(egui::Id::new("detail_close"))
+                })
+                .unwrap()
             };
             for _ in 0..4 {
                 frame(&mut app, vec![]);
@@ -962,13 +994,16 @@ mod tests {
                     BrushOperation::Smudge,
                 ] {
                     app.brush.operation = operation;
-                    for help in std::iter::once(None).chain(Property::ALL.map(Some)) {
+                    for help in
+                        std::iter::once(None).chain(Property::ALL.map(Some))
+                    {
                         app.brush_details.help = help;
                         for _ in 0..2 {
                             let actual = frame(&mut app, vec![]);
                             assert!(screen.contains_rect(actual));
                             assert!(
-                                (actual.center() - close.center()).length() < 0.5,
+                                (actual.center() - close.center()).length()
+                                    < 0.5,
                                 "{size:?} {} {operation:?} {}: {close:?} -> {actual:?}",
                                 category.label(),
                                 help.map_or("Parameter guide", Property::label),
@@ -994,7 +1029,8 @@ mod tests {
     }
 
     #[test]
-    fn opacity_mode_clicks_and_blending_retains_disabled_values_without_artwork_edits() {
+    fn opacity_mode_clicks_and_blending_retains_disabled_values_without_artwork_edits()
+     {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let original = app.doc.clone();
@@ -1015,7 +1051,8 @@ mod tests {
             output.textures_delta.clear();
         };
         let click = |app: &mut Parfait, id| {
-            let rect = ctx.data(|data| data.get_temp::<egui::Rect>(id)).unwrap();
+            let rect =
+                ctx.data(|data| data.get_temp::<egui::Rect>(id)).unwrap();
             let event = |pressed| egui::Event::PointerButton {
                 pos: rect.center(),
                 pressed,
@@ -1048,7 +1085,8 @@ mod tests {
     }
 
     #[test]
-    fn spacing_dynamics_button_retains_automatic_values_and_footer_is_visible() {
+    fn spacing_dynamics_button_retains_automatic_values_and_footer_is_visible()
+    {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         app.brush.pressure_spacing = true;
@@ -1057,7 +1095,8 @@ mod tests {
         let artwork = app.doc.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
+        let screen =
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
         let mut clicked = false;
         let mut frame = |app: &mut Parfait, events| {
             let mut output = ctx.run_ui(
@@ -1150,7 +1189,8 @@ mod tests {
         app.brush_details.category = Category::Ink;
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
+        let screen =
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
         let frame = |app: &mut Parfait, events| {
             let mut output = ctx.run_ui(
                 egui::RawInput {
@@ -1185,12 +1225,19 @@ mod tests {
             ("Local blur", BrushOperation::Blur, Property::BlurRadius),
         ] {
             let combo = ctx
-                .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("operation_combo")))
+                .data(|data| {
+                    data.get_temp::<egui::Rect>(egui::Id::new(
+                        "operation_combo",
+                    ))
+                })
                 .unwrap();
             click(&mut app, combo);
             let target = ctx
                 .data(|data| {
-                    data.get_temp::<egui::Rect>(egui::Id::new(("operation_choice", label)))
+                    data.get_temp::<egui::Rect>(egui::Id::new((
+                        "operation_choice",
+                        label,
+                    )))
                 })
                 .unwrap();
             click(&mut app, target);
@@ -1217,7 +1264,11 @@ mod tests {
                 assert!(!property.enabled(&app.brush));
                 app.brush.blur_radius = 17.;
                 let automatic = ctx
-                    .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("automatic_blur_size")))
+                    .data(|data| {
+                        data.get_temp::<egui::Rect>(egui::Id::new(
+                            "automatic_blur_size",
+                        ))
+                    })
                     .unwrap();
                 click(&mut app, automatic);
                 assert!(!app.brush.blur_automatic);
@@ -1233,11 +1284,7 @@ mod tests {
         assert!(app.brush_details.help.is_none());
         assert_eq!(app.brush.blur_radius, 17.);
         assert!(app.brush_details.properties.visibility(Property::Stretch));
-        assert!(
-            app.brush_details
-                .properties
-                .visibility(Property::BlurRadius)
-        );
+        assert!(app.brush_details.properties.visibility(Property::BlurRadius));
         assert_eq!(app.doc, artwork);
         app.persist_preferences(true);
         drop(app);
@@ -1245,15 +1292,13 @@ mod tests {
         assert_eq!(restored.brush.operation(), BrushOperation::Blur);
         assert_eq!(restored.brush.blur_radius, 17.);
         assert!(
-            restored
-                .brush_details
-                .properties
-                .visibility(Property::BlurRadius)
+            restored.brush_details.properties.visibility(Property::BlurRadius)
         );
     }
 
     #[test]
-    fn property_actions_are_below_settings_and_detail_footer_stays_on_one_row() {
+    fn property_actions_are_below_settings_and_detail_footer_stays_on_one_row()
+    {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let artwork = app.doc.clone();
@@ -1270,10 +1315,12 @@ mod tests {
             |ui| {
                 egui::CentralPanel::default().show(ui, |ui| {
                     ui.scope_builder(
-                        egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
-                            ui.cursor().min,
-                            egui::vec2(210., 600.),
-                        )),
+                        egui::UiBuilder::new().max_rect(
+                            egui::Rect::from_min_size(
+                                ui.cursor().min,
+                                egui::vec2(210., 600.),
+                            ),
+                        ),
                         |ui| {
                             ui.set_width(210.);
                             app.brush_properties_ui(ui);
@@ -1289,7 +1336,11 @@ mod tests {
             "Save brush settings and visible properties",
         ]
         .iter()
-        .map(|label| ctx.data(|data| data.get_temp(egui::Id::new(("flat_icon", *label))).unwrap()))
+        .map(|label| {
+            ctx.data(|data| {
+                data.get_temp(egui::Id::new(("flat_icon", *label))).unwrap()
+            })
+        })
         .collect();
         assert!(
             actions
@@ -1297,9 +1348,7 @@ mod tests {
                 .all(|rect| rect.top() > 220. && rect.height() == 24.)
         );
         assert!(
-            actions
-                .windows(2)
-                .all(|pair| pair[1].right() <= pair[0].left())
+            actions.windows(2).all(|pair| pair[1].right() <= pair[0].left())
         );
         app.brush_details.open = true;
         for _ in 0..2 {
@@ -1315,26 +1364,23 @@ mod tests {
             );
             output.textures_delta.clear();
         }
-        let buttons: Vec<egui::Rect> = ["Close", "Save preset", "Restore saved"]
-            .iter()
-            .map(|label| {
-                ctx.data(|data| {
-                    data.get_temp(egui::Id::new(("action_button", *label)))
-                        .unwrap()
-                })
-            })
-            .collect();
-        assert!(
-            buttons
+        let buttons: Vec<egui::Rect> =
+            ["Close", "Save preset", "Restore saved"]
                 .iter()
-                .all(|rect| ctx.content_rect().contains_rect(*rect)
-                    && rect.height() == 24.
-                    && rect.center().y == buttons[0].center().y)
-        );
+                .map(|label| {
+                    ctx.data(|data| {
+                        data.get_temp(egui::Id::new(("action_button", *label)))
+                            .unwrap()
+                    })
+                })
+                .collect();
+        assert!(buttons.iter().all(|rect| {
+            ctx.content_rect().contains_rect(*rect)
+                && rect.height() == 24.
+                && rect.center().y == buttons[0].center().y
+        }));
         assert!(
-            buttons
-                .windows(2)
-                .all(|pair| pair[1].right() <= pair[0].left())
+            buttons.windows(2).all(|pair| pair[1].right() <= pair[0].left())
         );
         assert_eq!(app.doc, artwork);
     }
@@ -1347,7 +1393,8 @@ mod tests {
         let artwork = app.doc.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
+        let screen =
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
         let frame = |app: &mut Parfait, events| {
             let mut output = ctx.run_ui(
                 egui::RawInput {
@@ -1362,10 +1409,19 @@ mod tests {
         frame(&mut app, vec![]);
         frame(&mut app, vec![]);
         for label in ["Fixed", "Wide", "Normal", "Narrow"] {
-            assert!(screen.contains_rect(ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new(("gap_mode", label)))).unwrap()));
+            assert!(
+                screen.contains_rect(
+                    ctx.data(|data| data.get_temp::<egui::Rect>(
+                        egui::Id::new(("gap_mode", label))
+                    ))
+                    .unwrap()
+                )
+            );
         }
         let close = ctx
-            .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("detail_close")))
+            .data(|data| {
+                data.get_temp::<egui::Rect>(egui::Id::new("detail_close"))
+            })
             .unwrap();
         assert!(screen.contains_rect(close));
         let event = |pressed| egui::Event::PointerButton {
@@ -1384,13 +1440,15 @@ mod tests {
     }
 
     #[test]
-    fn free_curve_dialog_keeps_close_visible_after_adding_a_point_at_minimum_window_size() {
+    fn free_curve_dialog_keeps_close_visible_after_adding_a_point_at_minimum_window_size()
+     {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         app.brush_details.open_pressure_dynamics();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
+        let screen =
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960., 640.));
         let frame = |app: &mut Parfait, events| {
             let mut output = ctx.run_ui(
                 egui::RawInput {
@@ -1437,7 +1495,8 @@ mod tests {
     }
 
     #[test]
-    fn dynamics_escape_dismisses_child_before_details_and_preserves_saved_response() {
+    fn dynamics_escape_dismisses_child_before_details_and_preserves_saved_response()
+     {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let artwork = app.doc.clone();
@@ -1492,7 +1551,8 @@ mod tests {
     }
 
     #[test]
-    fn eye_button_changes_only_layout_and_saved_presets_restore_it_after_restart() {
+    fn eye_button_changes_only_layout_and_saved_presets_restore_it_after_restart()
+     {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let artwork = app.doc.clone();
@@ -1536,24 +1596,37 @@ mod tests {
             vec![egui::Event::PointerMoved(target.center()), event(true)],
         );
         frame(&mut app, vec![event(false)]);
-        assert!(app.brush_details.properties.visible[Property::Spacing as usize]);
+        assert!(
+            app.brush_details.properties.visible[Property::Spacing as usize]
+        );
         assert!(app.brush == brush);
         assert_eq!(app.doc, artwork);
         assert!(app.preset_modified());
         app.save_current_preset();
         app.brush_details.properties = Default::default();
         app.restore_current_preset();
-        assert!(app.brush_details.properties.visible[Property::Spacing as usize]);
+        assert!(
+            app.brush_details.properties.visible[Property::Spacing as usize]
+        );
         app.select_brush_group(crate::brushes::BrushGroup::Eraser);
-        assert!(!app.brush_details.properties.visible[Property::Spacing as usize]);
+        assert!(
+            !app.brush_details.properties.visible[Property::Spacing as usize]
+        );
         app.select_brush_group(crate::brushes::BrushGroup::Ink);
-        assert!(app.brush_details.properties.visible[Property::Spacing as usize]);
+        assert!(
+            app.brush_details.properties.visible[Property::Spacing as usize]
+        );
         app.persist_preferences(true);
         assert!(app.error.is_none());
         drop(app);
         let restored = Parfait::open(dir.path().to_owned()).unwrap();
-        assert!(restored.brush_details.properties.visible[Property::Spacing as usize]);
-        assert!(restored.presets[0].properties.visible[Property::Spacing as usize]);
+        assert!(
+            restored.brush_details.properties.visible
+                [Property::Spacing as usize]
+        );
+        assert!(
+            restored.presets[0].properties.visible[Property::Spacing as usize]
+        );
         let mut old: serde_json::Value =
             serde_json::from_str(&restored.saved_preferences_json()).unwrap();
         old.as_object_mut().unwrap().remove("property_layout");
@@ -1617,7 +1690,8 @@ mod tests {
         let texture = app.brush_details.preview.as_ref().unwrap().1.id();
         app.brush.size = 42.;
         frame(&mut app, vec![]);
-        let (cached, current_texture) = app.brush_details.preview.as_ref().unwrap();
+        let (cached, current_texture) =
+            app.brush_details.preview.as_ref().unwrap();
         assert_eq!(current_texture.id(), texture);
         assert_eq!(cached.size, 42.);
         app.save_current_preset();

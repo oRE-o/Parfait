@@ -8,20 +8,33 @@ fn brightness_preserves_all_grayscale_alpha_combinations_against_reference() {
     let mut expected = Vec::with_capacity(input.capacity());
     for alpha in 0..=255 {
         for gray in 0..=255 {
-            input.extend_from_slice(&[gray as u8, gray as u8, gray as u8, alpha as u8]);
+            input.extend_from_slice(&[
+                gray as u8,
+                gray as u8,
+                gray as u8,
+                alpha as u8,
+            ]);
             if alpha == 0 {
-                expected.extend_from_slice(&[gray as u8, gray as u8, gray as u8, 0]);
+                expected.extend_from_slice(&[
+                    gray as u8, gray as u8, gray as u8, 0,
+                ]);
             } else {
-                let coverage = (f64::from(alpha) * (1. - f64::from(gray) / 255.)).round();
+                let coverage =
+                    (f64::from(alpha) * (1. - f64::from(gray) / 255.)).round();
                 expected.extend_from_slice(&[0, 0, 0, coverage as u8]);
             }
         }
     }
     document.layers[1].pixels = Arc::new(input);
-    assert!(document.convert_layer_pixels(1, RasterConversion::BrightnessToOpacity));
+    assert!(
+        document.convert_layer_pixels(1, RasterConversion::BrightnessToOpacity)
+    );
     assert_eq!(document.layers[1].pixels.as_slice(), expected);
     let converted = document.clone();
-    assert!(!document.convert_layer_pixels(1, RasterConversion::BrightnessToOpacity));
+    assert!(
+        !document
+            .convert_layer_pixels(1, RasterConversion::BrightnessToOpacity)
+    );
     assert_eq!(document, converted);
     assert!(Arc::ptr_eq(
         &document.layers[1].pixels,
@@ -33,21 +46,26 @@ fn brightness_preserves_all_grayscale_alpha_combinations_against_reference() {
 fn color_brightness_and_recolor_have_explicit_straight_alpha_results() {
     let mut document = Document::new(8, 1);
     document.layers[1].pixels = Arc::new(vec![
-        255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128, 128, 128, 128, 128, 0,
-        0, 0, 128, 77, 88, 99, 0, 200, 100, 50, 200,
+        255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128,
+        128, 128, 128, 128, 0, 0, 0, 128, 77, 88, 99, 0, 200, 100, 50, 200,
     ]);
     let before = document.clone();
-    assert!(document.convert_layer_pixels(1, RasterConversion::BrightnessToOpacity));
+    assert!(
+        document.convert_layer_pixels(1, RasterConversion::BrightnessToOpacity)
+    );
     assert_eq!(
         document.layers[1].pixels.as_slice(),
         &[
-            0, 0, 0, 179, 0, 0, 0, 105, 0, 0, 0, 226, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 128, 77,
-            88, 99, 0, 0, 0, 0, 103,
+            0, 0, 0, 179, 0, 0, 0, 105, 0, 0, 0, 226, 0, 0, 0, 0, 0, 0, 0, 64,
+            0, 0, 0, 128, 77, 88, 99, 0, 0, 0, 0, 103,
         ]
     );
     document = before.clone();
     document.layers[1].alpha_locked = true;
-    assert!(document.convert_layer_pixels(1, RasterConversion::DrawingColor([19, 79, 239])));
+    assert!(document.convert_layer_pixels(
+        1,
+        RasterConversion::DrawingColor([19, 79, 239])
+    ));
     for (output, source) in document.layers[1]
         .pixels
         .as_chunks::<4>()
@@ -58,11 +76,7 @@ fn color_brightness_and_recolor_have_explicit_straight_alpha_results() {
         assert_eq!(output[3], source[3]);
         assert_eq!(
             &output[..3],
-            if source[3] == 0 {
-                &source[..3]
-            } else {
-                &[19, 79, 239]
-            }
+            if source[3] == 0 { &source[..3] } else { &[19, 79, 239] }
         );
     }
 }
@@ -75,7 +89,8 @@ fn conversion_preserves_masks_metadata_other_layers_and_partial_composition() {
     ] {
         let mut document = Document::new(19, 13);
         document.add_layer();
-        document.layers[1].pixels = Arc::new([203, 90, 61, 189].repeat(19 * 13));
+        document.layers[1].pixels =
+            Arc::new([203, 90, 61, 189].repeat(19 * 13));
         document.layers[1].opacity = 0.4;
         document.layers[1].blend_mode = BlendMode::Multiply;
         document.layers[1].clipped = true;
@@ -100,12 +115,7 @@ fn conversion_preserves_masks_metadata_other_layers_and_partial_composition() {
         metadata.pixels = before.layers[1].pixels.clone();
         assert_eq!(metadata, before.layers[1]);
         assert_eq!(document.active, before.active);
-        let region = PixelRect {
-            x0: 3,
-            y0: 2,
-            x1: 17,
-            y1: 11,
-        };
+        let region = PixelRect { x0: 3, y0: 2, x1: 17, y1: 11 };
         let full = document.composite();
         let partial = document.composite_region(region);
         for row in 0..9 {
@@ -137,7 +147,9 @@ fn locked_invalid_and_noop_conversions_preserve_revision_buffers_and_redo() {
             if blocker == 3 {
                 document.width = 0;
             }
-            if blocker == 4 && conversion == RasterConversion::BrightnessToOpacity {
+            if blocker == 4
+                && conversion == RasterConversion::BrightnessToOpacity
+            {
                 document.layers[1].alpha_locked = true;
             }
             let before = document.clone();
@@ -152,7 +164,8 @@ fn locked_invalid_and_noop_conversions_preserve_revision_buffers_and_redo() {
         document.layers[0].locked = false;
         let mut history = History::default();
         history.begin(&document, "Recolor");
-        document.convert_layer_pixels(0, RasterConversion::DrawingColor([0, 0, 0]));
+        document
+            .convert_layer_pixels(0, RasterConversion::DrawingColor([0, 0, 0]));
         assert!(history.commit(&document));
         assert!(history.undo(&mut document));
         let before = document.clone();

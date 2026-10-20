@@ -34,17 +34,11 @@ impl ShortcutEditor {
         }
     }
     fn begin_capture(&mut self, old: Option<Chord>) {
-        self.capture = Some(Capture {
-            old,
-            candidate: None,
-        });
+        self.capture = Some(Capture { old, candidate: None });
         self.message = None;
     }
     fn assign_candidate(&mut self, replace: bool) {
-        let Some(Capture {
-            old,
-            candidate: Some(candidate),
-        }) = self.capture
+        let Some(Capture { old, candidate: Some(candidate) }) = self.capture
         else {
             return;
         };
@@ -61,7 +55,12 @@ impl ShortcutEditor {
             Err(error) => self.message = Some(error.label().into()),
         }
     }
-    fn ui(&mut self, ctx: &egui::Context, active: &Keymap, enabled: bool) -> Outcome {
+    fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        active: &Keymap,
+        enabled: bool,
+    ) -> Outcome {
         let mut outcome = Outcome::Keep;
         if enabled {
             if ctx.input(|input| input.key_pressed(Key::Escape)) {
@@ -95,7 +94,9 @@ impl ShortcutEditor {
                         .capture
                         .as_ref()
                         .and_then(|capture| capture.candidate)
-                        .is_some_and(|chord| !self.draft.conflicts(self.selected, chord))
+                        .is_some_and(|chord| {
+                            !self.draft.conflicts(self.selected, chord)
+                        })
                 {
                     self.assign_candidate(false);
                 }
@@ -231,7 +232,8 @@ impl Parfait {
                     self.shortcut_editor = Some(editor);
                     return;
                 }
-                let previous = std::mem::replace(&mut self.keymap, editor.draft.clone());
+                let previous =
+                    std::mem::replace(&mut self.keymap, editor.draft.clone());
                 self.persist_preferences(true);
                 if !self
                     .preferences_saved
@@ -251,7 +253,11 @@ impl Parfait {
 mod tests {
     use super::*;
 
-    fn app_frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>) {
+    fn app_frame(
+        app: &mut Parfait,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+    ) {
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -269,7 +275,12 @@ mod tests {
         app_frame(app, ctx, vec![]);
         app_frame(app, ctx, vec![]);
         let rect = ctx
-            .data(|data| data.get_temp::<egui::Rect>(egui::Id::new(("action_button", label))))
+            .data(|data| {
+                data.get_temp::<egui::Rect>(egui::Id::new((
+                    "action_button",
+                    label,
+                )))
+            })
             .unwrap();
         assert!(ctx.content_rect().contains_rect(rect));
         let event = |pressed| egui::Event::PointerButton {
@@ -337,10 +348,14 @@ mod tests {
         app.open_shortcut_settings();
         let editor = app.shortcut_editor.as_mut().unwrap();
         editor.begin_capture(Some(Chord::new(Key::Z, true, false, false)));
-        editor.capture.as_mut().unwrap().candidate = Some(Chord::new(Key::Y, true, false, false));
+        editor.capture.as_mut().unwrap().candidate =
+            Some(Chord::new(Key::Y, true, false, false));
         let footer = || {
             ctx.data(|data| {
-                data.get_temp::<egui::Rect>(egui::Id::new(("action_button", "Apply & close")))
+                data.get_temp::<egui::Rect>(egui::Id::new((
+                    "action_button",
+                    "Apply & close",
+                )))
             })
             .unwrap()
         };
@@ -352,10 +367,7 @@ mod tests {
             app_frame(&mut app, &ctx, vec![]);
         }
         let last = footer();
-        assert!(
-            (first.min - last.min).length() < 0.1,
-            "{first:?} -> {last:?}"
-        );
+        assert!((first.min - last.min).length() < 0.1, "{first:?} -> {last:?}");
         assert!(ctx.content_rect().contains_rect(last));
     }
 
@@ -395,10 +407,7 @@ mod tests {
         let active = Keymap::default();
         let mut editor = ShortcutEditor::new(&active);
         editor.begin_capture(Some(Chord::new(Key::Z, true, false, false)));
-        let primary = egui::Modifiers {
-            command: true,
-            ..Default::default()
-        };
+        let primary = egui::Modifiers { command: true, ..Default::default() };
         frame(&mut editor, &ctx, Key::Y, primary);
         frame(&mut editor, &ctx, Key::Enter, Default::default());
         assert!(editor.capture.is_some());

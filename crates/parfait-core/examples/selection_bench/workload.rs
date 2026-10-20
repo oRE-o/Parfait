@@ -1,4 +1,6 @@
-use parfait_core::{Brush, BrushOperation, Document, OpacityMode, Point, Stroke};
+use parfait_core::{
+    Brush, BrushOperation, Document, OpacityMode, Point, Stroke,
+};
 use std::{hint::black_box, sync::Arc, time::Instant};
 
 pub fn fixture() -> Document {
@@ -51,11 +53,7 @@ pub fn run(document: &Document, verify: impl Fn(&Document)) {
                 let mut stroke = Stroke::begin(
                     black_box(&mut sample),
                     brush,
-                    Point {
-                        x: 96.,
-                        y: 192.,
-                        pressure: 1.,
-                    },
+                    Point { x: 96., y: 192., pressure: 1. },
                 );
                 for index in 1..=64 {
                     stroke.extend(

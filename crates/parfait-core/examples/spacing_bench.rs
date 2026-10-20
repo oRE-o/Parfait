@@ -17,11 +17,7 @@ fn main() {
             let mut stroke = Stroke::begin(
                 &mut document,
                 brush,
-                Point {
-                    x: 256.,
-                    y: 300.,
-                    pressure: 0.25,
-                },
+                Point { x: 256., y: 300., pressure: 0.25 },
             );
             let mut timings = [0.; 120];
             for (index, timing) in timings.iter_mut().enumerate() {

@@ -50,13 +50,9 @@ fn locked_folder_protects_structure_and_descendants() {
     app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
     app.select_layer(1);
     app.doc.layers[2].locked = true;
+    assert!(app.command_disabled_reason(Command::NewLayerFolder).is_some());
     assert!(
-        app.command_disabled_reason(Command::NewLayerFolder)
-            .is_some()
-    );
-    assert!(
-        app.command_disabled_reason(Command::GroupLayersInFolder)
-            .is_some()
+        app.command_disabled_reason(Command::GroupLayersInFolder).is_some()
     );
     assert!(app.command_disabled_reason(Command::DeleteLayer).is_some());
 }

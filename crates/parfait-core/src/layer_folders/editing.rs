@@ -1,7 +1,10 @@
 use crate::{Document, LayerId};
 
 impl Document {
-    pub fn layer_folder_creation_reason(&self, selection: Option<u64>) -> Option<&'static str> {
+    pub fn layer_folder_creation_reason(
+        &self,
+        selection: Option<u64>,
+    ) -> Option<&'static str> {
         if !self.validate() {
             return Some("The drawing has an invalid layer tree.");
         }
@@ -12,21 +15,17 @@ impl Document {
             let Some(roots) = self.layer_selection_roots(selection) else {
                 return Some("Select existing layers first.");
             };
-            if self
-                .layers
-                .iter()
-                .enumerate()
-                .any(|(index, layer)| roots & (1 << index) != 0 && layer.kind.is_paper())
-            {
-                return Some("Paper must stay outside folders at the bottom of the drawing.");
+            if self.layers.iter().enumerate().any(|(index, layer)| {
+                roots & (1 << index) != 0 && layer.kind.is_paper()
+            }) {
+                return Some(
+                    "Paper must stay outside folders at the bottom of the drawing.",
+                );
             }
             let parent = self.layers[roots.trailing_zeros() as usize].parent;
-            if self
-                .layers
-                .iter()
-                .enumerate()
-                .any(|(index, layer)| roots & (1 << index) != 0 && layer.parent != parent)
-            {
+            if self.layers.iter().enumerate().any(|(index, layer)| {
+                roots & (1 << index) != 0 && layer.parent != parent
+            }) {
                 return Some("Select sibling layers to group them.");
             }
             parent
@@ -86,19 +85,17 @@ impl Document {
             return Some("Select existing layers first.");
         };
         let expanded = self.layer_selection_subtrees(roots).unwrap();
-        if self
-            .layers
-            .iter()
-            .enumerate()
-            .any(|(index, layer)| expanded & (1 << index) != 0 && layer.kind.is_paper())
-            || (boundary == 0 && self.layers[0].kind.is_paper())
+        if self.layers.iter().enumerate().any(|(index, layer)| {
+            expanded & (1 << index) != 0 && layer.kind.is_paper()
+        }) || (boundary == 0 && self.layers[0].kind.is_paper())
         {
             return Some("Paper must stay at the bottom of the drawing.");
         }
         if let Some(reason) = self.folder_edit_reason(parent) {
             return Some(reason);
         }
-        let parent_index = parent.and_then(|id| self.layer_index(id)).unwrap_or(64);
+        let parent_index =
+            parent.and_then(|id| self.layer_index(id)).unwrap_or(64);
         if parent_index != 64 && expanded & (1 << parent_index) != 0 {
             return Some("A folder cannot be placed inside itself.");
         }
@@ -110,14 +107,12 @@ impl Document {
             }
         }
         let layout = self.folder_layout().unwrap();
-        let top = if parent_index == 64 {
-            self.layers.len()
-        } else {
-            parent_index
-        };
+        let top =
+            if parent_index == 64 { self.layers.len() } else { parent_index };
         if boundary != top
             && !self.layers.iter().enumerate().any(|(index, _)| {
-                layout.parents[index] == parent_index && layout.starts[index] == boundary
+                layout.parents[index] == parent_index
+                    && layout.starts[index] == boundary
             })
         {
             return Some("Drop at a sibling boundary or inside a folder.");
@@ -131,19 +126,15 @@ impl Document {
         boundary: usize,
         parent: Option<LayerId>,
     ) -> bool {
-        if self
-            .layer_reparent_reason(selection, boundary, parent)
-            .is_some()
-        {
+        if self.layer_reparent_reason(selection, boundary, parent).is_some() {
             return false;
         }
         let roots = self.layer_selection_roots(selection).unwrap();
         let expanded = self.layer_selection_subtrees(roots).unwrap();
         let before = self.clone();
         let active = self.layers[self.active].id;
-        let insertion = (0..boundary)
-            .filter(|index| expanded & (1 << index) == 0)
-            .count();
+        let insertion =
+            (0..boundary).filter(|index| expanded & (1 << index) == 0).count();
         let mut kept = Vec::with_capacity(self.layers.len());
         let mut moved = Vec::new();
         for (index, mut layer) in self.layers.drain(..).enumerate() {
@@ -167,7 +158,10 @@ impl Document {
         true
     }
 
-    pub fn layer_tree_delete_reason(&self, selection: u64) -> Option<&'static str> {
+    pub fn layer_tree_delete_reason(
+        &self,
+        selection: u64,
+    ) -> Option<&'static str> {
         if !self.validate() {
             return Some("The drawing has an invalid layer tree.");
         }
@@ -177,13 +171,13 @@ impl Document {
         if expanded.count_ones() as usize >= self.layers.len() {
             return Some("Keep at least one layer in the drawing.");
         }
-        if self
-            .layers
-            .iter()
-            .enumerate()
-            .any(|(index, _)| expanded & (1 << index) != 0 && !self.layer_ancestors_unlocked(index))
-        {
-            return Some("Unlock the selected layers and their folders before deleting them.");
+        if self.layers.iter().enumerate().any(|(index, _)| {
+            expanded & (1 << index) != 0
+                && !self.layer_ancestors_unlocked(index)
+        }) {
+            return Some(
+                "Unlock the selected layers and their folders before deleting them.",
+            );
         }
         None
     }
@@ -208,7 +202,10 @@ impl Document {
         true
     }
 
-    pub fn layer_tree_duplication_reason(&self, selection: u64) -> Option<&'static str> {
+    pub fn layer_tree_duplication_reason(
+        &self,
+        selection: u64,
+    ) -> Option<&'static str> {
         if !self.validate() {
             return Some("The drawing has an invalid layer tree.");
         }
@@ -216,16 +213,15 @@ impl Document {
             return Some("Select existing layers first.");
         };
         let count = expanded.count_ones() as usize;
-        if self
-            .layers
-            .iter()
-            .enumerate()
-            .any(|(index, layer)| expanded & (1 << index) != 0 && layer.kind.is_paper())
-        {
+        if self.layers.iter().enumerate().any(|(index, layer)| {
+            expanded & (1 << index) != 0 && layer.kind.is_paper()
+        }) {
             return Some("Paper cannot be duplicated.");
         }
         if self.layers.len() + count > 64 || !self.can_allocate_layers(count) {
-            return Some("The duplicated subtrees would exceed the layer or identifier limit.");
+            return Some(
+                "The duplicated subtrees would exceed the layer or identifier limit.",
+            );
         }
         let roots = self.layer_selection_roots(selection).unwrap();
         for (index, layer) in self.layers.iter().enumerate() {
@@ -259,12 +255,16 @@ impl Document {
         let expanded = self.layer_selection_subtrees(roots)?;
         let layout = self.folder_layout()?;
         let mut identities = [LayerId(0); 64];
-        for (index, identity) in identities.iter_mut().enumerate().take(self.layers.len()) {
+        for (index, identity) in
+            identities.iter_mut().enumerate().take(self.layers.len())
+        {
             if expanded & (1 << index) != 0 {
                 *identity = self.allocate_layer_id().unwrap();
             }
         }
-        let mut output = Vec::with_capacity(self.layers.len() + expanded.count_ones() as usize);
+        let mut output = Vec::with_capacity(
+            self.layers.len() + expanded.count_ones() as usize,
+        );
         let mut copied = 0u64;
         for (index, layer) in self.layers.iter().enumerate() {
             output.push(layer.clone());
@@ -275,7 +275,8 @@ impl Document {
                     if roots & (1 << child) != 0 {
                         copy.name.push_str(" copy");
                     }
-                    if let Some(parent) = copy.parent.and_then(|id| self.layer_index(id))
+                    if let Some(parent) =
+                        copy.parent.and_then(|id| self.layer_index(id))
                         && identities[parent].0 != 0
                     {
                         copy.parent = Some(identities[parent]);
@@ -303,28 +304,25 @@ impl Document {
         let roots = self.layer_selection_roots(selection)?;
         let first = roots.trailing_zeros() as usize;
         let parent = self.layers[first].parent;
-        if self
-            .layers
-            .iter()
-            .enumerate()
-            .any(|(index, layer)| roots & (1 << index) != 0 && layer.kind.is_paper())
-        {
+        if self.layers.iter().enumerate().any(|(index, layer)| {
+            roots & (1 << index) != 0 && layer.kind.is_paper()
+        }) {
             return None;
         }
         if self.folder_edit_reason(parent).is_some()
-            || self
-                .layers
-                .iter()
-                .enumerate()
-                .any(|(index, layer)| roots & (1 << index) != 0 && layer.parent != parent)
+            || self.layers.iter().enumerate().any(|(index, layer)| {
+                roots & (1 << index) != 0 && layer.parent != parent
+            })
         {
             return None;
         }
         let layout = self.folder_layout()?;
-        let parent_index = parent.and_then(|id| self.layer_index(id)).unwrap_or(64);
+        let parent_index =
+            parent.and_then(|id| self.layer_index(id)).unwrap_or(64);
         let siblings: Vec<_> = (0..self.layers.len())
             .filter(|index| {
-                layout.parents[*index] == parent_index && !self.layers[*index].kind.is_paper()
+                layout.parents[*index] == parent_index
+                    && !self.layers[*index].kind.is_paper()
             })
             .collect();
         let mut reordered = siblings.clone();
@@ -333,13 +331,15 @@ impl Document {
             reordered.sort_by_key(|index| selected(*index) == upward);
         } else if upward {
             for index in (0..reordered.len().saturating_sub(1)).rev() {
-                if selected(reordered[index]) && !selected(reordered[index + 1]) {
+                if selected(reordered[index]) && !selected(reordered[index + 1])
+                {
                     reordered.swap(index, index + 1);
                 }
             }
         } else {
             for index in 1..reordered.len() {
-                if selected(reordered[index]) && !selected(reordered[index - 1]) {
+                if selected(reordered[index]) && !selected(reordered[index - 1])
+                {
                     reordered.swap(index, index - 1);
                 }
             }
@@ -352,11 +352,8 @@ impl Document {
         } else {
             layout.starts[parent_index]
         };
-        let end = if parent_index == 64 {
-            self.layers.len()
-        } else {
-            parent_index
-        };
+        let end =
+            if parent_index == 64 { self.layers.len() } else { parent_index };
         let mut order: Vec<_> = (0..start).collect();
         for sibling in reordered {
             order.extend(layout.starts[sibling]..=sibling);

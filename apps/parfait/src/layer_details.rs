@@ -20,7 +20,9 @@ impl LayerDetails {
             Some("이름에 제어 문자를 사용할 수 없습니다.")
         } else if self.needs_edit || self.draft.name.chars().count() > 128 {
             Some("기존 이름이 128자를 넘습니다. 이름을 수정해 주세요.")
-        } else if !self.draft.opacity.is_finite() || !(0.0..=1.0).contains(&self.draft.opacity) {
+        } else if !self.draft.opacity.is_finite()
+            || !(0.0..=1.0).contains(&self.draft.opacity)
+        {
             Some("불투명도는 0부터 100% 사이의 숫자로 입력해 주세요.")
         } else if self.draft.name.len() > self.max_name_bytes {
             Some("이 이름은 작업 파일의 저장 크기 한도를 넘습니다.")
@@ -36,7 +38,9 @@ impl LayerDetails {
 
 impl Parfait {
     pub(crate) fn open_layer_details(&mut self) {
-        if let Some(reason) = self.command_disabled_reason(Command::LayerDetails) {
+        if let Some(reason) =
+            self.command_disabled_reason(Command::LayerDetails)
+        {
             self.notice = Some(reason.into());
             return;
         }
@@ -45,7 +49,8 @@ impl Parfait {
         let metadata_bytes = parfait_storage::snapshot_size(&self.doc)
             .and_then(|bytes| bytes.checked_sub(draft.name.len() as u64))
             .unwrap_or(u64::MAX);
-        let max_name_bytes = (512 * 1024 * 1024u64).saturating_sub(metadata_bytes) as usize;
+        let max_name_bytes =
+            (512 * 1024 * 1024u64).saturating_sub(metadata_bytes) as usize;
         let needs_edit = draft.name.chars().nth(128).is_some();
         draft.name = draft.name.chars().take(128).collect();
         self.layer_details = Some(LayerDetails {
@@ -68,11 +73,15 @@ impl Parfait {
         let target = self.doc.layer_index(dialog.draft.id);
         if self.doc.revision != dialog.revision
             || target.is_none_or(|index| {
-                !Arc::ptr_eq(&dialog.draft.pixels, &self.doc.layers[index].pixels)
+                !Arc::ptr_eq(
+                    &dialog.draft.pixels,
+                    &self.doc.layers[index].pixels,
+                )
             })
         {
             self.layer_details = None;
-            self.notice = Some("대상 레이어가 변경되어 설정을 취소했습니다.".into());
+            self.notice =
+                Some("대상 레이어가 변경되어 설정을 취소했습니다.".into());
             return;
         }
         let target = target.unwrap();
@@ -85,7 +94,9 @@ impl Parfait {
         ctx.input(|input| {
             for event in &input.events {
                 match event {
-                    egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => {
+                    egui::Event::Ime(egui::ImeEvent::Preedit {
+                        text, ..
+                    }) => {
                         dialog.composing = !text.is_empty();
                         ime_event = true;
                     }
@@ -166,19 +177,30 @@ impl Parfait {
         });
         #[cfg(test)]
         ctx.data_mut(|data| {
-            data.insert_temp(egui::Id::new("layer_details_bounds"), modal.response.rect)
+            data.insert_temp(
+                egui::Id::new("layer_details_bounds"),
+                modal.response.rect,
+            )
         });
-        if modal.is_top_modal && !modal.any_popup_open && !was_composing && !dialog.composing {
-            cancel |=
-                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        if modal.is_top_modal
+            && !modal.any_popup_open
+            && !was_composing
+            && !dialog.composing
+        {
+            cancel |= ctx.input_mut(|input| {
+                input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
+            });
             if !first_frame && !ime_event {
-                confirm |= ctx
-                    .input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+                confirm |= ctx.input_mut(|input| {
+                    input.consume_key(egui::Modifiers::NONE, egui::Key::Enter)
+                });
             }
         }
         if cancel {
             self.layer_details = None;
-        } else if confirm && dialog.error().is_none() && (!dialog.draft.clipped || clipping_allowed)
+        } else if confirm
+            && dialog.error().is_none()
+            && (!dialog.draft.clipped || clipping_allowed)
         {
             let dialog = self.layer_details.take().unwrap();
             self.edit_named("Layer details", |document| {

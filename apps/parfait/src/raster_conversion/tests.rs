@@ -14,19 +14,19 @@ fn key(pressed: bool, repeat: bool) -> egui::Event {
     }
 }
 
-fn frame(app: &mut Parfait, context: &egui::Context, events: Vec<egui::Event>, focus: bool) {
-    let mut output = context.run_ui(
-        egui::RawInput {
-            events,
-            ..Default::default()
-        },
-        |ui| {
+fn frame(
+    app: &mut Parfait,
+    context: &egui::Context,
+    events: Vec<egui::Event>,
+    focus: bool,
+) {
+    let mut output =
+        context.run_ui(egui::RawInput { events, ..Default::default() }, |ui| {
             if focus {
                 ui.text_edit_singleline(&mut String::new()).request_focus();
             }
             app.shortcuts(ui.ctx());
-        },
-    );
+        });
     output.textures_delta.clear();
 }
 
@@ -47,10 +47,7 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
     let context = egui::Context::default();
     let before = app.doc.clone();
     app.execute_command(Command::BrightnessToOpacity, &context);
-    assert_eq!(
-        app.doc.layers[1].pixels.as_slice(),
-        [0, 0, 0, 64].repeat(64)
-    );
+    assert_eq!(app.doc.layers[1].pixels.as_slice(), [0, 0, 0, 64].repeat(64));
     assert_eq!(app.doc.layers[0], before.layers[0]);
     assert_eq!(app.doc.layers[1].mask, before.layers[1].mask);
     assert_eq!(app.selected_layer_mask(), 3);
@@ -73,12 +70,10 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     assert_eq!(app.doc, converted);
     assert!(
-        app.command_disabled_reason(Command::BrightnessToOpacity)
-            .is_some()
+        app.command_disabled_reason(Command::BrightnessToOpacity).is_some()
     );
     assert!(
-        app.command_disabled_reason(Command::ConvertToDrawingColor)
-            .is_none()
+        app.command_disabled_reason(Command::ConvertToDrawingColor).is_none()
     );
     app.execute_command(Command::ConvertToDrawingColor, &context);
     assert!(app.doc.layers[1].alpha_locked);
@@ -86,12 +81,15 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
 
 #[test]
 fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
-    for command in [Command::BrightnessToOpacity, Command::ConvertToDrawingColor] {
+    for command in
+        [Command::BrightnessToOpacity, Command::ConvertToDrawingColor]
+    {
         for blocker in 0..6 {
             let directory = tempfile::tempdir().unwrap();
             let mut app = Parfait::open(directory.path().to_owned()).unwrap();
             app.doc = Document::new(32, 32);
-            app.doc.layers[1].pixels = Arc::new([160, 120, 80, 255].repeat(1024));
+            app.doc.layers[1].pixels =
+                Arc::new([160, 120, 80, 255].repeat(1024));
             app.doc.create_layer_mask(1, 127);
             app.confirm_new = blocker == 0;
             app.workspace.resizing = blocker == 1;
@@ -100,11 +98,8 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
                 app.select_layer_target(1, true);
             }
             if blocker == 4 {
-                app.brush = Brush {
-                    size: 8.,
-                    pressure: false,
-                    ..Default::default()
-                };
+                app.brush =
+                    Brush { size: 8., pressure: false, ..Default::default() };
                 assert!(app.begin_canvas_stroke(Point {
                     x: 16.,
                     y: 16.,
@@ -112,8 +107,10 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
                 }));
             }
             if blocker == 5 {
-                app.doc.layers[1].alpha_locked = command == Command::BrightnessToOpacity;
-                app.doc.layers[1].locked = command == Command::ConvertToDrawingColor;
+                app.doc.layers[1].alpha_locked =
+                    command == Command::BrightnessToOpacity;
+                app.doc.layers[1].locked =
+                    command == Command::ConvertToDrawingColor;
             }
             let before = app.doc.clone();
             let rows = app.history.rows().count();

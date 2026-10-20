@@ -1,4 +1,6 @@
-use parfait_core::{Brush, BrushOperation, BrushTip, Document, PixelRect, Point, Stroke};
+use parfait_core::{
+    Brush, BrushOperation, BrushTip, Document, PixelRect, Point, Stroke,
+};
 use std::sync::Arc;
 
 #[test]
@@ -35,7 +37,12 @@ fn check_incremental_pixels(opacity_mode: parfait_core::OpacityMode) {
                 .iter_mut()
                 .enumerate()
             {
-                pixel.copy_from_slice(&[(index % 251) as u8, 120, (index % 173) as u8, 180]);
+                pixel.copy_from_slice(&[
+                    (index % 251) as u8,
+                    120,
+                    (index % 173) as u8,
+                    180,
+                ]);
             }
             let mut cached = doc.composite();
             let brush = Brush {
@@ -64,11 +71,7 @@ fn check_incremental_pixels(opacity_mode: parfait_core::OpacityMode) {
             let mut stroke = Stroke::begin(
                 &mut doc,
                 brush,
-                Point {
-                    x: -10.,
-                    y: 3.,
-                    pressure: 0.5,
-                },
+                Point { x: -10., y: 3., pressure: 0.5 },
             );
             for i in 0..30 {
                 stroke.extend(
@@ -84,7 +87,9 @@ fn check_incremental_pixels(opacity_mode: parfait_core::OpacityMode) {
                     let patch = doc.composite_region(r);
                     let stride = (r.x1 - r.x0) as usize * 4;
                     for (y, row) in patch.chunks_exact(stride).enumerate() {
-                        let at = ((r.y0 as usize + y) * doc.width as usize + r.x0 as usize) * 4;
+                        let at = ((r.y0 as usize + y) * doc.width as usize
+                            + r.x0 as usize)
+                            * 4;
                         cached[at..at + stride].copy_from_slice(row);
                     }
                 }
@@ -99,23 +104,14 @@ fn check_incremental_pixels(opacity_mode: parfait_core::OpacityMode) {
 fn empty_and_outside_regions_are_safe() {
     let mut doc = Document::new(16, 16);
     assert!(
-        doc.composite_region(PixelRect {
-            x0: 100,
-            y0: 100,
-            x1: 200,
-            y1: 200
-        })
-        .is_empty()
+        doc.composite_region(PixelRect { x0: 100, y0: 100, x1: 200, y1: 200 })
+            .is_empty()
     );
     let before = doc.clone();
     let mut stroke = Stroke::begin(
         &mut doc,
         Brush::default(),
-        Point {
-            x: -100.,
-            y: -100.,
-            pressure: 1.,
-        },
+        Point { x: -100., y: -100., pressure: 1. },
     );
     assert!(stroke.take_damage().is_none());
     assert_eq!(doc, before);
@@ -149,12 +145,8 @@ fn every_blend_mode_matches_partial_compositing_and_history() {
         d.layers[1].blend_mode = mode;
         d.touch();
         let full = d.composite();
-        let region = d.composite_region(PixelRect {
-            x0: 1,
-            y0: 1,
-            x1: 3,
-            y1: 3,
-        });
+        let region =
+            d.composite_region(PixelRect { x0: 1, y0: 1, x1: 3, y1: 3 });
         assert_eq!(region, [&full[20..28], &full[36..44]].concat(), "{mode:?}");
         history.undo(&mut d);
         assert_eq!(d.composite(), before);

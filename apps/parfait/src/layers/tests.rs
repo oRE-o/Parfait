@@ -3,7 +3,8 @@ use parfait_core::Document;
 use std::sync::Arc;
 
 #[test]
-fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth() {
+fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth()
+{
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     for depth in [1, 8, 61] {
@@ -36,7 +37,11 @@ fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth()
                             egui::Panel::left("nested_layers")
                                 .exact_size(width)
                                 .show(ui, |ui| {
-                                    app.palette(ui, crate::workspace::Palette::Layers, 700.)
+                                    app.palette(
+                                        ui,
+                                        crate::workspace::Palette::Layers,
+                                        700.,
+                                    )
                                 });
                         },
                     );
@@ -44,7 +49,11 @@ fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth()
                 }
                 let thumbnail = context
                     .data(|data| {
-                        data.get_temp::<Rect>(egui::Id::new(("layer_target", active, masked)))
+                        data.get_temp::<Rect>(egui::Id::new((
+                            "layer_target",
+                            active,
+                            masked,
+                        )))
                     })
                     .unwrap();
                 let label = row(&context, "layer_label", active);
@@ -59,7 +68,8 @@ fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth()
 }
 
 #[test]
-fn folder_disclosure_click_selects_parent_without_editing_and_navigation_reveals_child() {
+fn folder_disclosure_click_selects_parent_without_editing_and_navigation_reveals_child()
+ {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     app.doc = Document::new(8, 8);
@@ -73,7 +83,9 @@ fn folder_disclosure_click_selects_parent_without_editing_and_navigation_reveals
         frame(&mut app, &context, vec![], &mut time);
     }
     let fold = context
-        .data(|data| data.get_temp::<Rect>(egui::Id::new(("folder_fold", folder))))
+        .data(|data| {
+            data.get_temp::<Rect>(egui::Id::new(("folder_fold", folder)))
+        })
         .unwrap()
         .center();
     for pressed in [true, false] {
@@ -133,10 +145,7 @@ fn tree_drag_moves_into_folder_on_release_and_preserves_pixels_and_undo() {
     assert_eq!(app.doc.layers[2].id, moved);
     assert_eq!(app.doc.layers[2].parent, Some(folder));
     assert_eq!(app.doc.active, 2);
-    assert!(Arc::ptr_eq(
-        &app.doc.layers[2].pixels,
-        &before.layers[3].pixels
-    ));
+    assert!(Arc::ptr_eq(&app.doc.layers[2].pixels, &before.layers[3].pixels));
     assert!(app.doc.validate());
     assert_eq!(app.history.rows().count(), 2);
     app.undo();
@@ -156,33 +165,35 @@ fn solo_child_keeps_ancestors_visible_and_restores_original_flags() {
     let before = app.doc.clone();
     app.solo_layer(1);
     assert_eq!(
-        app.doc
-            .layers
-            .iter()
-            .map(|layer| layer.visible)
-            .collect::<Vec<_>>(),
+        app.doc.layers.iter().map(|layer| layer.visible).collect::<Vec<_>>(),
         [false, true, true, false]
     );
     app.solo_layer(1);
     assert!(app.doc.same_edit_state(&before));
 }
 
-fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, time: &mut f64) {
+fn frame(
+    app: &mut Parfait,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+    time: &mut f64,
+) {
     *time += 0.03;
     let mut output = ctx.run_ui(
         egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(960., 640.),
+            )),
             time: Some(*time),
             events,
             ..Default::default()
         },
         |ui| {
             app.prepare_layer_list(ui.ctx());
-            egui::Panel::left("test_layers")
-                .exact_size(240.)
-                .show(ui, |ui| {
-                    app.palette(ui, crate::workspace::Palette::Layers, 500.);
-                });
+            egui::Panel::left("test_layers").exact_size(240.).show(ui, |ui| {
+                app.palette(ui, crate::workspace::Palette::Layers, 500.);
+            });
             egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
             app.settle_layer_edit(ui.ctx());
         },
@@ -193,7 +204,11 @@ fn row(ctx: &egui::Context, kind: &str, layer: usize) -> Rect {
     ctx.data(|data| data.get_temp::<Rect>(egui::Id::new((kind, layer))))
         .unwrap()
 }
-fn pointer(pos: Pos2, pressed: bool, modifiers: egui::Modifiers) -> egui::Event {
+fn pointer(
+    pos: Pos2,
+    pressed: bool,
+    modifiers: egui::Modifiers,
+) -> egui::Event {
     egui::Event::PointerButton {
         pos,
         button: egui::PointerButton::Primary,
@@ -245,10 +260,7 @@ fn batched_drag_inserts_without_copying_pixels_and_undo_restores_order() {
         ["Layer 2", "Layer 0", "Layer 1", "Layer 3"]
     );
     assert_eq!(app.doc.active, 0);
-    assert!(Arc::ptr_eq(
-        &app.doc.layers[0].pixels,
-        &before.layers[2].pixels
-    ));
+    assert!(Arc::ptr_eq(&app.doc.layers[0].pixels, &before.layers[2].pixels));
     assert_eq!(app.history.rows().count(), 2);
     app.undo();
     assert_eq!(app.doc.layers, before.layers);
@@ -294,7 +306,9 @@ fn drag_preview_cancel_outside_and_stale_state_preserve_document_and_redo() {
                 repeat: false,
                 modifiers: Default::default(),
             }],
-            1 => vec![pointer(egui::pos2(800., 300.), false, Default::default())],
+            1 => {
+                vec![pointer(egui::pos2(800., 300.), false, Default::default())]
+            }
             2 => vec![egui::Event::WindowFocused(false)],
             _ => {
                 app.doc.touch();
@@ -351,10 +365,7 @@ fn check_shift_and_group_actions_keep_active_and_have_one_history_entry() {
     app.layer_click(1, Default::default(), false);
     app.layer_click(
         3,
-        egui::Modifiers {
-            shift: true,
-            ..Default::default()
-        },
+        egui::Modifiers { shift: true, ..Default::default() },
         false,
     );
     assert_eq!(app.selected_layer_mask(), 0b1110);
@@ -416,12 +427,7 @@ fn double_click_renames_inline_enter_commits_and_escape_restores() {
     assert_eq!(app.history.rows().count(), 2);
     app.begin_layer_rename(2);
     frame(&mut app, &ctx, vec![], &mut time);
-    frame(
-        &mut app,
-        &ctx,
-        vec![egui::Event::Text("Discard".into())],
-        &mut time,
-    );
+    frame(&mut app, &ctx, vec![egui::Event::Text("Discard".into())], &mut time);
     frame(
         &mut app,
         &ctx,
@@ -486,7 +492,9 @@ fn modifier_row_clicks_toggle_and_range_select_without_emptying_the_target() {
             ctrl: control,
             ..Default::default()
         };
-        for (layer, mask, active) in [(1, 0b0110, 2), (2, 0b0010, 1), (1, 0b0010, 1)] {
+        for (layer, mask, active) in
+            [(1, 0b0110, 2), (2, 0b0010, 1), (1, 0b0010, 1)]
+        {
             let position = row(&ctx, "layer_row", layer).center();
             frame(
                 &mut app,
@@ -502,10 +510,7 @@ fn modifier_row_clicks_toggle_and_range_select_without_emptying_the_target() {
             assert_eq!(app.doc.active, active);
         }
         let position = row(&ctx, "layer_row", 3).center();
-        let shift = egui::Modifiers {
-            shift: true,
-            ..Default::default()
-        };
+        let shift = egui::Modifiers { shift: true, ..Default::default() };
         frame(
             &mut app,
             &ctx,
@@ -524,7 +529,8 @@ fn modifier_row_clicks_toggle_and_range_select_without_emptying_the_target() {
 }
 
 #[test]
-fn grouped_duplicate_is_preflighted_before_partial_growth_and_solo_restores_flags() {
+fn grouped_duplicate_is_preflighted_before_partial_growth_and_solo_restores_flags()
+ {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.doc = Document::new(2, 2);
@@ -538,25 +544,20 @@ fn grouped_duplicate_is_preflighted_before_partial_growth_and_solo_restores_flag
     assert_eq!(app.doc, before);
     assert_eq!(app.history.rows().count(), 0);
     app.doc.layers[3].visible = false;
-    let visibility: Vec<_> = app.doc.layers.iter().map(|layer| layer.visible).collect();
+    let visibility: Vec<_> =
+        app.doc.layers.iter().map(|layer| layer.visible).collect();
+    app.solo_layer(1);
+    assert_eq!(app.doc.layers.iter().filter(|layer| layer.visible).count(), 1);
     app.solo_layer(1);
     assert_eq!(
-        app.doc.layers.iter().filter(|layer| layer.visible).count(),
-        1
-    );
-    app.solo_layer(1);
-    assert_eq!(
-        app.doc
-            .layers
-            .iter()
-            .map(|layer| layer.visible)
-            .collect::<Vec<_>>(),
+        app.doc.layers.iter().map(|layer| layer.visible).collect::<Vec<_>>(),
         visibility
     );
 }
 
 #[test]
-fn dragging_at_viewport_edge_scrolls_and_narrow_rows_do_not_escape_the_palette() {
+fn dragging_at_viewport_edge_scrolls_and_narrow_rows_do_not_escape_the_palette()
+{
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     let ctx = egui::Context::default();
@@ -568,7 +569,9 @@ fn dragging_at_viewport_edge_scrolls_and_narrow_rows_do_not_escape_the_palette()
     frame(&mut app, &ctx, vec![], &mut time);
     let start = row(&ctx, "layer_row", 23).center();
     let viewport = ctx
-        .data(|data| data.get_temp::<Rect>(egui::Id::new("layer_list_viewport")))
+        .data(|data| {
+            data.get_temp::<Rect>(egui::Id::new("layer_list_viewport"))
+        })
         .unwrap();
     let edge = viewport.center_bottom() - egui::vec2(0., 2.);
     frame(
@@ -585,15 +588,13 @@ fn dragging_at_viewport_edge_scrolls_and_narrow_rows_do_not_escape_the_palette()
         frame(&mut app, &ctx, vec![], &mut time);
     }
     assert!(row(&ctx, "layer_row", 23).top() < start.y - 21.);
-    frame(
-        &mut app,
-        &ctx,
-        vec![egui::Event::WindowFocused(false)],
-        &mut time,
-    );
+    frame(&mut app, &ctx, vec![egui::Event::WindowFocused(false)], &mut time);
     let mut output = ctx.run_ui(
         egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(180., 600.))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(180., 600.),
+            )),
             ..Default::default()
         },
         |ui| {
@@ -618,7 +619,10 @@ fn group_drag_in_docked_workspace_uses_release_position_without_a_move_event() {
         time += 0.1;
         let mut output = ctx.run_ui(
             egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1440., 920.))),
+                screen_rect: Some(Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(1440., 920.),
+                )),
                 time: Some(time),
                 events,
                 ..Default::default()
@@ -669,7 +673,8 @@ fn group_drag_in_docked_workspace_uses_release_position_without_a_move_event() {
 }
 
 #[test]
-fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags() {
+fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags()
+{
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     let ctx = egui::Context::default();
@@ -677,12 +682,7 @@ fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags()
     setup(&mut app, &ctx, &mut time);
     app.begin_layer_rename(2);
     frame(&mut app, &ctx, vec![], &mut time);
-    frame(
-        &mut app,
-        &ctx,
-        vec![egui::Event::Text("Renamed".into())],
-        &mut time,
-    );
+    frame(&mut app, &ctx, vec![egui::Event::Text("Renamed".into())], &mut time);
     app.hide_panels = true;
     app.prepare_layer_list(&ctx);
     assert!(app.layer_list.rename.is_none());
@@ -696,7 +696,10 @@ fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags()
         time += 0.1;
         let mut output = ctx.run_ui(
             egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.))),
+                screen_rect: Some(Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(960., 640.),
+                )),
                 time: Some(time),
                 events,
                 ..Default::default()
@@ -706,7 +709,10 @@ fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags()
                     .order(egui::Order::Foreground)
                     .fixed_pos(target - egui::vec2(30., 20.))
                     .show(ui.ctx(), |ui| {
-                        ui.add_sized([100., 40.], egui::Button::new("Popup action"));
+                        ui.add_sized(
+                            [100., 40.],
+                            egui::Button::new("Popup action"),
+                        );
                     });
                 app.layer_rows(ui, 500.);
             },

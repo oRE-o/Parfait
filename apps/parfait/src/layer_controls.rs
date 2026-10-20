@@ -86,44 +86,62 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
     let response = ui
         .horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.;
-            ui.spacing_mut().slider_width = (ui.available_width() - 52.).max(24.);
+            ui.spacing_mut().slider_width =
+                (ui.available_width() - 52.).max(24.);
             let background = ui.painter().add(egui::Shape::Noop);
             let slider = ui
                 .scope(|ui| {
                     ui.spacing_mut().slider_rail_height = 10.;
-                    ui.visuals_mut().widgets.inactive.bg_fill = Color32::TRANSPARENT;
+                    ui.visuals_mut().widgets.inactive.bg_fill =
+                        Color32::TRANSPARENT;
                     ui.add(
                         egui::Slider::new(&mut percent, 0.0..=100.)
                             .show_value(false)
                             .clamping(egui::SliderClamping::Edits)
                             .step_by(1.)
                             .trailing_fill(false)
-                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: 0.18 }),
+                            .handle_shape(egui::style::HandleShape::Rect {
+                                aspect_ratio: 0.18,
+                            }),
                     )
                 })
                 .inner;
             slider.widget_info(|| {
-                egui::WidgetInfo::slider(ui.is_enabled(), f64::from(percent), "불투명도 (%)")
+                egui::WidgetInfo::slider(
+                    ui.is_enabled(),
+                    f64::from(percent),
+                    "불투명도 (%)",
+                )
             });
-            let track =
-                Rect::from_center_size(slider.rect.center(), egui::vec2(slider.rect.width(), 10.));
+            let track = Rect::from_center_size(
+                slider.rect.center(),
+                egui::vec2(slider.rect.width(), 10.),
+            );
             let mut mesh = egui::Mesh::default();
             for column in 0..(track.width() / 5.).ceil() as usize {
                 for row in 0..2 {
                     let cell = Rect::from_min_size(
-                        track.min + egui::vec2(column as f32 * 5., row as f32 * 5.),
+                        track.min
+                            + egui::vec2(column as f32 * 5., row as f32 * 5.),
                         egui::vec2(5., 5.),
                     )
                     .intersect(track);
                     mesh.add_colored_rect(
                         cell,
-                        Color32::from_gray(if (column + row) % 2 == 0 { 210 } else { 162 }),
+                        Color32::from_gray(if (column + row) % 2 == 0 {
+                            210
+                        } else {
+                            162
+                        }),
                     );
                 }
             }
             mesh.add_colored_rect(
                 Rect::from_min_max(
-                    egui::pos2(track.left() + track.width() * percent / 100., track.top()),
+                    egui::pos2(
+                        track.left() + track.width() * percent / 100.,
+                        track.top(),
+                    ),
                     track.max,
                 ),
                 Color32::from_gray(78),
@@ -150,13 +168,18 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
                             .range(0.0..=100.)
                             .fixed_decimals(0)
                             .custom_parser(|text| {
-                                text.trim().trim_end_matches('%').trim().parse().ok()
+                                text.trim()
+                                    .trim_end_matches('%')
+                                    .trim()
+                                    .parse()
+                                    .ok()
                             }),
                     )
                 })
                 .inner
                 .on_hover_text("불투명도 (%) · 클릭하여 숫자 입력");
-            let (arrows, _) = ui.allocate_exact_size(egui::vec2(10., 20.), Sense::hover());
+            let (arrows, _) =
+                ui.allocate_exact_size(egui::vec2(10., 20.), Sense::hover());
             for (up, rect, delta, label) in [
                 (
                     true,
@@ -171,9 +194,14 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
                     "불투명도 낮추기",
                 ),
             ] {
-                let button = ui.interact(rect, ui.id().with(up), Sense::click());
+                let button =
+                    ui.interact(rect, ui.id().with(up), Sense::click());
                 button.widget_info(|| {
-                    egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::Button,
+                        ui.is_enabled(),
+                        label,
+                    )
                 });
                 let visuals = ui.style().interact(&button);
                 let direction = if up { -1. } else { 1. };
@@ -189,18 +217,26 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
                     percent = (percent.round() + delta).clamp(0., 100.);
                 }
                 #[cfg(test)]
-                ui.data_mut(|data| data.insert_temp(egui::Id::new(("opacity_arrow", up)), rect));
+                ui.data_mut(|data| {
+                    data.insert_temp(egui::Id::new(("opacity_arrow", up)), rect)
+                });
                 button.on_hover_text(label);
             }
             #[cfg(test)]
             ui.data_mut(|data| {
-                data.insert_temp(egui::Id::new("layer_opacity_number"), number.rect);
+                data.insert_temp(
+                    egui::Id::new("layer_opacity_number"),
+                    number.rect,
+                );
                 data.insert_temp(
                     egui::Id::new("layer_opacity"),
                     (slider.rect.union(number.rect), slider.rect.width()),
                 );
             });
-            if number.gained_focus() || number.has_focus() || number.lost_focus() {
+            if number.gained_focus()
+                || number.has_focus()
+                || number.lost_focus()
+            {
                 number.union(slider)
             } else {
                 slider.union(number)
@@ -213,6 +249,8 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
         response.mark_changed();
     }
     #[cfg(test)]
-    ui.data_mut(|data| data.insert_temp(egui::Id::new("layer_opacity_focus"), response.id));
+    ui.data_mut(|data| {
+        data.insert_temp(egui::Id::new("layer_opacity_focus"), response.id)
+    });
     response
 }

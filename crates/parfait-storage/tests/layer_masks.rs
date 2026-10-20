@@ -11,7 +11,9 @@ fn dense_and_uniform_masks_preserve_raw_pixels_and_history_after_reopen() {
     let original_pixels = document.layers[1].pixels.clone();
     document.layers[1].mask = Some(LayerMask {
         enabled: true,
-        coverage: MaskCoverage::Dense(Arc::new((0..77).map(|index| (index * 29) as u8).collect())),
+        coverage: MaskCoverage::Dense(Arc::new(
+            (0..77).map(|index| (index * 29) as u8).collect(),
+        )),
     });
     document.touch();
     let mut history = History::default();

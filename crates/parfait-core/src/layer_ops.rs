@@ -22,7 +22,9 @@ impl Document {
             return Some("The drawing has an invalid layer layout.");
         }
         if self.has_folders() {
-            return Some("Use tree-aware combining for folders and their children.");
+            return Some(
+                "Use tree-aware combining for folders and their children.",
+            );
         }
         if action != LayerCombine::CopyVisible && self.has_non_raster_layers() {
             return Some(
@@ -35,7 +37,10 @@ impl Document {
         }
         let Some(mask) = self.combine_mask(action, selection) else {
             return Some(
-                if matches!(action, LayerCombine::TransferDown | LayerCombine::MergeDown) {
+                if matches!(
+                    action,
+                    LayerCombine::TransferDown | LayerCombine::MergeDown
+                ) {
                     "There is no layer below the active layer."
                 } else {
                     "Show a layer first."
@@ -44,38 +49,42 @@ impl Document {
         };
         if matches!(
             action,
-            LayerCombine::CopyVisible | LayerCombine::MergeVisible | LayerCombine::Flatten
+            LayerCombine::CopyVisible
+                | LayerCombine::MergeVisible
+                | LayerCombine::Flatten
         ) && !self.can_allocate_layers(1)
         {
             return Some("The layer identifier space is exhausted.");
         }
         if matches!(action, LayerCombine::Clear | LayerCombine::TransferDown)
-            && self
-                .layers
-                .iter()
-                .enumerate()
-                .any(|(index, layer)| mask & (1 << index) != 0 && layer.alpha_locked)
+            && self.layers.iter().enumerate().any(|(index, layer)| {
+                mask & (1 << index) != 0 && layer.alpha_locked
+            })
         {
-            return Some("Unlock transparent pixels before clearing or transferring these layers.");
+            return Some(
+                "Unlock transparent pixels before clearing or transferring these layers.",
+            );
         }
         if action == LayerCombine::CopyVisible {
-            if self
-                .logical_pixel_bytes()
-                .saturating_add(u64::from(self.width) * u64::from(self.height) * 4)
-                > 512 * 1024 * 1024
+            if self.logical_pixel_bytes().saturating_add(
+                u64::from(self.width) * u64::from(self.height) * 4,
+            ) > 512 * 1024 * 1024
             {
-                return Some("The visible copy would exceed the 512 MiB logical pixel budget.");
+                return Some(
+                    "The visible copy would exceed the 512 MiB logical pixel budget.",
+                );
             }
-            return (self.layers.len() >= 64).then_some("The drawing already contains 64 layers.");
+            return (self.layers.len() >= 64)
+                .then_some("The drawing already contains 64 layers.");
         }
         if action == LayerCombine::TransferDown
-            && self
-                .layers
-                .iter()
-                .enumerate()
-                .any(|(index, layer)| mask & (1 << index) != 0 && layer.mask.is_some())
+            && self.layers.iter().enumerate().any(|(index, layer)| {
+                mask & (1 << index) != 0 && layer.mask.is_some()
+            })
         {
-            return Some("Apply or remove the affected masks before transferring pixels.");
+            return Some(
+                "Apply or remove the affected masks before transferring pixels.",
+            );
         }
         if self
             .layers
@@ -87,7 +96,9 @@ impl Document {
         }
         if matches!(
             action,
-            LayerCombine::TransferDown | LayerCombine::MergeDown | LayerCombine::MergeSelected
+            LayerCombine::TransferDown
+                | LayerCombine::MergeDown
+                | LayerCombine::MergeSelected
         ) {
             if mask.count_ones() < 2 {
                 return Some("Select at least two adjacent layers.");
@@ -122,30 +133,41 @@ impl Document {
         None
     }
 
-    fn combine_mask(&self, action: LayerCombine, selection: u64) -> Option<u64> {
+    fn combine_mask(
+        &self,
+        action: LayerCombine,
+        selection: u64,
+    ) -> Option<u64> {
         match action {
             LayerCombine::TransferDown | LayerCombine::MergeDown => self
                 .active
                 .checked_sub(1)
                 .map(|below| (1 << below) | (1 << self.active)),
-            LayerCombine::MergeSelected | LayerCombine::Clear => Some(selection),
+            LayerCombine::MergeSelected | LayerCombine::Clear => {
+                Some(selection)
+            }
             LayerCombine::Flatten => Some(u64::MAX >> (64 - self.layers.len())),
             LayerCombine::MergeVisible | LayerCombine::CopyVisible => {
-                let mask = self
-                    .layers
-                    .iter()
-                    .enumerate()
-                    .fold(0, |mask, (index, layer)| {
+                let mask = self.layers.iter().enumerate().fold(
+                    0,
+                    |mask, (index, layer)| {
                         mask | if layer.visible { 1 << index } else { 0 }
-                    });
+                    },
+                );
                 (mask != 0).then_some(mask)
             }
         }
     }
 
-    pub fn combine_layers(&mut self, action: LayerCombine, selection: u64) -> bool {
-        if matches!(action, LayerCombine::TransferDown | LayerCombine::MergeDown)
-            && self.active == 0
+    pub fn combine_layers(
+        &mut self,
+        action: LayerCombine,
+        selection: u64,
+    ) -> bool {
+        if matches!(
+            action,
+            LayerCombine::TransferDown | LayerCombine::MergeDown
+        ) && self.active == 0
             || matches!(
                 action,
                 LayerCombine::CopyVisible | LayerCombine::MergeVisible
@@ -161,8 +183,10 @@ impl Document {
             let mut changed = false;
             for (index, layer) in self.layers.iter_mut().enumerate() {
                 if mask & (1 << index) != 0 {
-                    changed |=
-                        crate::selection::clear_pixels(&mut layer.pixels, self.selection.as_ref());
+                    changed |= crate::selection::clear_pixels(
+                        &mut layer.pixels,
+                        self.selection.as_ref(),
+                    );
                 }
             }
             if changed {
@@ -171,20 +195,12 @@ impl Document {
             return changed;
         }
         if action == LayerCombine::TransferDown
-            && self.layers[self.active]
-                .pixels
-                .iter()
-                .all(|byte| *byte == 0)
+            && self.layers[self.active].pixels.iter().all(|byte| *byte == 0)
         {
             return false;
         }
         let pixels = self.composite_region_layers(
-            PixelRect {
-                x0: 0,
-                y0: 0,
-                x1: self.width,
-                y1: self.height,
-            },
+            PixelRect { x0: 0, y0: 0, x1: self.width, y1: self.height },
             mask,
         );
         match action {
@@ -208,7 +224,9 @@ impl Document {
                 self.layers.drain(bottom + 1..=top);
                 self.active = bottom;
             }
-            LayerCombine::MergeVisible | LayerCombine::CopyVisible | LayerCombine::Flatten => {
+            LayerCombine::MergeVisible
+            | LayerCombine::CopyVisible
+            | LayerCombine::Flatten => {
                 let name = match action {
                     LayerCombine::MergeVisible => "Merged visible",
                     LayerCombine::CopyVisible => "Visible copy",
@@ -293,19 +311,20 @@ mod tests {
                 assert!(document.combine_layers(action, 1 << document.active));
                 assert!(document.validate());
                 if action == LayerCombine::CopyVisible {
-                    assert_eq!(*document.layers.last().unwrap().pixels, expected);
-                    for (layer, before) in document.layers.iter().zip(&original.layers) {
+                    assert_eq!(
+                        *document.layers.last().unwrap().pixels,
+                        expected
+                    );
+                    for (layer, before) in
+                        document.layers.iter().zip(&original.layers)
+                    {
                         assert!(Arc::ptr_eq(&layer.pixels, &before.pixels));
                     }
                 } else {
                     assert_eq!(document.composite(), expected);
                     assert_eq!(
                         document.layers.len(),
-                        if action == LayerCombine::Flatten {
-                            1
-                        } else {
-                            2
-                        }
+                        if action == LayerCombine::Flatten { 1 } else { 2 }
                     );
                     if action == LayerCombine::MergeVisible {
                         assert_eq!(document.layers[0], original.layers[2]);
@@ -343,8 +362,13 @@ mod tests {
             if action == LayerCombine::TransferDown {
                 assert_eq!(document.layers.len(), original.layers.len());
                 assert_eq!(document.active, 3);
-                assert!(document.layers[3].pixels.iter().all(|byte| *byte == 0));
-                assert_eq!(*original.layers[3].pixels, *sample().layers[3].pixels);
+                assert!(
+                    document.layers[3].pixels.iter().all(|byte| *byte == 0)
+                );
+                assert_eq!(
+                    *original.layers[3].pixels,
+                    *sample().layers[3].pixels
+                );
             } else {
                 assert_eq!(document.layers.len(), original.layers.len() - 1);
                 assert_eq!(document.active, 2);

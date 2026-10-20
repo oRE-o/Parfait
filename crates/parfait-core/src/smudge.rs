@@ -44,7 +44,11 @@ fn sample(
     let left = x.floor() as i32;
     let top = y.floor() as i32;
     let read = |column: i32, row: i32| {
-        if column < 0 || row < 0 || column as usize >= width || row as usize >= height {
+        if column < 0
+            || row < 0
+            || column as usize >= width
+            || row as usize >= height
+        {
             [0.; 4]
         } else {
             pixel(column as usize, row as usize).map(f32::from)
@@ -92,8 +96,10 @@ pub(crate) fn stamp(
                 point.y + offset_y - 0.5,
                 |column, row| {
                     let index = (row * document.width as usize + column) * 4;
-                    integer_premultiplied(source[index..index + 4].try_into().unwrap())
-                        .map(|channel| channel as u16)
+                    integer_premultiplied(
+                        source[index..index + 4].try_into().unwrap(),
+                    )
+                    .map(|channel| channel as u16)
                 },
             );
             let carried = if had_previous && patch.radius == dab.radius {
@@ -122,8 +128,9 @@ pub(crate) fn stamp(
         return None;
     }
     let alpha_locked = document.layers[document.active].alpha_locked;
-    let mut destination =
-        crate::brush::Destination::Shared(&mut document.layers[document.active].pixels);
+    let mut destination = crate::brush::Destination::Shared(
+        &mut document.layers[document.active].pixels,
+    );
     let mut changed = false;
     for row in dab.bounds.y0..dab.bounds.y1 {
         for column in dab.bounds.x0..dab.bounds.x1 {
@@ -204,17 +211,14 @@ mod tests {
     }
 
     #[test]
-    fn spatial_pattern_moves_without_collapsing_into_an_average_or_adding_ink() {
+    fn spatial_pattern_moves_without_collapsing_into_an_average_or_adding_ink()
+    {
         let original = fixture();
         let draw = |operation, color| {
             let mut document = original.clone();
             let mut stroke = Stroke::begin(
                 &mut document,
-                Brush {
-                    operation,
-                    color,
-                    ..brush()
-                },
+                Brush { operation, color, ..brush() },
                 point(8.5, 12.5),
             );
             assert!(document == original);
@@ -232,12 +236,15 @@ mod tests {
             );
         }
         assert!(result == draw(BrushOperation::Smudge, [0, 255, 0]));
-        assert!(result.layers != draw(BrushOperation::Blend, [255, 0, 255]).layers);
+        assert!(
+            result.layers != draw(BrushOperation::Blend, [255, 0, 255]).layers
+        );
     }
 
     #[test]
     fn bilinear_samples_are_alpha_safe_and_clip_to_transparent_outside() {
-        let pixels = [[65025, 0, 0, 65025], [0; 4], [0, 0, 65025, 65025], [0; 4]];
+        let pixels =
+            [[65025, 0, 0, 65025], [0; 4], [0, 0, 65025, 65025], [0; 4]];
         assert_eq!(
             sample(2, 2, 0.5, 0.5, |column, row| pixels[row * 2 + column]),
             [16256.25, 0., 16256.25, 32512.5]
@@ -257,13 +264,11 @@ mod tests {
             .iter_mut()
             .enumerate()
         {
-            *pixel = if index % 20 < 10 {
-                [0, 0, 255, 255]
-            } else {
-                [255, 0, 0, 0]
-            };
+            *pixel =
+                if index % 20 < 10 { [0, 0, 255, 255] } else { [255, 0, 0, 0] };
         }
-        let mut stroke = Stroke::begin(&mut document, brush(), point(7.25, 5.75));
+        let mut stroke =
+            Stroke::begin(&mut document, brush(), point(7.25, 5.75));
         stroke.extend(&mut document, point(15.75, 5.75));
         assert!(
             document.layers[1]
@@ -287,22 +292,14 @@ mod tests {
             let before = document.clone();
             let mut stroke = Stroke::begin(
                 &mut document,
-                Brush {
-                    pressure: true,
-                    pressure_opacity: true,
-                    ..brush()
-                },
+                Brush { pressure: true, pressure_opacity: true, ..brush() },
                 point(18.25, 15.5),
             );
-            stroke.extend(
-                &mut document,
-                Point {
-                    pressure: 0.3,
-                    ..end
-                },
-            );
+            stroke.extend(&mut document, Point { pressure: 0.3, ..end });
             if let Some(damage) = stroke.take_damage() {
-                assert!(damage.x1 <= document.width && damage.y1 <= document.height);
+                assert!(
+                    damage.x1 <= document.width && damage.y1 <= document.height
+                );
             }
             assert!(document.validate());
             assert!(document.layers != before.layers);
@@ -310,13 +307,11 @@ mod tests {
     }
 
     #[test]
-    fn empty_blocked_zero_strength_and_stationary_strokes_do_not_copy_or_edit_pixels() {
+    fn empty_blocked_zero_strength_and_stationary_strokes_do_not_copy_or_edit_pixels()
+     {
         for blocked in 0..6 {
-            let mut document = if blocked == 0 {
-                Document::new(48, 32)
-            } else {
-                fixture()
-            };
+            let mut document =
+                if blocked == 0 { Document::new(48, 32) } else { fixture() };
             document.layers[1].locked = blocked == 1;
             document.layers[1].visible = blocked != 2;
             let before = document.clone();
@@ -352,10 +347,7 @@ mod tests {
         let before = document.clone();
         let mut stroke = Stroke::begin(
             &mut document,
-            Brush {
-                continuous_spray: true,
-                ..brush()
-            },
+            Brush { continuous_spray: true, ..brush() },
             point(8.25, 12.5),
         );
         assert!(stroke.spray_interval().is_none());
@@ -374,18 +366,24 @@ mod tests {
         let mut document = fixture();
         let brush = brush();
         let mut patch = Patch::new(16);
-        assert!(stamp(&mut document, &brush, point(8.5, 12.5), &mut patch).is_none());
-        assert!(stamp(&mut document, &brush, point(-100., -100.), &mut patch).is_none());
+        assert!(
+            stamp(&mut document, &brush, point(8.5, 12.5), &mut patch)
+                .is_none()
+        );
+        assert!(
+            stamp(&mut document, &brush, point(-100., -100.), &mut patch)
+                .is_none()
+        );
         let before = document.clone();
-        assert!(stamp(&mut document, &brush, point(20.5, 12.5), &mut patch).is_none());
+        assert!(
+            stamp(&mut document, &brush, point(20.5, 12.5), &mut patch)
+                .is_none()
+        );
         assert!(document == before);
         let mut document = Document::new(640, 640);
         let mut stroke = Stroke::begin(
             &mut document,
-            Brush {
-                size: 512.,
-                ..brush
-            },
+            Brush { size: 512., ..brush },
             point(320.25, 320.75),
         );
         assert_eq!(stroke.scratch_capacity_bytes(), 4_260_096);
@@ -398,11 +396,9 @@ mod tests {
         let original = fixture();
         let mut whole = original.clone();
         let mut segmented = original.clone();
-        let brush = Brush {
-            continuous_spray: true,
-            ..brush()
-        };
-        let mut first = Stroke::begin(&mut whole, brush.clone(), point(8.5, 12.5));
+        let brush = Brush { continuous_spray: true, ..brush() };
+        let mut first =
+            Stroke::begin(&mut whole, brush.clone(), point(8.5, 12.5));
         let mut second = Stroke::begin(&mut segmented, brush, point(8.5, 12.5));
         let mut history = History::default();
         history.checkpoint(&original);

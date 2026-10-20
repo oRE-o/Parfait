@@ -4,17 +4,25 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chord {
-    #[serde(serialize_with = "serialize_key", deserialize_with = "deserialize_key")]
+    #[serde(
+        serialize_with = "serialize_key",
+        deserialize_with = "deserialize_key"
+    )]
     pub key: Key,
     pub primary: bool,
     pub shift: bool,
     pub alt: bool,
 }
 
-fn serialize_key<S: Serializer>(key: &Key, serializer: S) -> Result<S::Ok, S::Error> {
+fn serialize_key<S: Serializer>(
+    key: &Key,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(key.name())
 }
-fn deserialize_key<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Key, D::Error> {
+fn deserialize_key<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Key, D::Error> {
     let name = String::deserialize(deserializer)?;
     if name.len() <= 32
         && let Some(key) = Key::from_name(&name)
@@ -26,17 +34,8 @@ fn deserialize_key<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Key, D:
 
 impl Chord {
     pub fn new(key: Key, primary: bool, shift: bool, alt: bool) -> Self {
-        let key = if key == Key::Equals && shift {
-            Key::Plus
-        } else {
-            key
-        };
-        Self {
-            key,
-            primary,
-            shift: shift && key != Key::Plus,
-            alt,
-        }
+        let key = if key == Key::Equals && shift { Key::Plus } else { key };
+        Self { key, primary, shift: shift && key != Key::Plus, alt }
     }
     pub fn from_event(key: Key, modifiers: egui::Modifiers) -> Self {
         Self::new(
@@ -50,7 +49,12 @@ impl Chord {
         self == Self::new(self.key, self.primary, self.shift, self.alt)
             && !matches!(
                 self.key,
-                Key::Space | Key::Escape | Key::Enter | Key::Copy | Key::Cut | Key::Paste
+                Key::Space
+                    | Key::Escape
+                    | Key::Enter
+                    | Key::Copy
+                    | Key::Cut
+                    | Key::Paste
             )
             && !(self.primary && self.key == Key::Q)
             && !(self.alt && self.key == Key::F4)
@@ -128,7 +132,9 @@ impl AssignmentError {
             }
             Self::Missing => "The selected assignment no longer exists.",
             Self::Limit => "Each command supports up to four shortcuts.",
-            Self::Duplicate => "This shortcut is already assigned to the selected command.",
+            Self::Duplicate => {
+                "This shortcut is already assigned to the selected command."
+            }
             Self::Conflict => {
                 "This shortcut belongs to another command. Replace it explicitly or choose another key."
             }
@@ -190,10 +196,7 @@ impl Default for Keymap {
                 chord: Chord::new(key, primary, shift, alt),
             });
         }
-        let mut keymap = Self {
-            bindings,
-            hints: Vec::new(),
-        };
+        let mut keymap = Self { bindings, hints: Vec::new() };
         keymap.refresh();
         keymap
     }
@@ -201,10 +204,7 @@ impl Default for Keymap {
 
 impl Keymap {
     pub fn preferences(&self) -> Self {
-        Self {
-            bindings: self.bindings.clone(),
-            hints: Vec::new(),
-        }
+        Self { bindings: self.bindings.clone(), hints: Vec::new() }
     }
     pub fn chords(&self, command: Command) -> impl Iterator<Item = Chord> + '_ {
         self.bindings
@@ -213,9 +213,7 @@ impl Keymap {
             .map(|binding| binding.chord)
     }
     pub fn hint(&self, command: Command) -> &str {
-        self.hints
-            .get(command as usize)
-            .map_or("", |hint| hint.keys.as_str())
+        self.hints.get(command as usize).map_or("", |hint| hint.keys.as_str())
     }
     pub fn summary(&self, command: Command) -> &str {
         self.hints
@@ -300,7 +298,9 @@ impl Keymap {
             return false;
         }
         for (index, binding) in self.bindings.iter().enumerate() {
-            if !binding.chord.validate() || self.chords(binding.command).count() > 4 {
+            if !binding.chord.validate()
+                || self.chords(binding.command).count() > 4
+            {
                 return false;
             }
             for previous in &self.bindings[..index] {
@@ -323,8 +323,9 @@ impl Keymap {
             .map(|binding| binding.command)
     }
     pub fn conflicts(&self, command: Command, chord: Chord) -> bool {
-        self.owners(chord)
-            .any(|owner| owner != command && !(owner.is_tool() && command.is_tool()))
+        self.owners(chord).any(|owner| {
+            owner != command && !(owner.is_tool() && command.is_tool())
+        })
     }
     pub fn assign(
         &mut self,
@@ -336,7 +337,9 @@ impl Keymap {
         if !chord.validate() {
             return Err(AssignmentError::Reserved);
         }
-        if old.is_some_and(|old| !self.chords(command).any(|existing| existing == old)) {
+        if old.is_some_and(|old| {
+            !self.chords(command).any(|existing| existing == old)
+        }) {
             return Err(AssignmentError::Missing);
         }
         if self
@@ -353,18 +356,25 @@ impl Keymap {
         }
         self.bindings.retain(|binding| {
             !(binding.command == command && Some(binding.chord) == old)
-                && !(replace && binding.command != command && binding.chord == chord)
+                && !(replace
+                    && binding.command != command
+                    && binding.chord == chord)
         });
         self.bindings.push(Binding { command, chord });
         self.refresh();
         Ok(())
     }
     pub fn remove(&mut self, command: Command, chord: Chord) {
-        self.bindings
-            .retain(|binding| binding.command != command || binding.chord != chord);
+        self.bindings.retain(|binding| {
+            binding.command != command || binding.chord != chord
+        });
         self.refresh();
     }
-    pub fn resolve(&self, chord: Chord, current: Option<Command>) -> Option<Command> {
+    pub fn resolve(
+        &self,
+        chord: Chord,
+        current: Option<Command>,
+    ) -> Option<Command> {
         fn choose(
             commands: impl Iterator<Item = Command>,
             current: Option<Command>,
@@ -441,8 +451,7 @@ mod tests {
         let mut map = Keymap::default();
         let pen = Chord::new(Key::P, false, false, false);
         let eraser = Chord::new(Key::E, false, false, false);
-        map.assign(Command::ToolInk, Some(pen), eraser, false)
-            .unwrap();
+        map.assign(Command::ToolInk, Some(pen), eraser, false).unwrap();
         assert_eq!(map.resolve(eraser, None), Some(Command::ToolInk));
         assert_eq!(
             map.resolve(eraser, Some(Command::ToolInk)),

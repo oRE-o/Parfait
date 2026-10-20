@@ -36,9 +36,10 @@ impl Parfait {
                             ..
                         } = event
                         {
-                            self.keymap
-                                .resolve(Chord::from_event(*key, *modifiers), None)
-                                == Some(Command::ShortcutGuide)
+                            self.keymap.resolve(
+                                Chord::from_event(*key, *modifiers),
+                                None,
+                            ) == Some(Command::ShortcutGuide)
                         } else {
                             false
                         }
@@ -101,11 +102,8 @@ mod tests {
         app.doc = parfait_core::Document::new(8, 8);
         let original = app.doc.layers.clone();
         let context = egui::Context::default();
-        let primary = egui::Modifiers {
-            ctrl: true,
-            command: true,
-            ..Default::default()
-        };
+        let primary =
+            egui::Modifiers { ctrl: true, command: true, ..Default::default() };
         key_frame(&mut app, &context, Key::A, primary, false, false);
         assert_eq!(
             app.doc.selection,
@@ -113,16 +111,12 @@ mod tests {
         );
         key_frame(&mut app, &context, Key::D, primary, false, false);
         assert!(app.doc.selection.is_none());
-        app.doc
-            .set_selection(Some(parfait_core::MaskCoverage::Uniform(64)));
+        app.doc.set_selection(Some(parfait_core::MaskCoverage::Uniform(64)));
         key_frame(
             &mut app,
             &context,
             Key::I,
-            egui::Modifiers {
-                shift: true,
-                ..primary
-            },
+            egui::Modifiers { shift: true, ..primary },
             false,
             false,
         );
@@ -176,15 +170,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
-        let shift = egui::Modifiers {
-            shift: true,
-            ..Default::default()
-        };
-        let control = egui::Modifiers {
-            ctrl: true,
-            command: true,
-            ..Default::default()
-        };
+        let shift = egui::Modifiers { shift: true, ..Default::default() };
+        let control =
+            egui::Modifiers { ctrl: true, command: true, ..Default::default() };
         key_frame(&mut app, &ctx, Key::H, shift, false, false);
         assert!(app.view.flip_horizontal);
         assert_eq!(app.navigation_tool, 0);
@@ -203,10 +191,7 @@ mod tests {
             &mut app,
             &ctx,
             Key::G,
-            egui::Modifiers {
-                shift: true,
-                ..control
-            },
+            egui::Modifiers { shift: true, ..control },
             false,
             false,
         );
@@ -239,11 +224,7 @@ mod tests {
         app.stroke = Some(parfait_core::Stroke::begin(
             &mut app.doc,
             app.brush.clone(),
-            parfait_core::Point {
-                x: 12.,
-                y: 12.,
-                pressure: 1.,
-            },
+            parfait_core::Point { x: 12., y: 12., pressure: 1. },
         ));
         key_frame(&mut app, &ctx, Key::H, shift, false, false);
         assert!(app.view.flip_horizontal);

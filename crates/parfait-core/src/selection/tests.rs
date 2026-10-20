@@ -1,11 +1,16 @@
 use super::*;
-use crate::{Brush, BrushOperation, BrushTip, History, OpacityMode, Point, Stroke};
+use crate::{
+    Brush, BrushOperation, BrushTip, History, OpacityMode, Point, Stroke,
+};
 
 #[test]
-fn explicit_clear_convert_and_mask_restore_obey_fractional_selection_without_changing_its_buffer() {
+fn explicit_clear_convert_and_mask_restore_obey_fractional_selection_without_changing_its_buffer()
+ {
     let mut document = Document::new(4, 1);
     document.layers[1].pixels = Arc::new([80, 120, 160, 255].repeat(4));
-    document.set_selection(Some(MaskCoverage::Dense(Arc::new(vec![0, 64, 128, 255]))));
+    document.set_selection(Some(MaskCoverage::Dense(Arc::new(vec![
+        0, 64, 128, 255,
+    ]))));
     let before = document.clone();
     assert!(document.combine_layers(crate::LayerCombine::Clear, 2));
     assert_eq!(
@@ -14,12 +19,12 @@ fn explicit_clear_convert_and_mask_restore_obey_fractional_selection_without_cha
             .collect::<Vec<_>>(),
         [255, 191, 127, 0]
     );
-    assert_eq!(
-        &document.layers[1].pixels[..4],
-        &before.layers[1].pixels[..4]
-    );
+    assert_eq!(&document.layers[1].pixels[..4], &before.layers[1].pixels[..4]);
     document = before.clone();
-    assert!(document.convert_layer_pixels(1, crate::RasterConversion::DrawingColor([0; 3])));
+    assert!(document.convert_layer_pixels(
+        1,
+        crate::RasterConversion::DrawingColor([0; 3])
+    ));
     for index in 0..4 {
         let fraction = [0, 64, 128, 255][index] as u32;
         for (channel, initial) in [80, 120, 160].into_iter().enumerate() {
@@ -46,7 +51,12 @@ fn explicit_clear_convert_and_mask_restore_obey_fractional_selection_without_cha
     document.set_selection(Some(MaskCoverage::Uniform(0)));
     let empty = document.clone();
     assert!(!document.combine_layers(crate::LayerCombine::Clear, 2));
-    assert!(!document.convert_layer_pixels(1, crate::RasterConversion::BrightnessToOpacity));
+    assert!(
+        !document.convert_layer_pixels(
+            1,
+            crate::RasterConversion::BrightnessToOpacity
+        )
+    );
     assert!(!document.clear_layer_mask(1));
     assert!(document.same_edit_state(&empty));
     assert_eq!(document.revision, empty.revision);
@@ -84,7 +94,10 @@ fn coverage_algebra_matches_independent_integer_oracles_for_every_byte_pair() {
                 ),
                 (SelectionMode::Intersect, (previous * source + 127) / 255),
             ] {
-                assert_eq!(mode.combine(previous as u8, source as u8), expected as u8);
+                assert_eq!(
+                    mode.combine(previous as u8, source as u8),
+                    expected as u8
+                );
             }
         }
     }
@@ -100,7 +113,8 @@ fn source() -> Document {
 }
 
 #[test]
-fn layer_geometry_preserves_soft_coverage_and_readonly_metadata_without_copying_pixels() {
+fn layer_geometry_preserves_soft_coverage_and_readonly_metadata_without_copying_pixels()
+ {
     let mut document = source();
     document.layers[1].opacity = 0.25;
     document.layers[1].visible = false;
@@ -108,16 +122,11 @@ fn layer_geometry_preserves_soft_coverage_and_readonly_metadata_without_copying_
     let before = document.clone();
     assert!(document.selection_from_layers(2, SelectionMode::Replace));
     assert_eq!(
-        (0..4)
-            .map(|index| document.selection_value(index))
-            .collect::<Vec<_>>(),
+        (0..4).map(|index| document.selection_value(index)).collect::<Vec<_>>(),
         [0, 64, 128, 255]
     );
     assert_eq!(document.layers, before.layers);
-    assert!(Arc::ptr_eq(
-        &document.layers[1].pixels,
-        &before.layers[1].pixels
-    ));
+    assert!(Arc::ptr_eq(&document.layers[1].pixels, &before.layers[1].pixels));
     let selected = document.clone();
     assert!(!document.selection_from_layers(2, SelectionMode::Replace));
     assert!(document.same_edit_state(&selected));
@@ -127,10 +136,8 @@ fn layer_geometry_preserves_soft_coverage_and_readonly_metadata_without_copying_
     assert_eq!(document.selection_value(2), 96);
     assert!(document.selection_from_layers(2, SelectionMode::Subtract));
     assert_eq!(document.selection_value(2), 48);
-    document.layers[1].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(128),
-    });
+    document.layers[1].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(128) });
     assert!(document.selection_from_layers(2, SelectionMode::Replace));
     assert_eq!(document.selection_value(3), 128);
 }
@@ -144,9 +151,7 @@ fn nested_folder_selection_normalizes_roots_and_uses_masks_once() {
     document.group_layers_in_folder(4, "Outer".into()).unwrap();
     assert!(document.selection_from_layers(0b1110, SelectionMode::Replace));
     assert_eq!(
-        (0..4)
-            .map(|index| document.selection_value(index))
-            .collect::<Vec<_>>(),
+        (0..4).map(|index| document.selection_value(index)).collect::<Vec<_>>(),
         [0, 32, 64, 128]
     );
     document.layers[2].visible = false;
@@ -155,14 +160,20 @@ fn nested_folder_selection_normalizes_roots_and_uses_masks_once() {
 }
 
 #[test]
-fn empty_none_invalid_and_noop_selections_keep_history_and_shared_data_predictable() {
+fn empty_none_invalid_and_noop_selections_keep_history_and_shared_data_predictable()
+ {
     let mut document = source();
     let mut history = History::default();
     assert!(!document.selection_from_layers(2, SelectionMode::Add));
     for selected in [0, 1 << 63] {
-        assert!(!document.selection_from_layers(selected, SelectionMode::Replace));
+        assert!(
+            !document.selection_from_layers(selected, SelectionMode::Replace)
+        );
     }
-    assert!(!document.set_selection(Some(MaskCoverage::Dense(Arc::new(vec![0; 3])))));
+    assert!(
+        !document
+            .set_selection(Some(MaskCoverage::Dense(Arc::new(vec![0; 3]))))
+    );
     history.begin(&document, "Selection");
     assert!(document.selection_from_layers(2, SelectionMode::Replace));
     assert!(history.commit(&document));
@@ -187,7 +198,8 @@ fn empty_none_invalid_and_noop_selections_keep_history_and_shared_data_predictab
 }
 
 #[test]
-fn selection_masks_share_coverage_obey_locks_and_leave_original_pixels_unchanged() {
+fn selection_masks_share_coverage_obey_locks_and_leave_original_pixels_unchanged()
+ {
     let mut document = source();
     assert!(document.create_mask_from_selection(1, true));
     assert_eq!(
@@ -202,12 +214,7 @@ fn selection_masks_share_coverage_obey_locks_and_leave_original_pixels_unchanged
         assert!(document.create_mask_from_selection(1, outside));
         for index in 0..4 {
             assert_eq!(
-                document.layers[1]
-                    .mask
-                    .as_ref()
-                    .unwrap()
-                    .coverage
-                    .value(index),
+                document.layers[1].mask.as_ref().unwrap().coverage.value(index),
                 if outside {
                     before.selection_value(index)
                 } else {
@@ -216,10 +223,12 @@ fn selection_masks_share_coverage_obey_locks_and_leave_original_pixels_unchanged
             );
         }
         if outside {
-            let Some(MaskCoverage::Dense(selection)) = &document.selection else {
+            let Some(MaskCoverage::Dense(selection)) = &document.selection
+            else {
                 panic!()
             };
-            let MaskCoverage::Dense(mask) = &document.layers[1].mask.as_ref().unwrap().coverage
+            let MaskCoverage::Dense(mask) =
+                &document.layers[1].mask.as_ref().unwrap().coverage
             else {
                 panic!()
             };
@@ -290,19 +299,11 @@ fn every_brush_operation_and_tip_respects_holes_and_region_composition() {
                 let mut stroke = Stroke::begin(
                     &mut document,
                     brush,
-                    Point {
-                        x: 12.,
-                        y: 16.,
-                        pressure: 1.,
-                    },
+                    Point { x: 12., y: 16., pressure: 1. },
                 );
                 stroke.extend(
                     &mut document,
-                    Point {
-                        x: 21.,
-                        y: 16.,
-                        pressure: 1.,
-                    },
+                    Point { x: 21., y: 16., pressure: 1. },
                 );
                 for index in (0..1024).step_by(3) {
                     assert_eq!(
@@ -316,7 +317,9 @@ fn every_brush_operation_and_tip_respects_holes_and_region_composition() {
                     let full = document.composite();
                     let stride = (rect.x1 - rect.x0) as usize * 4;
                     for row in 0..(rect.y1 - rect.y0) as usize {
-                        let start = ((rect.y0 as usize + row) * 32 + rect.x0 as usize) * 4;
+                        let start = ((rect.y0 as usize + row) * 32
+                            + rect.x0 as usize)
+                            * 4;
                         assert_eq!(
                             &region[row * stride..(row + 1) * stride],
                             &full[start..start + stride]
@@ -329,7 +332,8 @@ fn every_brush_operation_and_tip_respects_holes_and_region_composition() {
 }
 
 #[test]
-fn empty_selection_dabs_do_not_copy_or_change_pixels_masks_revision_or_history() {
+fn empty_selection_dabs_do_not_copy_or_change_pixels_masks_revision_or_history()
+{
     let mut document = source();
     document.set_selection(Some(MaskCoverage::Uniform(0)));
     document.create_layer_mask(1, 127);
@@ -341,15 +345,12 @@ fn empty_selection_dabs_do_not_copy_or_change_pixels_masks_revision_or_history()
             size: 32.,
             ..Default::default()
         };
-        let point = Point {
-            x: 2.,
-            y: 0.5,
-            pressure: 1.,
-        };
+        let point = Point { x: 2., y: 0.5, pressure: 1. };
         let mut stroke = Stroke::begin(&mut document, brush.clone(), point);
         stroke.extend(&mut document, point);
         assert!(stroke.take_damage().is_none());
-        let mut stroke = Stroke::begin_mask(&mut document, brush, point).unwrap();
+        let mut stroke =
+            Stroke::begin_mask(&mut document, brush, point).unwrap();
         stroke.extend(&mut document, point);
         assert!(stroke.take_damage().is_none());
         assert!(document.same_edit_state(&before));
@@ -372,25 +373,14 @@ fn capped_strokes_apply_fractional_selection_once_to_the_accumulation_limit() {
             opacity_mode: OpacityMode::PerStroke,
             ..Default::default()
         };
-        let point = Point {
-            x: 4.,
-            y: 4.,
-            pressure: 1.,
-        };
+        let point = Point { x: 4., y: 4., pressure: 1. };
         let mut stroke = if mask {
             Stroke::begin_mask(&mut document, brush, point).unwrap()
         } else {
             Stroke::begin(&mut document, brush, point)
         };
         for _ in 0..50 {
-            stroke.extend(
-                &mut document,
-                Point {
-                    x: 4.5,
-                    y: 4.,
-                    pressure: 1.,
-                },
-            );
+            stroke.extend(&mut document, Point { x: 4.5, y: 4., pressure: 1. });
             stroke.extend(&mut document, point);
         }
         if mask {

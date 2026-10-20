@@ -35,7 +35,12 @@ impl Parfait {
             self.history.commit(&self.doc);
         }
     }
-    pub(crate) fn begin_layer_edit(&mut self, kind: LayerEditKind, layer: usize, pointer: bool) {
+    pub(crate) fn begin_layer_edit(
+        &mut self,
+        kind: LayerEditKind,
+        layer: usize,
+        pointer: bool,
+    ) {
         let layer_id = self.doc.layers[layer].id;
         if self
             .layer_edit
@@ -53,27 +58,27 @@ impl Parfait {
                 LayerEditKind::Name => "Rename layer",
             },
         );
-        self.layer_edit = Some(LayerEdit {
-            kind,
-            layer: layer_id,
-            pointer,
-            focus: None,
-        });
+        self.layer_edit =
+            Some(LayerEdit { kind, layer: layer_id, pointer, focus: None });
     }
-    pub(crate) fn layer_edit_response(&mut self, kind: LayerEditKind, response: &egui::Response) {
-        let Some(edit) = self.layer_edit.as_mut().filter(|edit| edit.kind == kind) else {
+    pub(crate) fn layer_edit_response(
+        &mut self,
+        kind: LayerEditKind,
+        response: &egui::Response,
+    ) {
+        let Some(edit) =
+            self.layer_edit.as_mut().filter(|edit| edit.kind == kind)
+        else {
             return;
         };
         edit.focus = Some(response.id);
-        if response
-            .ctx
-            .input(|input| input.key_pressed(egui::Key::Escape))
-        {
-            self.cancelled_layer_drag =
-                edit.pointer && response.ctx.input(|input| input.pointer.any_down());
+        if response.ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.cancelled_layer_drag = edit.pointer
+                && response.ctx.input(|input| input.pointer.any_down());
             response.surrender_focus();
             self.cancel_edit();
-        } else if (edit.pointer && !response.ctx.input(|input| input.pointer.any_down()))
+        } else if (edit.pointer
+            && !response.ctx.input(|input| input.pointer.any_down()))
             || (!edit.pointer
                 && (!response.has_focus()
                     || response
@@ -91,8 +96,9 @@ impl Parfait {
             if edit.pointer {
                 !ctx.input(|input| input.pointer.any_down())
             } else {
-                edit.focus
-                    .is_some_and(|id| ctx.memory(|memory| memory.focused()) != Some(id))
+                edit.focus.is_some_and(|id| {
+                    ctx.memory(|memory| memory.focused()) != Some(id)
+                })
             }
         });
         if finished {
@@ -120,7 +126,9 @@ impl Parfait {
     }
     pub(crate) fn new_layer(&mut self) {
         let name = format!("Layer {}", self.doc.layers.len());
-        if let Some(reason) = parfait_storage::layer_growth_error(&self.doc, name.len()) {
+        if let Some(reason) =
+            parfait_storage::layer_growth_error(&self.doc, name.len())
+        {
             self.notice = Some(reason.into());
             return;
         }
@@ -143,7 +151,11 @@ impl Parfait {
 mod tests {
     use super::*;
 
-    fn layers_frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>) {
+    fn layers_frame(
+        app: &mut Parfait,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+    ) {
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -194,10 +206,7 @@ mod tests {
             vec![
                 key(
                     egui::Key::A,
-                    egui::Modifiers {
-                        command: true,
-                        ..Default::default()
-                    },
+                    egui::Modifiers { command: true, ..Default::default() },
                 ),
                 egui::Event::Text(text.into()),
             ],
@@ -218,7 +227,9 @@ mod tests {
         layers_frame(&mut app, &ctx, vec![]);
         layers_frame(&mut app, &ctx, vec![]);
         let name = ctx
-            .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("layer_name")))
+            .data(|data| {
+                data.get_temp::<egui::Rect>(egui::Id::new("layer_name"))
+            })
             .unwrap();
         click(&mut app, &ctx, name.center());
         replace(&mut app, &ctx, "Draft");
@@ -263,7 +274,11 @@ mod tests {
         layers_frame(&mut app, &ctx, vec![]);
         layers_frame(&mut app, &ctx, vec![]);
         let (opacity, _) = ctx
-            .data(|data| data.get_temp::<(egui::Rect, f32)>(egui::Id::new("layer_opacity")))
+            .data(|data| {
+                data.get_temp::<(egui::Rect, f32)>(egui::Id::new(
+                    "layer_opacity",
+                ))
+            })
             .unwrap();
         click(&mut app, &ctx, opacity.right_center() - egui::vec2(16., 0.));
         replace(&mut app, &ctx, "42");
@@ -280,7 +295,11 @@ mod tests {
         assert!((app.doc.layers[1].opacity - 0.42).abs() < 0.001);
         layers_frame(&mut app, &ctx, vec![]);
         let (rect, width) = ctx
-            .data(|data| data.get_temp::<(egui::Rect, f32)>(egui::Id::new("layer_opacity")))
+            .data(|data| {
+                data.get_temp::<(egui::Rect, f32)>(egui::Id::new(
+                    "layer_opacity",
+                ))
+            })
             .unwrap();
         click(
             &mut app,
@@ -289,7 +308,9 @@ mod tests {
         );
         let before = app.doc.layers[1].opacity;
         let focus = ctx
-            .data(|data| data.get_temp::<egui::Id>(egui::Id::new("layer_opacity_focus")))
+            .data(|data| {
+                data.get_temp::<egui::Id>(egui::Id::new("layer_opacity_focus"))
+            })
             .unwrap();
         ctx.memory_mut(|memory| memory.request_focus(focus));
         layers_frame(&mut app, &ctx, vec![]);
@@ -305,7 +326,12 @@ mod tests {
         assert!(app.layer_edit.is_some());
         assert_eq!(app.history.rows().count(), count);
         let name = ctx
-            .data(|data| data.get_temp::<egui::Rect>(egui::Id::new(("layer_label", 1usize))))
+            .data(|data| {
+                data.get_temp::<egui::Rect>(egui::Id::new((
+                    "layer_label",
+                    1usize,
+                )))
+            })
             .unwrap();
         click(&mut app, &ctx, name.center());
         assert!(app.layer_edit.is_none());
@@ -326,7 +352,11 @@ mod tests {
         layers_frame(&mut app, &ctx, vec![]);
         layers_frame(&mut app, &ctx, vec![]);
         let (rect, width) = ctx
-            .data(|data| data.get_temp::<(egui::Rect, f32)>(egui::Id::new("layer_opacity")))
+            .data(|data| {
+                data.get_temp::<(egui::Rect, f32)>(egui::Id::new(
+                    "layer_opacity",
+                ))
+            })
             .unwrap();
         let start = egui::pos2(rect.left() + width - 2., rect.center().y);
         let end = start - egui::vec2(width * 0.5, 0.);

@@ -23,12 +23,7 @@ pub struct History {
 }
 impl Default for History {
     fn default() -> Self {
-        Self {
-            entries: Vec::new(),
-            cursor: 0,
-            next_id: 1,
-            pending: None,
-        }
+        Self { entries: Vec::new(), cursor: 0, next_id: 1, pending: None }
     }
 }
 impl History {
@@ -83,22 +78,20 @@ impl History {
             return false;
         }
         let revision = document.revision + 1;
-        let next_layer_id = document.next_layer_id.max(pending.before.next_layer_id);
+        let next_layer_id =
+            document.next_layer_id.max(pending.before.next_layer_id);
         *document = pending.before;
         document.revision = revision;
         document.next_layer_id = next_layer_id;
         true
     }
     pub fn rows(&self) -> impl Iterator<Item = HistoryRow<'_>> {
-        self.entries
-            .iter()
-            .enumerate()
-            .map(|(index, entry)| HistoryRow {
-                id: entry.id,
-                label: &entry.label,
-                current: index == self.cursor,
-                future: index > self.cursor,
-            })
+        self.entries.iter().enumerate().map(|(index, entry)| HistoryRow {
+            id: entry.id,
+            label: &entry.label,
+            current: index == self.cursor,
+            future: index > self.cursor,
+        })
     }
     pub fn can_undo(&self) -> bool {
         self.cursor > 0 || self.pending.is_some()
@@ -108,7 +101,8 @@ impl History {
     }
     pub fn restore(&mut self, document: &mut Document, id: u64) -> bool {
         self.commit(document);
-        let Some(index) = self.entries.iter().position(|entry| entry.id == id) else {
+        let Some(index) = self.entries.iter().position(|entry| entry.id == id)
+        else {
             return false;
         };
         self.restore_index(document, index)

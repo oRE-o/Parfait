@@ -127,7 +127,12 @@ impl Default for Workspace {
                     scroll_offset: 0.,
                     height: [250., 265., 115., 190., 190., 400., 200.][i],
                     width_weight: 1.,
-                    rect: [300. + i as f32 * 24., 120. + i as f32 * 24., 270., 340.],
+                    rect: [
+                        300. + i as f32 * 24.,
+                        120. + i as f32 * 24.,
+                        270.,
+                        340.,
+                    ],
                 })
                 .collect(),
             left_width: 260.,
@@ -158,34 +163,32 @@ impl Workspace {
         self.left_width == other.left_width
             && self.right_width == other.right_width
             && self.panels.len() == other.panels.len()
-            && self
-                .panels
-                .iter()
-                .zip(&other.panels)
-                .all(|(current, saved)| {
-                    current.palette == saved.palette
-                        && current.location == saved.location
-                        && current.visible == saved.visible
-                        && current.collapsed == saved.collapsed
-                        && current.row == saved.row
-                        && current.window_rect == saved.window_rect
-                        && current.height == saved.height
-                        && current.width_weight == saved.width_weight
-                        && current.rect == saved.rect
-                })
+            && self.panels.iter().zip(&other.panels).all(|(current, saved)| {
+                current.palette == saved.palette
+                    && current.location == saved.location
+                    && current.visible == saved.visible
+                    && current.collapsed == saved.collapsed
+                    && current.row == saved.row
+                    && current.window_rect == saved.window_rect
+                    && current.height == saved.height
+                    && current.width_weight == saved.width_weight
+                    && current.rect == saved.rect
+            })
     }
     pub fn validate(&self) -> bool {
         self.panels.len() == Palette::ALL.len()
-            && Palette::ALL
-                .iter()
-                .all(|p| self.panels.iter().filter(|s| s.palette == *p).count() == 1)
+            && Palette::ALL.iter().all(|p| {
+                self.panels.iter().filter(|s| s.palette == *p).count() == 1
+            })
             && [self.left_width, self.right_width]
                 .iter()
                 .all(|v| v.is_finite() && (180. ..=800.).contains(v))
             && self.panels.iter().all(|s| {
-                s.window_rect
-                    .is_none_or(|r| r.iter().all(|v| v.is_finite()) && r[2] >= 180. && r[3] >= 23.)
-                    && s.height.is_finite()
+                s.window_rect.is_none_or(|r| {
+                    r.iter().all(|v| v.is_finite())
+                        && r[2] >= 180.
+                        && r[3] >= 23.
+                }) && s.height.is_finite()
                     && (60. ..=2000.).contains(&s.height)
                     && s.width_weight.is_finite()
                     && (0. ..=1000.).contains(&s.width_weight)
@@ -201,11 +204,7 @@ impl Workspace {
         before: Option<Palette>,
         pos: Pos2,
     ) {
-        let i = self
-            .panels
-            .iter()
-            .position(|s| s.palette == palette)
-            .unwrap();
+        let i = self.panels.iter().position(|s| s.palette == palette).unwrap();
         let mut item = self.panels.remove(i);
         self.reserve_row_identity(palette);
         item.location = location;
@@ -226,10 +225,7 @@ impl Workspace {
     }
     fn dock_rows(&self, side: Location) -> Vec<Vec<Palette>> {
         let mut rows: Vec<(Palette, Vec<Palette>)> = Vec::new();
-        for p in self
-            .panels
-            .iter()
-            .filter(|p| p.visible && p.location == side)
+        for p in self.panels.iter().filter(|p| p.visible && p.location == side)
         {
             let key = p.row.unwrap_or(p.palette);
             if let Some((_, row)) = rows.iter_mut().find(|(id, _)| *id == key) {
@@ -241,7 +237,11 @@ impl Workspace {
         rows.into_iter().map(|(_, row)| row).collect()
     }
     /// The same layout calculation drives both the rendered slots and drop preview.
-    fn dock_layout(&self, side: Location, bounds: Rect) -> Vec<(Palette, Rect)> {
+    fn dock_layout(
+        &self,
+        side: Location,
+        bounds: Rect,
+    ) -> Vec<(Palette, Rect)> {
         let rows = self.dock_rows(side);
         let width = bounds
             .width()
@@ -292,7 +292,10 @@ impl Workspace {
                 let height = if placement.collapsed { 23. } else { row_height };
                 result.push((
                     *palette,
-                    Rect::from_min_size(egui::pos2(left, y), egui::vec2(cell_width, height)),
+                    Rect::from_min_size(
+                        egui::pos2(left, y),
+                        egui::vec2(cell_width, height),
+                    ),
                 ));
                 left += cell_width;
             }
@@ -305,7 +308,11 @@ impl Workspace {
             if let Some(key) = self
                 .panels
                 .iter()
-                .find(|p| p.palette != palette && p.location == side && p.row == Some(palette))
+                .find(|p| {
+                    p.palette != palette
+                        && p.location == side
+                        && p.row == Some(palette)
+                })
                 .map(|p| p.palette)
             {
                 for p in &mut self.panels {
@@ -316,29 +323,29 @@ impl Workspace {
             }
         }
     }
-    fn dock_to(&mut self, palette: Palette, other: Palette, direction: DockDirection) {
+    fn dock_to(
+        &mut self,
+        palette: Palette,
+        other: Palette,
+        direction: DockDirection,
+    ) {
         if palette == other {
             return;
         }
         let mut item = self.panels.remove(
-            self.panels
-                .iter()
-                .position(|p| p.palette == palette)
-                .unwrap(),
+            self.panels.iter().position(|p| p.palette == palette).unwrap(),
         );
         self.reserve_row_identity(palette);
-        let target = self
-            .panels
-            .iter()
-            .find(|p| p.palette == other)
-            .unwrap()
-            .clone();
+        let target =
+            self.panels.iter().find(|p| p.palette == other).unwrap().clone();
         let group = target.row.unwrap_or(other);
         item.location = target.location;
         if matches!(direction, DockDirection::Left | DockDirection::Right) {
             // Give all existing members the same explicit row identity.
             for p in &mut self.panels {
-                if p.location == target.location && p.row.unwrap_or(p.palette) == group {
+                if p.location == target.location
+                    && p.row.unwrap_or(p.palette) == group
+                {
                     p.row = Some(group);
                 }
             }
@@ -350,22 +357,33 @@ impl Workspace {
             .panels
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.location == target.location && p.row.unwrap_or(p.palette) == group)
+            .filter(|(_, p)| {
+                p.location == target.location
+                    && p.row.unwrap_or(p.palette) == group
+            })
             .map(|(i, _)| i)
             .collect();
-        let target_index = self.panels.iter().position(|p| p.palette == other).unwrap();
+        let target_index =
+            self.panels.iter().position(|p| p.palette == other).unwrap();
         let index = match direction {
             DockDirection::Left => target_index,
             DockDirection::Right => target_index + 1,
-            DockDirection::Top => members.first().copied().unwrap_or(target_index),
-            DockDirection::Bottom => members.last().copied().unwrap_or(target_index) + 1,
+            DockDirection::Top => {
+                members.first().copied().unwrap_or(target_index)
+            }
+            DockDirection::Bottom => {
+                members.last().copied().unwrap_or(target_index) + 1
+            }
         };
         self.panels.insert(index, item);
     }
     fn header(&mut self, ui: &mut egui::Ui, palette: Palette) {
-        let (rect, _) =
-            ui.allocate_exact_size(egui::vec2(ui.available_width(), 23.), egui::Sense::hover());
-        let drag_rect = Rect::from_min_max(rect.min, rect.max - egui::vec2(42., 0.));
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), 23.),
+            egui::Sense::hover(),
+        );
+        let drag_rect =
+            Rect::from_min_max(rect.min, rect.max - egui::vec2(42., 0.));
         let response = ui.interact(
             drag_rect,
             ui.id().with("move"),
@@ -396,19 +414,24 @@ impl Workspace {
             egui::FontId::proportional(11.),
             Color32::LIGHT_GRAY,
         );
-        let i = self
-            .panels
-            .iter()
-            .position(|p| p.palette == palette)
-            .unwrap();
-        let collapse =
-            Rect::from_min_size(rect.right_top() - egui::vec2(42., 0.), egui::vec2(21., 23.));
-        let close =
-            Rect::from_min_size(rect.right_top() - egui::vec2(21., 0.), egui::vec2(21., 23.));
+        let i = self.panels.iter().position(|p| p.palette == palette).unwrap();
+        let collapse = Rect::from_min_size(
+            rect.right_top() - egui::vec2(42., 0.),
+            egui::vec2(21., 23.),
+        );
+        let close = Rect::from_min_size(
+            rect.right_top() - egui::vec2(21., 0.),
+            egui::vec2(21., 23.),
+        );
         if ui
             .put(
                 collapse,
-                egui::Button::new(if self.panels[i].collapsed { "+" } else { "−" }).frame(false),
+                egui::Button::new(if self.panels[i].collapsed {
+                    "+"
+                } else {
+                    "−"
+                })
+                .frame(false),
             )
             .on_hover_text("Collapse / expand palette")
             .clicked()
@@ -426,7 +449,10 @@ impl Workspace {
             let spawn = ui.button("Open in separate window");
             #[cfg(test)]
             ui.ctx().data_mut(|d| {
-                d.insert_temp(egui::Id::new(("native_command", palette)), spawn.rect)
+                d.insert_temp(
+                    egui::Id::new(("native_command", palette)),
+                    spawn.rect,
+                )
             });
             if spawn.clicked() {
                 self.panels[i].location = Location::Window;
@@ -449,7 +475,9 @@ impl Workspace {
                 ui.close();
             }
         });
-        if response.drag_started() && self.panels[i].location == Location::Window {
+        if response.drag_started()
+            && self.panels[i].location == Location::Window
+        {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         } else if response.drag_started() && self.dragging.is_none() {
             self.drag_origin = Some((i, self.panels[i].clone()));
@@ -469,23 +497,25 @@ impl Workspace {
             .on_hover_text("Drag to move or dock. Right-click for separate window / dock commands. Escape cancels a move.");
     }
     /// Identical header, content and resize grip in both docked and floating hosts.
-    fn shell(&mut self, ui: &mut egui::Ui, app: &mut Parfait, palette: Palette) {
+    fn shell(
+        &mut self,
+        ui: &mut egui::Ui,
+        app: &mut Parfait,
+        palette: Palette,
+    ) {
         ui.spacing_mut().item_spacing.y = 0.;
         self.header(ui, palette);
-        let p = self
-            .panels
-            .iter()
-            .find(|p| p.palette == palette)
-            .unwrap()
-            .clone();
+        let p =
+            self.panels.iter().find(|p| p.palette == palette).unwrap().clone();
         if p.collapsed || !p.visible {
             return;
         }
-        let body_height = if matches!(p.location, Location::Left | Location::Right) {
-            (ui.max_rect().height() - 29.).max(60.)
-        } else {
-            p.height
-        };
+        let body_height =
+            if matches!(p.location, Location::Left | Location::Right) {
+                (ui.max_rect().height() - 29.).max(60.)
+            } else {
+                p.height
+            };
         let body = egui::ScrollArea::vertical()
             .id_salt(("palette_body", palette))
             .vertical_scroll_offset(p.scroll_offset)
@@ -501,8 +531,10 @@ impl Workspace {
             .find(|p| p.palette == palette)
             .unwrap()
             .scroll_offset = body.state.offset.y;
-        let (grip, _) =
-            ui.allocate_exact_size(egui::vec2(ui.available_width(), 6.), egui::Sense::hover());
+        let (grip, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), 6.),
+            egui::Sense::hover(),
+        );
         ui.painter().line_segment(
             [
                 grip.center() - egui::vec2(18., 0.),
@@ -511,12 +543,13 @@ impl Workspace {
             egui::Stroke::new(1., Color32::GRAY),
         );
     }
-    fn side(&mut self, ui: &mut egui::Ui, app: &mut Parfait, location: Location) {
-        if !self
-            .panels
-            .iter()
-            .any(|p| p.location == location && p.visible)
-        {
+    fn side(
+        &mut self,
+        ui: &mut egui::Ui,
+        app: &mut Parfait,
+        location: Location,
+    ) {
+        if !self.panels.iter().any(|p| p.location == location && p.visible) {
             return;
         }
         let left = location == Location::Left;
@@ -525,12 +558,10 @@ impl Workspace {
         } else {
             egui::Panel::right("dock_right")
         };
-        let dock_margin = egui::Frame::side_top_panel(ui.style())
-            .total_margin()
-            .sum()
-            .x
-            + ui.spacing().scroll.allocated_width()
-            + 1.;
+        let dock_margin =
+            egui::Frame::side_top_panel(ui.style()).total_margin().sum().x
+                + ui.spacing().scroll.allocated_width()
+                + 1.;
         let minimum = (self
             .dock_rows(location)
             .iter()
@@ -540,30 +571,34 @@ impl Workspace {
             * 180.
             + dock_margin)
             .min(800.);
-        let width = if left {
-            self.left_width
-        } else {
-            self.right_width
-        }
-        .clamp(minimum, 800.);
+        let width = if left { self.left_width } else { self.right_width }
+            .clamp(minimum, 800.);
         let result = panel.exact_size(width).resizable(false).show(ui, |ui| {
             let viewport = ui.available_rect_before_wrap();
-            let dock_width = viewport.width() - ui.spacing().scroll.allocated_width();
+            let dock_width =
+                viewport.width() - ui.spacing().scroll.allocated_width();
             let stack = egui::ScrollArea::both()
                 .id_salt(if left { "left_stack" } else { "right_stack" })
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     let bounds = Rect::from_min_size(
                         ui.cursor().min,
-                        egui::vec2(ui.available_width().min(dock_width), viewport.height()),
+                        egui::vec2(
+                            ui.available_width().min(dock_width),
+                            viewport.height(),
+                        ),
                     );
                     let layout = self.dock_layout(location, bounds);
                     for (palette, rect) in &layout {
                         ui.scope_builder(
-                            egui::UiBuilder::new().id_salt(*palette).max_rect(*rect),
+                            egui::UiBuilder::new()
+                                .id_salt(*palette)
+                                .max_rect(*rect),
                             |ui| {
                                 ui.set_width(rect.width());
-                                ui.set_clip_rect(ui.clip_rect().intersect(*rect));
+                                ui.set_clip_rect(
+                                    ui.clip_rect().intersect(*rect),
+                                );
                                 self.shell(ui, app, *palette);
                             },
                         );
@@ -575,7 +610,9 @@ impl Workspace {
                         }
                     }
                     self.dock_resize(ui, location, &layout);
-                    if let Some(total) = layout.iter().map(|(_, r)| *r).reduce(|a, b| a.union(b)) {
+                    if let Some(total) =
+                        layout.iter().map(|(_, r)| *r).reduce(|a, b| a.union(b))
+                    {
                         ui.allocate_rect(total, egui::Sense::hover());
                     }
                 });
@@ -606,11 +643,7 @@ impl Workspace {
             egui::pos2(boundary - 4., result.response.rect.top()),
             egui::pos2(boundary + 4., result.response.rect.bottom()),
         );
-        let label = if left {
-            "Resize left dock"
-        } else {
-            "Resize right dock"
-        };
+        let label = if left { "Resize left dock" } else { "Resize right dock" };
         let next_width = resize::handle(
             ui,
             egui::Id::new(label),
@@ -621,7 +654,8 @@ impl Workspace {
         )
         .map(|drag| {
             self.resizing = true;
-            (drag.initial[0] + drag.delta.x * if left { 1. } else { -1. }).clamp(minimum, 800.)
+            (drag.initial[0] + drag.delta.x * if left { 1. } else { -1. })
+                .clamp(minimum, 800.)
         })
         .unwrap_or(width);
         if left {
@@ -662,7 +696,11 @@ impl Workspace {
         let floating: Vec<_> = self
             .panels
             .iter()
-            .filter(|p| !app.hide_panels && p.visible && p.location == Location::Floating)
+            .filter(|p| {
+                !app.hide_panels
+                    && p.visible
+                    && p.location == Location::Floating
+            })
             .cloned()
             .collect();
         for p in floating {
@@ -672,31 +710,40 @@ impl Workspace {
                     screen.left(),
                     (screen.right() - p.rect[2]).max(screen.left()),
                 ),
-                p.rect[1].clamp(screen.top(), (screen.bottom() - 23.).max(screen.top())),
+                p.rect[1].clamp(
+                    screen.top(),
+                    (screen.bottom() - 23.).max(screen.top()),
+                ),
             );
-            let response = egui::Area::new(egui::Id::new(("floating", p.palette)))
-                .order(egui::Order::Foreground)
-                .fixed_pos(pos)
-                .movable(false)
-                .show(&ctx, |ui| {
-                    egui::Frame::NONE
-                        .fill(Color32::from_gray(57))
-                        .show(ui, |ui| {
-                            ui.set_width(p.rect[2]);
-                            self.shell(ui, app, p.palette);
-                            self.floating_resize(
-                                ui,
-                                p.palette,
-                                Rect::from_min_size(
-                                    ui.min_rect().min,
-                                    egui::vec2(
-                                        p.rect[2],
-                                        if p.collapsed { 23. } else { p.height + 29. },
+            let response =
+                egui::Area::new(egui::Id::new(("floating", p.palette)))
+                    .order(egui::Order::Foreground)
+                    .fixed_pos(pos)
+                    .movable(false)
+                    .show(&ctx, |ui| {
+                        egui::Frame::NONE.fill(Color32::from_gray(57)).show(
+                            ui,
+                            |ui| {
+                                ui.set_width(p.rect[2]);
+                                self.shell(ui, app, p.palette);
+                                self.floating_resize(
+                                    ui,
+                                    p.palette,
+                                    Rect::from_min_size(
+                                        ui.min_rect().min,
+                                        egui::vec2(
+                                            p.rect[2],
+                                            if p.collapsed {
+                                                23.
+                                            } else {
+                                                p.height + 29.
+                                            },
+                                        ),
                                     ),
-                                ),
-                            );
-                        });
-                });
+                                );
+                            },
+                        );
+                    });
             let item = self
                 .panels
                 .iter_mut()
@@ -718,14 +765,25 @@ impl Workspace {
             let mut builder = egui::ViewportBuilder::default()
                 .with_title(format!("Parfait · {}", p.palette.title()))
                 .with_decorations(false)
-                .with_inner_size([p.rect[2], if p.collapsed { 23. } else { p.height + 29. }])
-                .with_min_inner_size([180., if p.collapsed { 23. } else { 89. }])
-                .with_max_inner_size([800., if p.collapsed { 23. } else { 2029. }])
+                .with_inner_size([
+                    p.rect[2],
+                    if p.collapsed { 23. } else { p.height + 29. },
+                ])
+                .with_min_inner_size([
+                    180.,
+                    if p.collapsed { 23. } else { 89. },
+                ])
+                .with_max_inner_size([
+                    800.,
+                    if p.collapsed { 23. } else { 2029. },
+                ])
                 .with_resizable(true);
             if let Some(r) = p.window_rect {
-                builder = builder
-                    .with_position([r[0], r[1]])
-                    .with_inner_size([r[2], if p.collapsed { 23. } else { r[3] }]);
+                builder =
+                    builder.with_position([r[0], r[1]]).with_inner_size([
+                        r[2],
+                        if p.collapsed { 23. } else { r[3] },
+                    ]);
             }
             let enabled = ui.is_enabled();
             ctx.show_viewport_immediate(
@@ -753,7 +811,12 @@ impl Workspace {
                         } else {
                             item.height + 29.
                         };
-                        item.window_rect = Some([r.left(), r.top(), r.width().max(180.), expanded]);
+                        item.window_rect = Some([
+                            r.left(),
+                            r.top(),
+                            r.width().max(180.),
+                            expanded,
+                        ]);
                         item.rect[2] = r.width().max(180.);
                         if !item.collapsed && r.height() >= 89. {
                             item.height = (r.height() - 29.).clamp(60., 2000.);
@@ -762,7 +825,9 @@ impl Workspace {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::NONE.fill(Color32::from_gray(57)))
                         .show(ui, |ui| {
-                            ui.add_enabled_ui(enabled, |ui| self.shell(ui, app, p.palette))
+                            ui.add_enabled_ui(enabled, |ui| {
+                                self.shell(ui, app, p.palette)
+                            })
                         });
                     if class != egui::ViewportClass::EmbeddedWindow {
                         crate::chrome::resize_edges(ui);
@@ -772,7 +837,11 @@ impl Workspace {
         }
         if let Some(palette) = self.dragging {
             if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                let target = self.slots.iter().find(|(_, _, r)| r.contains(pos)).copied();
+                let target = self
+                    .slots
+                    .iter()
+                    .find(|(_, _, r)| r.contains(pos))
+                    .copied();
                 let screen = ctx.content_rect();
                 let edge = if pos.x < screen.left() + 100. {
                     Some(Location::Left)
@@ -785,11 +854,13 @@ impl Workspace {
                     egui::Order::Tooltip,
                     egui::Id::new("dock_feedback"),
                 ));
-                let direction = target.map(|(_, _, r)| DockDirection::at(r, pos));
+                let direction =
+                    target.map(|(_, _, r)| DockDirection::at(r, pos));
                 let mut planned = self.clone();
                 if let Some((other, side, _)) = target {
                     planned.dock_to(palette, other, direction.unwrap());
-                    if let Some((_, bounds)) = self.dock_bounds.iter().find(|(s, _)| *s == side)
+                    if let Some((_, bounds)) =
+                        self.dock_bounds.iter().find(|(s, _)| *s == side)
                         && let Some((_, preview)) = planned
                             .dock_layout(side, {
                                 let mut bounds = *bounds;
@@ -802,7 +873,9 @@ impl Workspace {
                                     as f32
                                     * 180.;
                                 let desired = desired.min(784.);
-                                if side == Location::Right && desired > bounds.width() {
+                                if side == Location::Right
+                                    && desired > bounds.width()
+                                {
                                     bounds.min.x = bounds.right() - desired;
                                 }
                                 bounds
@@ -844,7 +917,10 @@ impl Workspace {
                                     },
                                     dock_area.top() + 8.,
                                 ),
-                                egui::vec2(width - 16., dock_area.height() - 16.),
+                                egui::vec2(
+                                    width - 16.,
+                                    dock_area.height() - 16.,
+                                ),
                             )
                         });
                     if let Some((_, preview)) = planned
@@ -923,7 +999,9 @@ mod tests {
             |workspace| workspace.panels[0].location = super::Location::Window,
             |workspace| workspace.panels[0].visible = false,
             |workspace| workspace.panels[0].row = Some(super::Palette::Color),
-            |workspace| workspace.panels[0].window_rect = Some([1., 2., 250., 300.]),
+            |workspace| {
+                workspace.panels[0].window_rect = Some([1., 2., 250., 300.])
+            },
             |workspace| workspace.panels[0].height += 1.,
             |workspace| workspace.panels[0].width_weight += 0.5,
             |workspace| workspace.panels[0].rect[0] += 1.,
@@ -952,7 +1030,10 @@ mod tests {
             for frame_index in 0..30 {
                 let mut output = ctx.run_ui(
                     egui::RawInput {
-                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.))),
+                        screen_rect: Some(Rect::from_min_size(
+                            Pos2::ZERO,
+                            egui::vec2(960., 640.),
+                        )),
                         time: Some(width as f64 + frame_index as f64 / 30.),
                         ..Default::default()
                     },
@@ -973,7 +1054,12 @@ mod tests {
                 "width={width}: viewport={viewport:?}, content={content:?}"
             );
             let details = ctx
-                .data(|data| data.get_temp::<Rect>(egui::Id::new(("flat_icon", "Sub tool detail"))))
+                .data(|data| {
+                    data.get_temp::<Rect>(egui::Id::new((
+                        "flat_icon",
+                        "Sub tool detail",
+                    )))
+                })
                 .unwrap();
             assert!(details.right() <= viewport.right());
             assert_eq!(app.doc, artwork);
@@ -989,7 +1075,10 @@ mod tests {
         let frame = |app: &mut Parfait, events| {
             let mut out = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280., 900.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1280., 900.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -1019,13 +1108,15 @@ mod tests {
                 button(p, true, egui::PointerButton::Secondary),
             ],
         );
-        frame(
-            &mut app,
-            vec![button(p, false, egui::PointerButton::Secondary)],
-        );
+        frame(&mut app, vec![button(p, false, egui::PointerButton::Secondary)]);
         frame(&mut app, vec![]);
         let rect = ctx
-            .data(|d| d.get_temp::<Rect>(egui::Id::new(("native_command", Palette::Brushes))))
+            .data(|d| {
+                d.get_temp::<Rect>(egui::Id::new((
+                    "native_command",
+                    Palette::Brushes,
+                )))
+            })
             .expect("right click should open native window menu");
         frame(
             &mut app,
@@ -1050,7 +1141,8 @@ mod tests {
         assert!(app.workspace.dragging.is_none());
     }
     #[test]
-    fn side_docking_preview_matches_rendered_slot_and_window_state_roundtrips() {
+    fn side_docking_preview_matches_rendered_slot_and_window_state_roundtrips()
+    {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
         let ctx = egui::Context::default();
@@ -1058,7 +1150,10 @@ mod tests {
         let frame = |app: &mut Parfait, events| {
             let mut out = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1440., 1000.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1440., 1000.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -1109,7 +1204,11 @@ mod tests {
             .unwrap()
             .1;
         let mut preview = app.workspace.clone();
-        preview.dock_to(Palette::Brushes, Palette::Properties, DockDirection::Right);
+        preview.dock_to(
+            Palette::Brushes,
+            Palette::Properties,
+            DockDirection::Right,
+        );
         let predicted = preview
             .dock_layout(Location::Left, bounds)
             .into_iter()
@@ -1178,7 +1277,10 @@ mod tests {
         crate::theme::apply(&ctx);
         let mut out = ctx.run_ui(
             egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280., 900.))),
+                screen_rect: Some(Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(1280., 900.),
+                )),
                 events: vec![egui::Event::Key {
                     key: egui::Key::Escape,
                     physical_key: None,
@@ -1206,7 +1308,10 @@ mod tests {
         let frame = |app: &mut Parfait, events| {
             let mut out = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280., 900.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1280., 900.),
+                    )),
                     events,
                     ..Default::default()
                 },
@@ -1283,7 +1388,10 @@ mod tests {
         let frame = |app: &mut Parfait, events| {
             let mut out = ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280., 900.))),
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1280., 900.),
+                    )),
                     events,
                     ..Default::default()
                 },

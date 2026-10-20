@@ -91,13 +91,14 @@ impl Parfait {
 
     fn top_menu_contents(&mut self, ui: &mut egui::Ui, menu: TopMenu) {
         let caption = ui.label(
-            RichText::new("미구현 표시 항목은 준비 중입니다.")
-                .small()
-                .weak(),
+            RichText::new("미구현 표시 항목은 준비 중입니다.").small().weak(),
         );
         #[cfg(test)]
         ui.data_mut(|data| {
-            data.insert_temp(egui::Id::new(("catalog_caption", menu)), caption.rect);
+            data.insert_temp(
+                egui::Id::new(("catalog_caption", menu)),
+                caption.rect,
+            );
         });
         let _ = caption;
         ui.separator();
@@ -127,7 +128,8 @@ impl Parfait {
         path: egui::Id,
     ) {
         ui.set_min_width(252.);
-        let height = (ui.ctx().content_rect().height() - 112.).clamp(100., 680.);
+        let height =
+            (ui.ctx().content_rect().height() - 112.).clamp(100., 680.);
         let output = ui.scope(|ui| {
             ui.set_max_height(height);
             egui::ScrollArea::vertical()
@@ -184,18 +186,27 @@ impl Parfait {
         }).inner;
         #[cfg(test)]
         ui.data_mut(|data| {
-            data.insert_temp(egui::Id::new(("catalog_viewport", path)), output.inner_rect);
+            data.insert_temp(
+                egui::Id::new(("catalog_viewport", path)),
+                output.inner_rect,
+            );
         });
         let _ = output;
     }
 
     fn menu_selected(&self, command: Command) -> bool {
         match command {
-            Command::LayerVisibility => self.doc.layers[self.doc.active].visible,
+            Command::LayerVisibility => {
+                self.doc.layers[self.doc.active].visible
+            }
             Command::LayerLock => self.doc.layers[self.doc.active].locked,
-            Command::LayerAlphaLock => self.doc.layers[self.doc.active].alpha_locked,
+            Command::LayerAlphaLock => {
+                self.doc.layers[self.doc.active].alpha_locked
+            }
             Command::LayerClipping => self.doc.layers[self.doc.active].clipped,
-            Command::LayerReference => self.doc.layers[self.doc.active].reference,
+            Command::LayerReference => {
+                self.doc.layers[self.doc.active].reference
+            }
             Command::LayerDraft => self.doc.layers[self.doc.active].draft,
             Command::LayerMaskEnabled => self.doc.layers[self.doc.active]
                 .mask
@@ -207,19 +218,27 @@ impl Parfait {
             Command::FlipHorizontal => self.view.flip_horizontal,
             Command::FlipVertical => self.view.flip_vertical,
             Command::HidePalettes => self.hide_panels,
-            _ => {
-                self.workspace.panels.iter().any(|placement| {
-                    Some(placement.palette) == command.palette() && placement.visible
-                })
-            }
+            _ => self.workspace.panels.iter().any(|placement| {
+                Some(placement.palette) == command.palette()
+                    && placement.visible
+            }),
         }
     }
 
-    pub(crate) fn top_menu_command(&mut self, ui: &mut egui::Ui, command: Command) {
+    pub(crate) fn top_menu_command(
+        &mut self,
+        ui: &mut egui::Ui,
+        command: Command,
+    ) {
         self.command_menu_item_named(ui, command, menu_label(command));
     }
 
-    pub(crate) fn top_menu_toggle(&mut self, ui: &mut egui::Ui, command: Command, selected: bool) {
+    pub(crate) fn top_menu_toggle(
+        &mut self,
+        ui: &mut egui::Ui,
+        command: Command,
+        selected: bool,
+    ) {
         self.command_toggle_named(ui, command, selected, menu_label(command));
     }
 }

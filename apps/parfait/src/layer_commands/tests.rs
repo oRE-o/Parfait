@@ -10,15 +10,10 @@ fn folder_documents_render_safely_and_refuse_raster_only_edits() {
     crate::theme::apply(&context);
     app.update_previews(&context);
     let before = app.doc.clone();
-    for command in [
-        Command::MoveLayerUp,
-        Command::LayerAlphaLock,
-        Command::ApplyLayerMask,
-    ] {
-        assert!(
-            app.command_disabled_reason(command).is_some(),
-            "{command:?}"
-        );
+    for command in
+        [Command::MoveLayerUp, Command::LayerAlphaLock, Command::ApplyLayerMask]
+    {
+        assert!(app.command_disabled_reason(command).is_some(), "{command:?}");
         app.execute_command(command, &context);
         assert!(app.doc.same_edit_state(&before));
     }
@@ -50,14 +45,14 @@ fn folder_documents_render_safely_and_refuse_raster_only_edits() {
         y: 8.,
         pressure: 1.
     }));
-    app.save_project_to(directory.path().join("folders.parfait"))
-        .unwrap();
-    let loaded = parfait_storage::Store::open(&directory.path().join("folders.parfait"))
-        .unwrap()
-        .load()
-        .unwrap()
-        .unwrap()
-        .document;
+    app.save_project_to(directory.path().join("folders.parfait")).unwrap();
+    let loaded =
+        parfait_storage::Store::open(&directory.path().join("folders.parfait"))
+            .unwrap()
+            .load()
+            .unwrap()
+            .unwrap()
+            .document;
     assert_eq!(loaded.layers, app.doc.layers);
 }
 use crate::shortcuts::Chord;
@@ -74,7 +69,10 @@ fn masked_document_duplicate_undo_and_autosave_preserve_both_shared_buffers() {
         for layer in &mut app.doc.layers {
             layer.mask = Some(parfait_core::LayerMask {
                 enabled: true,
-                coverage: parfait_core::MaskCoverage::Dense(Arc::new(vec![127; 64])),
+                coverage: parfait_core::MaskCoverage::Dense(Arc::new(vec![
+                    127;
+                    64
+                ])),
             });
         }
         app.doc.touch();
@@ -82,16 +80,15 @@ fn masked_document_duplicate_undo_and_autosave_preserve_both_shared_buffers() {
         let before = app.doc.clone();
         app.execute_command(Command::DuplicateLayer, &egui::Context::default());
         assert_eq!(app.doc.layers.len(), if multiple { 4 } else { 3 });
-        for layer in app
-            .doc
-            .layers
-            .iter()
-            .filter(|layer| layer.name.ends_with(" copy"))
+        for layer in
+            app.doc.layers.iter().filter(|layer| layer.name.ends_with(" copy"))
         {
             let original = before
                 .layers
                 .iter()
-                .find(|original| layer.name == format!("{} copy", original.name))
+                .find(|original| {
+                    layer.name == format!("{} copy", original.name)
+                })
                 .unwrap();
             assert!(Arc::ptr_eq(&layer.pixels, &original.pixels));
             if let (
@@ -155,7 +152,11 @@ fn clipping_property_menu_and_key_share_undo_and_durable_state() {
                     app.prepare_layer_list(ui.ctx());
                     app.shortcuts(ui.ctx());
                     if route == 0 {
-                        app.palette(ui, crate::workspace::Palette::Layers, 500.);
+                        app.palette(
+                            ui,
+                            crate::workspace::Palette::Layers,
+                            500.,
+                        );
                     } else {
                         app.top_menu_toggle(
                             ui,
@@ -177,9 +178,8 @@ fn clipping_property_menu_and_key_share_undo_and_durable_state() {
             } else {
                 egui::Id::new(("command_toggle", Command::LayerClipping))
             };
-            let rect = context
-                .data(|data| data.get_temp::<egui::Rect>(id))
-                .unwrap();
+            let rect =
+                context.data(|data| data.get_temp::<egui::Rect>(id)).unwrap();
             for pressed in [true, false] {
                 render(
                     &mut app,
@@ -226,10 +226,7 @@ fn clipping_selection_is_atomic_and_stroke_and_modal_guards_apply() {
     let context = egui::Context::default();
     app.set_layer_selection(7, 0);
     let before = app.doc.clone();
-    assert!(
-        app.command_disabled_reason(Command::LayerClipping)
-            .is_some()
-    );
+    assert!(app.command_disabled_reason(Command::LayerClipping).is_some());
     app.execute_command(Command::LayerClipping, &context);
     assert_eq!(app.doc, before);
     app.set_layer_selection(6, 1);
@@ -249,29 +246,24 @@ fn clipping_selection_is_atomic_and_stroke_and_modal_guards_apply() {
         if blocker == 2 {
             app.stroke = Some(Stroke::begin(
                 &mut app.doc,
-                Brush {
-                    opacity: 0.,
-                    ..Default::default()
-                },
-                Point {
-                    x: 2.,
-                    y: 2.,
-                    pressure: 1.,
-                },
+                Brush { opacity: 0., ..Default::default() },
+                Point { x: 2., y: 2., pressure: 1. },
             ));
         }
         let before = app.doc.clone();
-        assert!(
-            app.command_disabled_reason(Command::LayerClipping)
-                .is_some()
-        );
+        assert!(app.command_disabled_reason(Command::LayerClipping).is_some());
         app.execute_command(Command::LayerClipping, &context);
         assert_eq!(app.doc, before);
         app.stroke = None;
     }
 }
 
-fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, palette: bool) {
+fn frame(
+    app: &mut Parfait,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+    palette: bool,
+) {
     let mut output = ctx.run_ui(
         egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -299,7 +291,12 @@ fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>, palet
     output.textures_delta.clear();
 }
 
-fn click(app: &mut Parfait, ctx: &egui::Context, rect: egui::Rect, palette: bool) {
+fn click(
+    app: &mut Parfait,
+    ctx: &egui::Context,
+    rect: egui::Rect,
+    palette: bool,
+) {
     for pressed in [true, false] {
         frame(
             app,
@@ -333,16 +330,14 @@ fn layer_edits_share_buffers_and_survive_undo_redo_and_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.doc = Document::new(4, 4);
-    Arc::make_mut(&mut app.doc.layers[1].pixels)[..4].copy_from_slice(&[120, 60, 30, 255]);
+    Arc::make_mut(&mut app.doc.layers[1].pixels)[..4]
+        .copy_from_slice(&[120, 60, 30, 255]);
     let before = app.doc.clone();
     let ctx = egui::Context::default();
-    for (index, command) in [
-        Command::MoveLayerDown,
-        Command::LayerLock,
-        Command::LayerVisibility,
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, command) in
+        [Command::MoveLayerDown, Command::LayerLock, Command::LayerVisibility]
+            .into_iter()
+            .enumerate()
     {
         app.execute_command(command, &ctx);
         assert!(Arc::ptr_eq(
@@ -370,10 +365,7 @@ fn layer_edits_share_buffers_and_survive_undo_redo_and_reopen() {
     assert_eq!(app.doc.layers.len(), 2);
     app.redo();
     let path = dir.path().join("layers.parfait");
-    parfait_storage::Store::open(&path)
-        .unwrap()
-        .save(&app.doc)
-        .unwrap();
+    parfait_storage::Store::open(&path).unwrap().save(&app.doc).unwrap();
     let loaded = parfait_storage::Store::open(&path)
         .unwrap()
         .load()
@@ -395,11 +387,9 @@ fn refused_layer_commands_and_input_owners_preserve_redo() {
     app.execute_command(Command::LayerVisibility, &ctx);
     app.undo();
     let before = app.doc.clone();
-    for command in [
-        Command::DeleteLayer,
-        Command::MoveLayerUp,
-        Command::MoveLayerDown,
-    ] {
+    for command in
+        [Command::DeleteLayer, Command::MoveLayerUp, Command::MoveLayerDown]
+    {
         assert!(app.command_disabled_reason(command).is_some());
         app.execute_command(command, &ctx);
         assert_eq!(app.doc, before);
@@ -408,19 +398,13 @@ fn refused_layer_commands_and_input_owners_preserve_redo() {
     for owner in 0..4 {
         app.show_help = owner == 0;
         app.workspace.resizing = owner == 1;
-        app.workspace.dragging = (owner == 2).then_some(crate::workspace::Palette::Layers);
+        app.workspace.dragging =
+            (owner == 2).then_some(crate::workspace::Palette::Layers);
         if owner == 3 {
             app.stroke = Some(Stroke::begin(
                 &mut app.doc,
-                Brush {
-                    opacity: 0.,
-                    ..Default::default()
-                },
-                Point {
-                    x: 2.,
-                    y: 2.,
-                    pressure: 1.,
-                },
+                Brush { opacity: 0., ..Default::default() },
+                Point { x: 2., y: 2., pressure: 1. },
             ));
         }
         for command in [
@@ -446,7 +430,8 @@ fn refused_layer_commands_and_input_owners_preserve_redo() {
 }
 
 #[test]
-fn inactive_row_targets_do_not_select_and_reordering_preserves_surviving_target() {
+fn inactive_row_targets_do_not_select_and_reordering_preserves_surviving_target()
+ {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.doc = Document::new(4, 4);
@@ -559,7 +544,11 @@ fn checkbox_rows_and_menu_toggle_share_state_without_changing_active_layer() {
     for command in [Command::LayerVisibility, Command::LayerLock] {
         let rect = ctx
             .data(|data| {
-                data.get_temp::<egui::Rect>(egui::Id::new(("layer_checkbox", command, 0usize)))
+                data.get_temp::<egui::Rect>(egui::Id::new((
+                    "layer_checkbox",
+                    command,
+                    0usize,
+                )))
             })
             .unwrap();
         click(&mut app, &ctx, rect, true);
@@ -570,7 +559,10 @@ fn checkbox_rows_and_menu_toggle_share_state_without_changing_active_layer() {
     frame(&mut app, &ctx, vec![], false);
     let rect = ctx
         .data(|data| {
-            data.get_temp::<egui::Rect>(egui::Id::new(("command_toggle", Command::LayerVisibility)))
+            data.get_temp::<egui::Rect>(egui::Id::new((
+                "command_toggle",
+                Command::LayerVisibility,
+            )))
         })
         .unwrap();
     click(&mut app, &ctx, rect, false);
@@ -669,13 +661,17 @@ fn command_catalog_and_preferences_keep_keys_layout_and_unknown_originals() {
     for &command in Command::ALL {
         assert!(app.keymap.tooltip(command).starts_with(command.label()));
         assert_eq!(
-            serde_json::from_value::<Command>(serde_json::to_value(command).unwrap()).unwrap(),
+            serde_json::from_value::<Command>(
+                serde_json::to_value(command).unwrap()
+            )
+            .unwrap(),
             command
         );
     }
     app.persist_preferences(true);
     let keys = app.keymap.clone();
-    let mut saved: serde_json::Value = serde_json::from_str(&app.saved_preferences_json()).unwrap();
+    let mut saved: serde_json::Value =
+        serde_json::from_str(&app.saved_preferences_json()).unwrap();
     assert_eq!(saved["version"], 21);
     drop(app);
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
@@ -759,12 +755,18 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
             } else {
                 let rect = if route == 1 {
                     ctx.data(|data| {
-                        data.get_temp::<egui::Rect>(egui::Id::new(("layer_command", command)))
+                        data.get_temp::<egui::Rect>(egui::Id::new((
+                            "layer_command",
+                            command,
+                        )))
                     })
                     .unwrap()
                 } else {
                     ctx.data(|data| {
-                        data.get_temp::<egui::Rect>(egui::Id::new(("menu_item", command.label())))
+                        data.get_temp::<egui::Rect>(egui::Id::new((
+                            "menu_item",
+                            command.label(),
+                        )))
                     })
                     .unwrap()
                 };
@@ -783,7 +785,11 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
                     );
                 }
             }
-            assert_eq!(app.history.rows().count(), 2, "{command:?} route {route}");
+            assert_eq!(
+                app.history.rows().count(),
+                2,
+                "{command:?} route {route}"
+            );
             let result = app.doc.clone();
             if let Some(expected) = &expected {
                 assert_eq!(&result, expected);
@@ -814,7 +820,8 @@ fn raster_combine_routes_share_transactions_undo_and_durable_pixels() {
 }
 
 #[test]
-fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixels() {
+fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixels()
+ {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.doc = Document::new(4, 4);
@@ -843,10 +850,7 @@ fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixe
         }
     }
     let before = app.doc.clone();
-    assert!(
-        app.command_disabled_reason(Command::CopyVisibleLayers)
-            .is_some()
-    );
+    assert!(app.command_disabled_reason(Command::CopyVisibleLayers).is_some());
     app.execute_command(Command::CopyVisibleLayers, &ctx);
     assert_eq!(app.doc, before);
     assert!(app.history.can_redo());
@@ -856,7 +860,8 @@ fn raster_combine_noops_refusals_and_copy_budget_preserve_future_and_shared_pixe
 }
 
 #[test]
-fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindings() {
+fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindings()
+ {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.workspace.panels[0].height = 317.;
@@ -874,8 +879,11 @@ fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindin
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
     legacy["version"] = 11.into();
-    parfait_storage::save_preferences(&dir.path().join("preferences.sqlite"), &legacy.to_string())
-        .unwrap();
+    parfait_storage::save_preferences(
+        &dir.path().join("preferences.sqlite"),
+        &legacy.to_string(),
+    )
+    .unwrap();
     drop(app);
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
@@ -889,7 +897,10 @@ fn version_eleven_keys_and_layout_upgrade_to_thirteen_without_new_default_bindin
     }
     app.persist_preferences(true);
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
+        serde_json::from_str::<serde_json::Value>(
+            &app.saved_preferences_json()
+        )
+        .unwrap()["version"],
         21
     );
 }
@@ -925,7 +936,11 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
                     app.prepare_layer_list(ui.ctx());
                     app.shortcuts(ui.ctx());
                     if route == 1 {
-                        app.palette(ui, crate::workspace::Palette::Layers, 500.);
+                        app.palette(
+                            ui,
+                            crate::workspace::Palette::Layers,
+                            500.,
+                        );
                     } else {
                         app.top_menu_toggle(
                             ui,
@@ -943,11 +958,16 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
             render(&mut app, vec![key(egui::Key::F6, false)]);
         } else {
             let id = if route == 1 {
-                egui::Id::new(("layer_checkbox", Command::LayerAlphaLock, 1usize))
+                egui::Id::new((
+                    "layer_checkbox",
+                    Command::LayerAlphaLock,
+                    1usize,
+                ))
             } else {
                 egui::Id::new(("command_toggle", Command::LayerAlphaLock))
             };
-            let rect = ctx.data(|data| data.get_temp::<egui::Rect>(id)).unwrap();
+            let rect =
+                ctx.data(|data| data.get_temp::<egui::Rect>(id)).unwrap();
             for pressed in [true, false] {
                 render(
                     &mut app,
@@ -992,7 +1012,8 @@ fn alpha_lock_menu_row_and_key_share_one_edit_and_reopen_with_pixels_and_ids() {
 }
 
 #[test]
-fn selected_ids_and_inline_name_target_survive_reordering_without_index_aliases() {
+fn selected_ids_and_inline_name_target_survive_reordering_without_index_aliases()
+ {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     app.doc = Document::new(8, 8);
@@ -1059,8 +1080,11 @@ fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
     let mut legacy: serde_json::Value =
         serde_json::from_str(&app.saved_preferences_json()).unwrap();
     legacy["version"] = 12.into();
-    parfait_storage::save_preferences(&dir.path().join("preferences.sqlite"), &legacy.to_string())
-        .unwrap();
+    parfait_storage::save_preferences(
+        &dir.path().join("preferences.sqlite"),
+        &legacy.to_string(),
+    )
+    .unwrap();
     drop(app);
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
     assert!(!app.preferences_read_failed);
@@ -1078,7 +1102,10 @@ fn previous_preferences_upgrade_without_reset_and_alpha_key_survives_restart() {
         .unwrap();
     app.persist_preferences(true);
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&app.saved_preferences_json()).unwrap()["version"],
+        serde_json::from_str::<serde_json::Value>(
+            &app.saved_preferences_json()
+        )
+        .unwrap()["version"],
         21
     );
     drop(app);

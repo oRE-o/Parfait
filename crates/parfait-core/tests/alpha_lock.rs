@@ -1,19 +1,16 @@
 use parfait_core::{
-    Brush, BrushOperation, BrushTip, Document, History, LayerCombine, LayerId, OpacityMode,
-    PixelRect, Point, Stroke,
+    Brush, BrushOperation, BrushTip, Document, History, LayerCombine, LayerId,
+    OpacityMode, PixelRect, Point, Stroke,
 };
 use std::sync::Arc;
 
 fn point(column: f32, row: f32) -> Point {
-    Point {
-        x: column,
-        y: row,
-        pressure: 1.,
-    }
+    Point { x: column, y: row, pressure: 1. }
 }
 
 #[test]
-fn paint_and_white_erase_preserve_partial_alpha_with_exact_color_interpolation() {
+fn paint_and_white_erase_preserve_partial_alpha_with_exact_color_interpolation()
+{
     for operation in [BrushOperation::Paint, BrushOperation::Erase] {
         for opacity_mode in [OpacityMode::PerDab, OpacityMode::PerStroke] {
             let mut document = Document::new(16, 16);
@@ -83,11 +80,7 @@ fn every_operation_preserves_alpha_and_incremental_composition() {
                     (index * 31) as u8,
                     (index * 17) as u8,
                     (index * 9) as u8,
-                    if column < 24 {
-                        [0, 32, 128, 255][column % 4]
-                    } else {
-                        0
-                    },
+                    if column < 24 { [0, 32, 128, 255][column % 4] } else { 0 },
                 ]);
             }
             let before = document.clone();
@@ -104,7 +97,8 @@ fn every_operation_preserves_alpha_and_incremental_composition() {
                 color: [180, 30, 70],
                 ..Default::default()
             };
-            let mut stroke = Stroke::begin(&mut document, brush, point(4., 12.));
+            let mut stroke =
+                Stroke::begin(&mut document, brush, point(4., 12.));
             for column in 4..34 {
                 stroke.extend(
                     &mut document,
@@ -117,8 +111,11 @@ fn every_operation_preserves_alpha_and_incremental_composition() {
                 if let Some(rect) = stroke.take_damage() {
                     let patch = document.composite_region(rect);
                     let stride = (rect.x1 - rect.x0) as usize * 4;
-                    for (row, pixels) in patch.chunks_exact(stride).enumerate() {
-                        let start = ((rect.y0 as usize + row) * 40 + rect.x0 as usize) * 4;
+                    for (row, pixels) in patch.chunks_exact(stride).enumerate()
+                    {
+                        let start = ((rect.y0 as usize + row) * 40
+                            + rect.x0 as usize)
+                            * 4;
                         cached[start..start + stride].copy_from_slice(pixels);
                     }
                 }
@@ -201,7 +198,10 @@ fn ineffective_color_and_carried_samples_do_not_copy_pixels_or_dirty_history() {
             ));
             assert!(stroke.take_damage().is_none());
             assert!(!history.commit(&document));
-            if matches!(operation, BrushOperation::Paint | BrushOperation::Erase) {
+            if matches!(
+                operation,
+                BrushOperation::Paint | BrushOperation::Erase
+            ) {
                 assert_eq!(stroke.scratch_capacity_bytes(), 0);
             }
         }
@@ -212,9 +212,8 @@ fn ineffective_color_and_carried_samples_do_not_copy_pixels_or_dirty_history() {
 fn capped_recolor_stays_at_the_baseline_opacity_limit() {
     let mut document = Document::new(24, 24);
     document.layers[1].alpha_locked = true;
-    for pixel in Arc::make_mut(&mut document.layers[1].pixels)
-        .as_chunks_mut::<4>()
-        .0
+    for pixel in
+        Arc::make_mut(&mut document.layers[1].pixels).as_chunks_mut::<4>().0
     {
         pixel.copy_from_slice(&[0, 0, 0, 64]);
     }
@@ -241,7 +240,8 @@ fn capped_recolor_stays_at_the_baseline_opacity_limit() {
             .as_chunks::<4>()
             .0
             .iter()
-            .all(|pixel| pixel[3] == 64 && pixel[..3].iter().all(|channel| *channel <= 64))
+            .all(|pixel| pixel[3] == 64
+                && pixel[..3].iter().all(|channel| *channel <= 64))
     );
     assert!(
         document.layers[1]
@@ -286,11 +286,7 @@ fn frozen_strokes_and_destructive_commands_respect_identity_and_alpha_policy() {
     let mut different_target = Document::new(16, 16);
     let mut frozen = Stroke::begin(
         &mut different_target,
-        Brush {
-            size: 4.,
-            pressure: false,
-            ..Default::default()
-        },
+        Brush { size: 4., pressure: false, ..Default::default() },
         point(2., 2.),
     );
     different_target.add_layer();
@@ -300,10 +296,7 @@ fn frozen_strokes_and_destructive_commands_respect_identity_and_alpha_policy() {
     let mut document = Document::new(8, 8);
     let mut stroke = Stroke::begin(
         &mut document,
-        Brush {
-            opacity: 0.,
-            ..Default::default()
-        },
+        Brush { opacity: 0., ..Default::default() },
         point(1., 1.),
     );
     document.layers[1].alpha_locked = true;
@@ -320,8 +313,6 @@ fn frozen_strokes_and_destructive_commands_respect_identity_and_alpha_policy() {
     document.add_layer();
     assert_eq!(document, before);
     assert!(
-        document
-            .layer_combine_reason(LayerCombine::CopyVisible, 2)
-            .is_some()
+        document.layer_combine_reason(LayerCombine::CopyVisible, 2).is_some()
     );
 }

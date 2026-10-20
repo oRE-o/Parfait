@@ -8,7 +8,8 @@ fn saved_clipping_reopens_with_hidden_pixels_and_history_roundtrips() {
     let path = directory.path().join("clipping.parfait");
     let mut document = Document::new(3, 1);
     document.layers[0].visible = false;
-    document.layers[1].pixels = Arc::new(vec![80, 120, 200, 128, 0, 0, 0, 0, 0, 0, 0, 0]);
+    document.layers[1].pixels =
+        Arc::new(vec![80, 120, 200, 128, 0, 0, 0, 0, 0, 0, 0, 0]);
     document.add_layer();
     document.layers[2].pixels = Arc::new([255, 32, 48, 255].repeat(3));
     let mut history = History::default();
@@ -22,12 +23,8 @@ fn saved_clipping_reopens_with_hidden_pixels_and_history_roundtrips() {
     store.save(&document).unwrap();
     store.checkpoint().unwrap();
     drop(store);
-    let mut document = Store::open(&path)
-        .unwrap()
-        .load()
-        .unwrap()
-        .unwrap()
-        .document;
+    let mut document =
+        Store::open(&path).unwrap().load().unwrap().unwrap().document;
     assert_eq!(document, expected);
     assert_eq!(
         document.composite(),

@@ -1,5 +1,7 @@
 use super::MaskCoverage;
-use crate::{Brush, BrushOperation, Document, OpacityMode, PixelRect, Point, brush::Dab};
+use crate::{
+    Brush, BrushOperation, Document, OpacityMode, PixelRect, Point, brush::Dab,
+};
 use std::sync::Arc;
 
 const SIDE: usize = 64;
@@ -34,7 +36,8 @@ impl<'a> Destination<'a> {
         let values = match self {
             Self::Shared(coverage) => {
                 if let MaskCoverage::Uniform(initial) = coverage {
-                    *coverage = MaskCoverage::Dense(Arc::new(vec![*initial; count]));
+                    *coverage =
+                        MaskCoverage::Dense(Arc::new(vec![*initial; count]));
                 }
                 let MaskCoverage::Dense(values) = coverage else {
                     unreachable!()
@@ -51,14 +54,16 @@ impl<'a> Destination<'a> {
 impl MaskPaint {
     pub fn new(document: &Document, brush: &Brush) -> Self {
         Self {
-            baseline: (brush.opacity_mode == OpacityMode::PerStroke).then(|| {
-                document.layers[document.active]
-                    .mask
-                    .as_ref()
-                    .unwrap()
-                    .coverage
-                    .clone()
-            }),
+            baseline: (brush.opacity_mode == OpacityMode::PerStroke).then(
+                || {
+                    document.layers[document.active]
+                        .mask
+                        .as_ref()
+                        .unwrap()
+                        .coverage
+                        .clone()
+                },
+            ),
             width: document.width,
             height: document.height,
             columns: (document.width as usize).div_ceil(SIDE),
@@ -108,22 +113,30 @@ impl MaskPaint {
                 if (erase && current == 0) || (!erase && current == 255) {
                     continue;
                 }
-                let deposit = dab.coverage(brush, column as u32, row as u32) * brush.flow;
+                let deposit =
+                    dab.coverage(brush, column as u32, row as u32) * brush.flow;
                 if deposit <= 0. {
                     continue;
                 }
                 let (initial, amount) = if let Some(baseline) = &self.baseline {
                     if self.tiles.is_empty() {
-                        self.tiles =
-                            vec![None; self.columns * (self.height as usize).div_ceil(SIDE)];
+                        self.tiles = vec![
+                            None;
+                            self.columns
+                                * (self.height as usize)
+                                    .div_ceil(SIDE)
+                        ];
                     }
-                    let tile = self.tiles[row / SIDE * self.columns + column / SIDE]
+                    let tile = self.tiles
+                        [row / SIDE * self.columns + column / SIDE]
                         .get_or_insert_with(|| {
                             self.allocated += 1;
                             Box::new([0.; CELLS])
                         });
-                    let contribution = &mut tile[(row % SIDE) * SIDE + column % SIDE];
-                    let next = (*contribution + (limit - *contribution).max(0.) * deposit)
+                    let contribution =
+                        &mut tile[(row % SIDE) * SIDE + column % SIDE];
+                    let next = (*contribution
+                        + (limit - *contribution).max(0.) * deposit)
                         .min(limit.max(*contribution));
                     *contribution = next;
                     (baseline.value(index), next)
@@ -133,10 +146,14 @@ impl MaskPaint {
                 let result = if erase {
                     (f32::from(initial) * (1. - amount)).round() as u8
                 } else {
-                    (f32::from(initial) + f32::from(255 - initial) * amount).round() as u8
+                    (f32::from(initial) + f32::from(255 - initial) * amount)
+                        .round() as u8
                 };
-                let (next, written) =
-                    destination.write(index, result, (self.width * self.height) as usize);
+                let (next, written) = destination.write(
+                    index,
+                    result,
+                    (self.width * self.height) as usize,
+                );
                 destination = next;
                 changed |= written;
             }

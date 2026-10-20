@@ -30,7 +30,13 @@ impl CalibrationDialog {
                 .into(),
         }
     }
-    fn record(&mut self, pos: Pos2, raw: f32, rect: egui::Rect, measured: bool) {
+    fn record(
+        &mut self,
+        pos: Pos2,
+        raw: f32,
+        rect: egui::Rect,
+        measured: bool,
+    ) {
         if !rect.contains(pos) {
             self.connected = false;
             return;
@@ -67,20 +73,23 @@ impl CalibrationDialog {
     }
     fn pad(&mut self, ui: &mut egui::Ui) {
         ui.label("Test strokes — preview updates when you edit the curve");
-        let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 180.), Sense::drag());
+        let (r, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), 180.),
+            Sense::drag(),
+        );
         let visible = r.intersect(ui.clip_rect());
         let events = ui.input(|i| i.events.clone());
         let has_touch = events.iter().any(|e| matches!(e, Event::Touch { .. }));
         for event in events {
             match event {
-                Event::Touch {
-                    phase, pos, force, ..
-                } => {
+                Event::Touch { phase, pos, force, .. } => {
                     if phase == TouchPhase::Start {
                         self.active = visible.contains(pos);
                         self.connected = false;
                     }
-                    if self.active && matches!(phase, TouchPhase::Start | TouchPhase::Move) {
+                    if self.active
+                        && matches!(phase, TouchPhase::Start | TouchPhase::Move)
+                    {
                         self.record(
                             pos,
                             force.filter(|v| v.is_finite()).unwrap_or(1.),
@@ -119,10 +128,16 @@ impl CalibrationDialog {
         p.rect_filled(r, 0., Color32::from_gray(245));
         let mut previous = None;
         for (v, raw, connected) in &self.marks {
-            let at = egui::pos2(r.left() + v[0] * r.width(), r.top() + v[1] * r.height());
+            let at = egui::pos2(
+                r.left() + v[0] * r.width(),
+                r.top() + v[1] * r.height(),
+            );
             let width = 1. + self.draft.map(*raw) * 22.;
             if *connected && let Some(last) = previous {
-                p.line_segment([last, at], Stroke::new(width, Color32::from_gray(35)));
+                p.line_segment(
+                    [last, at],
+                    Stroke::new(width, Color32::from_gray(35)),
+                );
             }
             p.circle_filled(at, width / 2., Color32::from_gray(35));
             previous = Some(at);
@@ -146,7 +161,8 @@ impl Parfait {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        let body_height = (ctx.content_rect().height() - 180.).clamp(180., 520.);
+        let body_height =
+            (ctx.content_rect().height() - 180.).clamp(180., 520.);
         egui::Window::new("Tablet pressure calibration")
             .open(&mut open).collapsible(false).resizable(false)
             .default_pos(ctx.content_rect().center() - egui::vec2(260., 250.))
@@ -179,7 +195,11 @@ impl Parfait {
                 cancel = close.clicked();
             });
         });
-        if apply || cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        if apply
+            || cancel
+            || !open
+            || ctx.input(|i| i.key_pressed(egui::Key::Escape))
+        {
             self.finish_calibration(apply);
         }
     }
@@ -201,7 +221,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
         let ctx = egui::Context::default();
-        let screen = egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.));
+        let screen =
+            egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(960., 640.));
         let frame = |app: &mut Parfait, events| {
             let mut out = ctx.run_ui(
                 egui::RawInput {
@@ -215,15 +236,12 @@ mod tests {
             );
             out.textures_delta.clear();
         };
-        app.calibration_dialog = Some(CalibrationDialog::new(Default::default()));
+        app.calibration_dialog =
+            Some(CalibrationDialog::new(Default::default()));
         frame(&mut app, vec![]);
         frame(&mut app, vec![]);
-        let rect = app
-            .calibration_dialog
-            .as_ref()
-            .unwrap()
-            .cancel_rect
-            .unwrap();
+        let rect =
+            app.calibration_dialog.as_ref().unwrap().cancel_rect.unwrap();
         assert!(screen.contains_rect(rect));
         let p = rect.center();
         let button = |pressed| Event::PointerButton {
@@ -238,19 +256,16 @@ mod tests {
             "Footer input reached the clipped test pad"
         );
         assert_eq!(
-            app.calibration_dialog
-                .as_ref()
-                .unwrap()
-                .cancel_rect
-                .unwrap(),
+            app.calibration_dialog.as_ref().unwrap().cancel_rect.unwrap(),
             rect,
             "Footer moved during pointer-down"
         );
         frame(&mut app, vec![button(false)]);
         assert!(app.calibration_dialog.is_none());
-        app.calibration_dialog = Some(CalibrationDialog::new(PressureCalibration {
-            points: vec![[0., 0.], [0.5, 1.], [1., 1.]],
-        }));
+        app.calibration_dialog =
+            Some(CalibrationDialog::new(PressureCalibration {
+                points: vec![[0., 0.], [0.5, 1.], [1., 1.]],
+            }));
         frame(
             &mut app,
             vec![Event::Key {
@@ -289,7 +304,10 @@ mod tests {
             (rect, d.draft.clone())
         };
         let (r, _) = frame(vec![]);
-        let start = egui::pos2(r.left() + 0.4 * r.width(), r.bottom() - 0.6 * r.height());
+        let start = egui::pos2(
+            r.left() + 0.4 * r.width(),
+            r.bottom() - 0.6 * r.height(),
+        );
         let button = |pos, pressed| Event::PointerButton {
             pos,
             pressed,
@@ -310,9 +328,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
         let original = app.doc.clone();
-        let curve = PressureCalibration {
-            points: vec![[0., 0.], [0.6, 1.], [1., 1.]],
-        };
+        let curve =
+            PressureCalibration { points: vec![[0., 0.], [0.6, 1.], [1., 1.]] };
         app.calibration_dialog = Some(CalibrationDialog::new(curve.clone()));
         app.finish_calibration(false);
         assert_eq!(app.calibration, PressureCalibration::default());
@@ -326,14 +343,16 @@ mod tests {
         let mut json: serde_json::Value =
             serde_json::from_str(&restored.saved_preferences_json()).unwrap();
         json.as_object_mut().unwrap().remove("calibration");
-        let old: crate::preferences::Preferences = serde_json::from_value(json).unwrap();
+        let old: crate::preferences::Preferences =
+            serde_json::from_value(json).unwrap();
         assert!(old.validate());
         assert_eq!(old.calibration, PressureCalibration::default());
     }
     #[test]
     fn only_measured_pad_samples_calibrate_and_collection_is_bounded() {
         let mut d = CalibrationDialog::new(Default::default());
-        let rect = egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(100., 100.));
+        let rect =
+            egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(100., 100.));
         d.record(egui::pos2(50., 50.), 1., rect, false);
         d.record(egui::pos2(150., 50.), 0.5, rect, true);
         assert!(d.samples.is_empty());

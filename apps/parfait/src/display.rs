@@ -58,15 +58,22 @@ mod tests {
             }
         };
         frame(&mut app, vec![], true);
-        let menu_path = egui::Id::new(("catalog_root", crate::menus::TopMenu::View));
+        let menu_path =
+            egui::Id::new(("catalog_root", crate::menus::TopMenu::View));
         for _ in 0..20 {
             let target = ctx.data(|data| {
-                data.get_temp::<Rect>(egui::Id::new(("menu_item", "Display settings…")))
-                    .unwrap()
+                data.get_temp::<Rect>(egui::Id::new((
+                    "menu_item",
+                    "Display settings…",
+                )))
+                .unwrap()
             });
             let viewport = ctx.data(|data| {
-                data.get_temp::<Rect>(egui::Id::new(("catalog_viewport", menu_path)))
-                    .unwrap()
+                data.get_temp::<Rect>(egui::Id::new((
+                    "catalog_viewport",
+                    menu_path,
+                )))
+                .unwrap()
             });
             if viewport.contains(target.center()) {
                 break;
@@ -103,15 +110,20 @@ mod tests {
         );
         let settings = ctx
             .data_mut(|data| {
-                data.get_temp::<Rect>(egui::Id::new(("menu_item", "Display settings…")))
+                data.get_temp::<Rect>(egui::Id::new((
+                    "menu_item",
+                    "Display settings…",
+                )))
             })
             .unwrap();
         click(&mut app, settings, true);
         assert!(app.show_display_settings);
         frame(&mut app, vec![], false);
         let button = |label: &str| {
-            ctx.data_mut(|data| data.get_temp::<Rect>(egui::Id::new(("action_button", label))))
-                .unwrap()
+            ctx.data_mut(|data| {
+                data.get_temp::<Rect>(egui::Id::new(("action_button", label)))
+            })
+            .unwrap()
         };
         assert!(bounds.contains_rect(button("Close")));
         assert!(bounds.contains_rect(button("Restore defaults")));
@@ -167,8 +179,12 @@ impl Parfait {
         match command {
             ViewCommand::Fit => self.view.request_zoom(ViewZoom::Fit),
             ViewCommand::Reset => self.view = Default::default(),
-            ViewCommand::ActualSize => self.view.request_zoom(ViewZoom::Scale(1.)),
-            ViewCommand::DoubleSize => self.view.request_zoom(ViewZoom::Scale(2.)),
+            ViewCommand::ActualSize => {
+                self.view.request_zoom(ViewZoom::Scale(1.))
+            }
+            ViewCommand::DoubleSize => {
+                self.view.request_zoom(ViewZoom::Scale(2.))
+            }
             ViewCommand::RotateLeft | ViewCommand::RotateRight => {
                 let direction = if matches!(command, ViewCommand::RotateLeft) {
                     -1.
@@ -185,13 +201,19 @@ impl Parfait {
                 self.view.flip_horizontal = false;
                 self.view.flip_vertical = false;
             }
-            ViewCommand::FlipHorizontal => self.view.flip_horizontal = !self.view.flip_horizontal,
-            ViewCommand::FlipVertical => self.view.flip_vertical = !self.view.flip_vertical,
+            ViewCommand::FlipHorizontal => {
+                self.view.flip_horizontal = !self.view.flip_horizontal
+            }
+            ViewCommand::FlipVertical => {
+                self.view.flip_vertical = !self.view.flip_vertical
+            }
         }
     }
 
     pub fn display_menu(&mut self, ui: &mut egui::Ui) {
-        ui.add_enabled_ui(self.stroke.is_none(), |ui| self.expanded_view_menu(ui));
+        ui.add_enabled_ui(self.stroke.is_none(), |ui| {
+            self.expanded_view_menu(ui)
+        });
     }
 
     pub fn display_settings_ui(&mut self, ctx: &egui::Context) {

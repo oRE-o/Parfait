@@ -21,7 +21,11 @@ impl Parfait {
                 self.command_icon(ui, Icon::Fit, Command::FitCanvas);
                 ui.separator();
                 ui.label(
-                    RichText::new(format!("{} × {} px", self.doc.width, self.doc.height)).weak(),
+                    RichText::new(format!(
+                        "{} × {} px",
+                        self.doc.width, self.doc.height
+                    ))
+                    .weak(),
                 );
             });
         });
@@ -53,7 +57,8 @@ impl Parfait {
                         ui.separator();
                         ui.add_sized(
                             [(ui.available_width() - 26.).max(1.), 20.],
-                            egui::Label::new(RichText::new(&message).size(11.)).truncate(),
+                            egui::Label::new(RichText::new(&message).size(11.))
+                                .truncate(),
                         )
                         .on_hover_text(message);
                         if ui
@@ -81,13 +86,18 @@ impl Parfait {
                 }
                 ui.separator();
                 ui.label(
-                    RichText::new("Space: pan    Shift+Space: rotate    Alt: pick color")
-                        .size(11.)
-                        .weak(),
+                    RichText::new(
+                        "Space: pan    Shift+Space: rotate    Alt: pick color",
+                    )
+                    .size(11.)
+                    .weak(),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(RichText::new("Parfait").size(11.).weak());
-                });
+                ui.with_layout(
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(RichText::new("Parfait").size(11.).weak());
+                    },
+                );
             });
         });
     }
@@ -96,9 +106,7 @@ impl Parfait {
             .exact_size(38.)
             .resizable(false)
             .frame(
-                egui::Frame::NONE
-                    .fill(Color32::from_gray(66))
-                    .inner_margin(4),
+                egui::Frame::NONE.fill(Color32::from_gray(66)).inner_margin(4),
             )
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 1.;
@@ -107,14 +115,19 @@ impl Parfait {
                     (BrushGroup::Ink, Icon::Pen, Command::ToolInk),
                     (BrushGroup::Sketch, Icon::Pencil, Command::ToolSketch),
                     (BrushGroup::Paint, Icon::Brush, Command::ToolPaint),
-                    (BrushGroup::Airbrush, Icon::Airbrush, Command::ToolAirbrush),
+                    (
+                        BrushGroup::Airbrush,
+                        Icon::Airbrush,
+                        Command::ToolAirbrush,
+                    ),
                     (BrushGroup::Eraser, Icon::Eraser, Command::ToolEraser),
                     (BrushGroup::Blend, Icon::Blend, Command::ToolBlend),
                 ] {
                     if widgets::flat_icon(
                         ui,
                         icon,
-                        self.navigation_tool == 0 && BrushGroup::of(&self.brush) == group,
+                        self.navigation_tool == 0
+                            && BrushGroup::of(&self.brush) == group,
                         self.keymap.tooltip(command),
                         30.,
                     )
@@ -147,7 +160,9 @@ impl Parfait {
                     self.navigation_tool = 2;
                 }
                 ui.separator();
-                if widgets::flat_icon(ui, Icon::Fit, false, "Fit canvas", 30.).clicked() {
+                if widgets::flat_icon(ui, Icon::Fit, false, "Fit canvas", 30.)
+                    .clicked()
+                {
                     self.execute_command(Command::FitCanvas, ui.ctx());
                 }
                 ui.add_space(10.);
@@ -156,12 +171,16 @@ impl Parfait {
     }
     pub(crate) fn duplicate_layer(&mut self) {
         if self.doc.has_non_raster_layers() {
-            self.execute_tree_collection(Command::DuplicateLayer, 1 << self.doc.active);
+            self.execute_tree_collection(
+                Command::DuplicateLayer,
+                1 << self.doc.active,
+            );
             return;
         }
-        if let Some(reason) =
-            parfait_storage::layer_duplication_error(&self.doc, 1 << self.doc.active)
-        {
+        if let Some(reason) = parfait_storage::layer_duplication_error(
+            &self.doc,
+            1 << self.doc.active,
+        ) {
             self.notice = Some(reason.into());
             return;
         }
@@ -179,21 +198,22 @@ impl Parfait {
             return;
         }
         self.layer_previews.truncate(self.doc.layers.len());
-        self.mask_previews
-            .resize_with(self.doc.layers.len(), || None);
+        self.mask_previews.resize_with(self.doc.layers.len(), || None);
         for (i, layer) in self.doc.layers.iter().enumerate() {
             if let Some(mask) = &layer.mask {
                 let mut pixels = Vec::with_capacity(40 * 40 * 4);
                 for row in 0..40 {
                     for column in 0..40 {
-                        let index = (row * self.doc.height / 40 * self.doc.width
+                        let index = (row * self.doc.height / 40
+                            * self.doc.width
                             + column * self.doc.width / 40)
                             as usize;
                         let value = mask.coverage.value(index);
                         pixels.extend_from_slice(&[value, value, value, 255]);
                     }
                 }
-                let image = egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
+                let image =
+                    egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
                 if let Some(texture) = &mut self.mask_previews[i] {
                     texture.set(image, egui::TextureOptions::LINEAR);
                 } else {
@@ -211,16 +231,20 @@ impl Parfait {
                 for x in 0..40 {
                     let sx = x * self.doc.width / 40;
                     let sy = y * self.doc.height / 40;
-                    let pixel = layer.source_pixel((sy * self.doc.width + sx) as usize);
+                    let pixel =
+                        layer.source_pixel((sy * self.doc.width + sx) as usize);
                     let a = pixel[3] as f32 / 255.;
                     let bg = if (x / 5 + y / 5) % 2 == 0 { 210. } else { 165. };
                     for component in &pixel[..3] {
-                        pixels.push((f32::from(*component) * a + bg * (1. - a)) as u8);
+                        pixels.push(
+                            (f32::from(*component) * a + bg * (1. - a)) as u8,
+                        );
                     }
                     pixels.push(255);
                 }
             }
-            let img = egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
+            let img =
+                egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
             if let Some(t) = self.layer_previews.get_mut(i) {
                 t.set(img, egui::TextureOptions::LINEAR);
             } else {
@@ -246,16 +270,18 @@ impl Parfait {
             Palette::Properties => self.brush_properties_ui(ui),
             Palette::Sizes => {
                 let sizes = [
-                    1., 2., 3., 4., 5., 7., 10., 12., 15., 20., 25., 30., 40., 50., 70., 100.,
-                    150., 200.,
+                    1., 2., 3., 4., 5., 7., 10., 12., 15., 20., 25., 30., 40.,
+                    50., 70., 100., 150., 200.,
                 ];
                 let cell = ((ui.available_width() - 5. * 2.) / 6.).max(20.);
                 egui::Grid::new("brush_size_grid")
                     .spacing(egui::vec2(2., 2.))
                     .show(ui, |ui| {
                         for (i, size) in sizes.into_iter().enumerate() {
-                            let (r, response) =
-                                ui.allocate_exact_size(egui::vec2(cell, 36.), egui::Sense::click());
+                            let (r, response) = ui.allocate_exact_size(
+                                egui::vec2(cell, 36.),
+                                egui::Sense::click(),
+                            );
                             response.widget_info(|| {
                                 egui::WidgetInfo::labeled(
                                     egui::WidgetType::Button,
@@ -296,22 +322,33 @@ impl Parfait {
             }
             Palette::Color => {
                 ui.vertical_centered(|ui| {
-                    widgets::color_wheel_sized(ui, &mut self.brush.color, body_height - 30.);
+                    widgets::color_wheel_sized(
+                        ui,
+                        &mut self.brush.color,
+                        body_height - 30.,
+                    );
                 });
                 ui.color_edit_button_srgb(&mut self.brush.color);
             }
             Palette::Navigator => {
                 if let Some(texture) = &self.texture {
                     let w = ui.available_width();
-                    let h = (w * self.doc.height as f32 / self.doc.width as f32)
+                    let h = (w * self.doc.height as f32
+                        / self.doc.width as f32)
                         .min((body_height - 66.).clamp(30., 180.));
-                    let size = egui::vec2(h * self.doc.width as f32 / self.doc.height as f32, h);
+                    let size = egui::vec2(
+                        h * self.doc.width as f32 / self.doc.height as f32,
+                        h,
+                    );
                     ui.vertical_centered(|ui| {
-                        ui.add(egui::Image::new(texture).fit_to_exact_size(size));
+                        ui.add(
+                            egui::Image::new(texture).fit_to_exact_size(size),
+                        );
                     });
                 }
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().slider_width = (ui.available_width() - 108.).max(24.);
+                    ui.spacing_mut().slider_width =
+                        (ui.available_width() - 108.).max(24.);
                     ui.add(
                         egui::Slider::new(&mut self.view.zoom, 0.05..=12.)
                             .logarithmic(true)
@@ -319,13 +356,26 @@ impl Parfait {
                     );
                     ui.add_sized(
                         [44., 24.],
-                        egui::Label::new(format!("{:.1}%", self.view.zoom * 100.))
-                            .halign(egui::Align::RIGHT),
+                        egui::Label::new(format!(
+                            "{:.1}%",
+                            self.view.zoom * 100.
+                        ))
+                        .halign(egui::Align::RIGHT),
                     );
-                    if widgets::flat_icon(ui, Icon::Minus, false, "Zoom out", 24.).clicked() {
+                    if widgets::flat_icon(
+                        ui,
+                        Icon::Minus,
+                        false,
+                        "Zoom out",
+                        24.,
+                    )
+                    .clicked()
+                    {
                         self.view.zoom = (self.view.zoom / 1.2).max(0.05);
                     }
-                    if widgets::flat_icon(ui, Icon::Plus, false, "Zoom in", 24.).clicked() {
+                    if widgets::flat_icon(ui, Icon::Plus, false, "Zoom in", 24.)
+                        .clicked()
+                    {
                         self.view.zoom = (self.view.zoom * 1.2).min(12.);
                     }
                 });
@@ -334,18 +384,34 @@ impl Parfait {
                     if ui
                         .add_sized(
                             [64., 24.],
-                            egui::DragValue::new(&mut deg).speed(0.5).suffix("°"),
+                            egui::DragValue::new(&mut deg)
+                                .speed(0.5)
+                                .suffix("°"),
                         )
                         .changed()
                     {
                         self.view.angle = deg.to_radians();
                     }
                     widgets::action_row(ui, |ui| {
-                        if widgets::flat_icon(ui, Icon::Fit, false, "Fit canvas", 24.).clicked() {
+                        if widgets::flat_icon(
+                            ui,
+                            Icon::Fit,
+                            false,
+                            "Fit canvas",
+                            24.,
+                        )
+                        .clicked()
+                        {
                             self.view_command(crate::display::ViewCommand::Fit);
                         }
-                        if widgets::flat_icon(ui, Icon::Undo, false, "Reset rotation", 24.)
-                            .clicked()
+                        if widgets::flat_icon(
+                            ui,
+                            Icon::Undo,
+                            false,
+                            "Reset rotation",
+                            24.,
+                        )
+                        .clicked()
                         {
                             self.view.angle = 0.;
                         }
@@ -365,12 +431,18 @@ impl Parfait {
                     let blend = crate::layer_controls::blend_select(
                         ui,
                         &mut mode,
-                        self.doc.layers[active].kind == parfait_core::LayerKind::Folder,
+                        self.doc.layers[active].kind
+                            == parfait_core::LayerKind::Folder,
                         self.doc.layers[active].clipped,
                         (width * 0.4).clamp(72., 120.),
                     );
                     #[cfg(test)]
-                    ui.data_mut(|data| data.insert_temp(egui::Id::new("layer_blend"), blend.rect));
+                    ui.data_mut(|data| {
+                        data.insert_temp(
+                            egui::Id::new("layer_blend"),
+                            blend.rect,
+                        )
+                    });
                     #[cfg(not(test))]
                     let _ = blend;
                     if mode != self.doc.layers[active].blend_mode {
@@ -383,7 +455,8 @@ impl Parfait {
                             crate::layer_controls::opacity(ui, &mut opacity)
                         })
                         .inner;
-                    if r.changed() && opacity != self.doc.layers[active].opacity {
+                    if r.changed() && opacity != self.doc.layers[active].opacity
+                    {
                         self.begin_layer_edit(
                             crate::editing::LayerEditKind::Opacity,
                             active,
@@ -392,7 +465,10 @@ impl Parfait {
                         self.doc.layers[active].opacity = opacity;
                         self.doc.touch();
                     }
-                    self.layer_edit_response(crate::editing::LayerEditKind::Opacity, &r);
+                    self.layer_edit_response(
+                        crate::editing::LayerEditKind::Opacity,
+                        &r,
+                    );
                 });
                 ui.horizontal_wrapped(|ui| {
                     for (icon, command, selected) in [
@@ -457,26 +533,67 @@ impl Parfait {
                         |ui| {
                             self.layer_operations_menu(ui);
                             ui.separator();
-                            self.command_menu_item(ui, Command::GroupLayersInFolder);
-                            self.command_menu_item(ui, Command::UngroupLayerFolder);
+                            self.command_menu_item(
+                                ui,
+                                Command::GroupLayersInFolder,
+                            );
+                            self.command_menu_item(
+                                ui,
+                                Command::UngroupLayerFolder,
+                            );
                             ui.separator();
-                            ui.menu_button("레이어 마스크", |ui| self.layer_mask_menu(ui));
+                            ui.menu_button("레이어 마스크", |ui| {
+                                self.layer_mask_menu(ui)
+                            });
                         },
                     )
                     .response
                     .on_hover_text("레이어 조작");
-                    self.layer_command_icon(ui, Icon::NewLayer, Command::NewLayer);
-                    self.layer_command_icon(ui, Icon::Folder, Command::NewLayerFolder);
-                    self.layer_command_icon(ui, Icon::Copy, Command::DuplicateLayer);
+                    self.layer_command_icon(
+                        ui,
+                        Icon::NewLayer,
+                        Command::NewLayer,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Folder,
+                        Command::NewLayerFolder,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Copy,
+                        Command::DuplicateLayer,
+                    );
                     self.layer_command_icon(ui, Icon::Up, Command::MoveLayerUp);
-                    self.layer_command_icon(ui, Icon::Down, Command::MoveLayerDown);
-                    self.layer_command_icon(ui, Icon::Transfer, Command::TransferLayerDown);
-                    self.layer_command_icon(ui, Icon::Merge, Command::MergeLayerDown);
-                    self.layer_command_icon(ui, Icon::LayerMask, Command::LayerMaskRevealAll);
-                    self.layer_command_icon(ui, Icon::Trash, Command::DeleteLayer);
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Down,
+                        Command::MoveLayerDown,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Transfer,
+                        Command::TransferLayerDown,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Merge,
+                        Command::MergeLayerDown,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::LayerMask,
+                        Command::LayerMaskRevealAll,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Trash,
+                        Command::DeleteLayer,
+                    );
                 });
                 ui.separator();
-                let list_height = body_height - (ui.cursor().top() - controls_top);
+                let list_height =
+                    body_height - (ui.cursor().top() - controls_top);
                 self.layer_rows(ui, list_height);
             }
         }
@@ -514,7 +631,11 @@ mod tests {
         frame(&mut app, vec![]);
         frame(&mut app, vec![]);
         let slider = context
-            .data(|data| data.get_temp::<(egui::Rect, f32)>(egui::Id::new("layer_opacity")))
+            .data(|data| {
+                data.get_temp::<(egui::Rect, f32)>(egui::Id::new(
+                    "layer_opacity",
+                ))
+            })
             .unwrap()
             .0;
         for pressed in [true, false] {
@@ -554,10 +675,7 @@ mod tests {
         }
         app.set_layer_selection(3, 0);
         assert!(app.command_disabled_reason(Command::LayerDraft).is_some());
-        assert!(
-            app.command_disabled_reason(Command::LayerAlphaLock)
-                .is_some()
-        );
+        assert!(app.command_disabled_reason(Command::LayerAlphaLock).is_some());
     }
 
     #[test]
@@ -580,8 +698,12 @@ mod tests {
                 |ui| app.palette(ui, Palette::Layers, 400.),
             );
             output.textures_delta.clear();
-            ctx.data(|data| data.get_temp::<(egui::Rect, f32)>(egui::Id::new("layer_opacity")))
-                .unwrap()
+            ctx.data(|data| {
+                data.get_temp::<(egui::Rect, f32)>(egui::Id::new(
+                    "layer_opacity",
+                ))
+            })
+            .unwrap()
         };
         frame(&mut app, vec![]);
         let (slider, width) = frame(&mut app, vec![]);
@@ -628,7 +750,8 @@ mod tests {
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         app.doc = parfait_core::Document::new(32, 24);
         app.doc.layers[1].name =
-            "A layer with a very long name that must remain inside its row".into();
+            "A layer with a very long name that must remain inside its row"
+                .into();
         let artwork = app.doc.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
@@ -683,16 +806,23 @@ mod tests {
                 assert_eq!(app.doc, artwork);
                 if palette == Palette::Layers {
                     let blend: egui::Rect = ctx
-                        .data(|data| data.get_temp(egui::Id::new("layer_blend")))
+                        .data(|data| {
+                            data.get_temp(egui::Id::new("layer_blend"))
+                        })
                         .unwrap();
                     let (opacity, _): (egui::Rect, f32) = ctx
-                        .data(|data| data.get_temp(egui::Id::new("layer_opacity")))
+                        .data(|data| {
+                            data.get_temp(egui::Id::new("layer_opacity"))
+                        })
                         .unwrap();
                     assert!((blend.center().y - opacity.center().y).abs() < 1.);
                     assert!(blend.right() < opacity.left());
                     let clipping: egui::Rect = ctx
                         .data(|data| {
-                            data.get_temp(egui::Id::new(("layer_property", Command::LayerClipping)))
+                            data.get_temp(egui::Id::new((
+                                "layer_property",
+                                Command::LayerClipping,
+                            )))
                         })
                         .unwrap();
                     let reference: egui::Rect = ctx
@@ -723,7 +853,11 @@ mod tests {
                             egui::CentralPanel::default().show(ui, |ui| {
                                 ui.scope_builder(
                                     egui::UiBuilder::new()
-                                        .id_salt(("palette_height", palette, body_height as u32))
+                                        .id_salt((
+                                            "palette_height",
+                                            palette,
+                                            body_height as u32,
+                                        ))
                                         .max_rect(egui::Rect::from_min_size(
                                             ui.cursor().min,
                                             egui::vec2(260., 800.),
@@ -750,7 +884,8 @@ mod tests {
     }
 
     #[test]
-    fn opacity_arrows_commit_single_steps_and_unchanged_display_preserves_redo() {
+    fn opacity_arrows_commit_single_steps_and_unchanged_display_preserves_redo()
+    {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
         app.doc = parfait_core::Document::new(8, 8);

@@ -2,7 +2,8 @@ use parfait_core::{Brush, BrushOperation, Document, Point, Stroke};
 use std::{hint::black_box, sync::Arc, time::Instant};
 
 fn main() {
-    let alpha_locked = std::env::args().any(|argument| argument == "--alpha-lock");
+    let alpha_locked =
+        std::env::args().any(|argument| argument == "--alpha-lock");
     if alpha_locked {
         println!("alpha_locked=true");
     }
@@ -21,7 +22,12 @@ fn main() {
                 .iter_mut()
                 .enumerate()
             {
-                pixel.copy_from_slice(&[(index % 251) as u8, (index / 1024 % 193) as u8, 160, 180]);
+                pixel.copy_from_slice(&[
+                    (index % 251) as u8,
+                    (index / 1024 % 193) as u8,
+                    160,
+                    180,
+                ]);
             }
             let brush = Brush {
                 operation,
@@ -36,11 +42,7 @@ fn main() {
             let mut stroke = Stroke::begin(
                 &mut document,
                 brush,
-                Point {
-                    x: 256.,
-                    y: 300.,
-                    pressure: 1.,
-                },
+                Point { x: 256., y: 300., pressure: 1. },
             );
             let updates = 120;
             let first_ms = start.elapsed().as_secs_f64() * 1000.;

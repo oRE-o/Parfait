@@ -14,7 +14,9 @@ impl Capture {
         if self.frames < 5 {
             self.frames += 1;
             if self.frames == 5 {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
+                    Default::default(),
+                ));
             }
         }
         let captured = ctx.input(|i| {

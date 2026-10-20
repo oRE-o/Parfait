@@ -1,4 +1,6 @@
-use parfait_core::{Brush, BrushOperation, Document, History, OpacityMode, Point, Stroke};
+use parfait_core::{
+    Brush, BrushOperation, Document, History, OpacityMode, Point, Stroke,
+};
 use parfait_storage::Store;
 use std::sync::Arc;
 
@@ -26,11 +28,7 @@ fn capped_paint_and_erase_survive_history_reopen_and_snapshot_fallback() {
             spray_rate: 120.,
             ..Default::default()
         };
-        let center = Point {
-            x: 32.5,
-            y: 32.5,
-            pressure: 1.,
-        };
+        let center = Point { x: 32.5, y: 32.5, pressure: 1. };
         let mut stroke = Stroke::begin(&mut document, options.clone(), center);
         for _ in 0..20 {
             stroke.spray(&mut document, 0.1, 1.);

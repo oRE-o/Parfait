@@ -1,11 +1,7 @@
 use parfait_core::{Brush, BrushTip, Document, GapMode, Point, Stroke};
 
 fn point() -> Point {
-    Point {
-        x: 16.25,
-        y: 32.25,
-        pressure: 1.,
-    }
+    Point { x: 16.25, y: 32.25, pressure: 1. }
 }
 
 fn path(brush: Brush, distances: &[f32]) -> (Document, u64) {
@@ -44,33 +40,20 @@ fn gap_modes_place_distinct_stamps_and_fixed_value_is_not_lost() {
         assert_eq!(fixed.spacing_pixels(), 25.);
     }
     assert_eq!(
-        Brush {
-            size: 1.,
-            spacing: 0.01,
-            ..Default::default()
-        }
-        .spacing_pixels(),
+        Brush { size: 1., spacing: 0.01, ..Default::default() }
+            .spacing_pixels(),
         0.5
     );
     for spacing in [f32::NAN, 0., 10.1] {
-        assert!(
-            !Brush {
-                spacing,
-                ..Default::default()
-            }
-            .validate()
-        );
+        assert!(!Brush { spacing, ..Default::default() }.validate());
     }
 }
 
 #[test]
 fn spacing_phase_and_pixels_do_not_depend_on_movement_event_count() {
-    for gap_mode in [
-        GapMode::Fixed,
-        GapMode::Wide,
-        GapMode::Normal,
-        GapMode::Narrow,
-    ] {
+    for gap_mode in
+        [GapMode::Fixed, GapMode::Wide, GapMode::Normal, GapMode::Narrow]
+    {
         let brush = Brush {
             size: 10.,
             gap_mode,
@@ -80,7 +63,8 @@ fn spacing_phase_and_pixels_do_not_depend_on_movement_event_count() {
             ..Default::default()
         };
         let (single, count) = path(brush.clone(), &[100.]);
-        let (fragmented, fragmented_count) = path(brush, &[7., 13., 9., 21., 11., 39.]);
+        let (fragmented, fragmented_count) =
+            path(brush, &[7., 13., 9., 21., 11., 39.]);
         assert_eq!(count, fragmented_count);
         assert_eq!(single.layers[1].pixels, fragmented.layers[1].pixels);
     }
@@ -119,13 +103,7 @@ fn stationary_spray_uses_time_not_frame_count_and_drops_pause_backlog() {
     assert_eq!(spray_frames(&[0.1; 10], false).1, 0);
     assert_eq!(spray_frames(&[f32::NAN, f32::INFINITY, -1., 0.], true).1, 0);
     for spray_rate in [f32::NAN, 0., 121.] {
-        assert!(
-            !Brush {
-                spray_rate,
-                ..Default::default()
-            }
-            .validate()
-        );
+        assert!(!Brush { spray_rate, ..Default::default() }.validate());
     }
 }
 
@@ -140,10 +118,7 @@ fn spray_uses_current_pressure_supports_erasing_and_respects_locked_layers() {
             continuous_spray: true,
             ..Default::default()
         },
-        Point {
-            pressure: 0.,
-            ..point()
-        },
+        Point { pressure: 0., ..point() },
     );
     stroke.take_damage();
     let edge = ((32 * 64 + 26) * 4 + 3) as usize;

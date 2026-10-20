@@ -68,7 +68,9 @@ pub fn spray_controls(ui: &mut egui::Ui, brush: &mut Brush) {
     let supported = brush.operation() != BrushOperation::Smudge;
     let response = ui.add_enabled(supported, egui::Checkbox::new(&mut brush.continuous_spray, "Continuous spraying")).on_hover_text("Accumulate the effect while held still. Smudge requires movement and does not use stationary spraying. Disabled values are retained for other operations.");
     #[cfg(test)]
-    ui.data_mut(|data| data.insert_temp(egui::Id::new("continuous_spray"), response.rect));
+    ui.data_mut(|data| {
+        data.insert_temp(egui::Id::new("continuous_spray"), response.rect)
+    });
     let _ = response;
     ui.push_id("spray_rate", |ui| {
         ui.add_enabled_ui(supported && brush.continuous_spray, |ui| {
@@ -100,13 +102,10 @@ pub fn spray_controls(ui: &mut egui::Ui, brush: &mut Brush) {
 mod tests {
     use super::*;
     #[test]
-    fn mode_buttons_preserve_fixed_value_and_spray_toggle_changes_only_its_setting() {
+    fn mode_buttons_preserve_fixed_value_and_spray_toggle_changes_only_its_setting()
+     {
         let ctx = egui::Context::default();
-        let mut brush = Brush {
-            size: 10.,
-            spacing: 2.5,
-            ..Default::default()
-        };
+        let mut brush = Brush { size: 10., spacing: 2.5, ..Default::default() };
         let frame = |brush: &mut Brush, events| {
             let mut output = ctx.run_ui(
                 egui::RawInput {
@@ -127,7 +126,8 @@ mod tests {
         frame(&mut brush, vec![]);
         frame(&mut brush, vec![]);
         let click = |brush: &mut Brush, id| {
-            let center = ctx.data(|data| data.get_temp::<Rect>(id)).unwrap().center();
+            let center =
+                ctx.data(|data| data.get_temp::<Rect>(id)).unwrap().center();
             let event = |pressed| egui::Event::PointerButton {
                 pos: center,
                 pressed,

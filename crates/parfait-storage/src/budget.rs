@@ -19,8 +19,9 @@ pub fn solid_layer_growth_error(
         return Some(reason);
     }
     let active = &document.layers[document.active];
-    let parent =
-        !paper && (active.parent.is_some() || active.kind == parfait_core::LayerKind::Folder);
+    let parent = !paper
+        && (active.parent.is_some()
+            || active.kind == parfait_core::LayerKind::Folder);
     let mask_bytes = if paper {
         Some(0)
     } else {
@@ -36,31 +37,40 @@ pub fn solid_layer_growth_error(
             .checked_add(name.len() as u64)?
             .checked_add(mask_bytes?)
     });
-    allowed
-        .is_none_or(|bytes| bytes > SNAPSHOT_LIMIT)
-        .then_some("Creating this layer would exceed the 512 MiB snapshot budget.")
+    allowed.is_none_or(|bytes| bytes > SNAPSHOT_LIMIT).then_some(
+        "Creating this layer would exceed the 512 MiB snapshot budget.",
+    )
 }
 
-pub fn solid_rasterization_error(document: &Document, index: usize) -> Option<&'static str> {
+pub fn solid_rasterization_error(
+    document: &Document,
+    index: usize,
+) -> Option<&'static str> {
     if let Some(reason) = document.solid_rasterization_reason(index) {
         return Some(reason);
     }
     snapshot_size(document)
         .and_then(|bytes| {
-            bytes
-                .checked_sub(3)?
-                .checked_add(u64::from(document.width) * u64::from(document.height) * 4)
+            bytes.checked_sub(3)?.checked_add(
+                u64::from(document.width) * u64::from(document.height) * 4,
+            )
         })
         .is_none_or(|bytes| bytes > SNAPSHOT_LIMIT)
-        .then_some("Rasterizing this layer would exceed the 512 MiB snapshot budget.")
+        .then_some(
+            "Rasterizing this layer would exceed the 512 MiB snapshot budget.",
+        )
 }
 
-pub fn selection_update_error(document: &Document, dense: bool) -> Option<&'static str> {
+pub fn selection_update_error(
+    document: &Document,
+    dense: bool,
+) -> Option<&'static str> {
     if let Some(reason) = document.selection_creation_reason() {
         return Some(reason);
     }
     let allowed = || -> Option<bool> {
-        let previous = document.selection.as_ref().map_or(Some(0), coverage_size)?;
+        let previous =
+            document.selection.as_ref().map_or(Some(0), coverage_size)?;
         let proposed = if dense {
             12 + u64::from(document.width) * u64::from(document.height)
         } else {
@@ -73,10 +83,14 @@ pub fn selection_update_error(document: &Document, dense: bool) -> Option<&'stat
                 <= SNAPSHOT_LIMIT,
         )
     };
-    (allowed() != Some(true)).then_some("The selection would exceed the 512 MiB snapshot budget.")
+    (allowed() != Some(true))
+        .then_some("The selection would exceed the 512 MiB snapshot budget.")
 }
 
-pub fn mask_edit_error(document: &Document, layer: usize) -> Option<&'static str> {
+pub fn mask_edit_error(
+    document: &Document,
+    layer: usize,
+) -> Option<&'static str> {
     if !document.validate() {
         return Some("The drawing has invalid image data.");
     }
@@ -85,12 +99,15 @@ pub fn mask_edit_error(document: &Document, layer: usize) -> Option<&'static str
         Some(
             snapshot_size(document)?
                 .checked_sub(mask_payload_size(mask)?)?
-                .checked_add(13 + u64::from(document.width) * u64::from(document.height))?
+                .checked_add(
+                    13 + u64::from(document.width) * u64::from(document.height),
+                )?
                 <= SNAPSHOT_LIMIT,
         )
     };
-    (allowed() != Some(true))
-        .then_some("Editing this mask would exceed the 512 MiB snapshot budget.")
+    (allowed() != Some(true)).then_some(
+        "Editing this mask would exceed the 512 MiB snapshot budget.",
+    )
 }
 
 pub fn snapshot_size(document: &Document) -> Option<u64> {
@@ -103,7 +120,9 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     if let Some(coverage) = &document.selection {
         bytes = bytes.checked_add(match coverage {
             MaskCoverage::Uniform(_) => 5,
-            MaskCoverage::Dense(values) => 12u64.checked_add(values.len() as u64)?,
+            MaskCoverage::Dense(values) => {
+                12u64.checked_add(values.len() as u64)?
+            }
         })?;
     }
     for layer in &document.layers {
@@ -123,7 +142,10 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
     Some(bytes)
 }
 
-pub fn layer_growth_error(document: &Document, name_bytes: usize) -> Option<&'static str> {
+pub fn layer_growth_error(
+    document: &Document,
+    name_bytes: usize,
+) -> Option<&'static str> {
     layer_growth_count_error(document, 1, name_bytes)
 }
 
@@ -148,9 +170,15 @@ pub fn layer_growth_count_error(
         let snapshot = snapshot_size(document)?
             .checked_add(
                 (44u64
-                    + 8 * u64::from(document.layers.get(document.active).is_some_and(|layer| {
-                        layer.parent.is_some() || layer.kind == parfait_core::LayerKind::Folder
-                    })))
+                    + 8 * u64::from(
+                        document.layers.get(document.active).is_some_and(
+                            |layer| {
+                                layer.parent.is_some()
+                                    || layer.kind
+                                        == parfait_core::LayerKind::Folder
+                            },
+                        ),
+                    ))
                 .checked_mul(additional as u64)?,
             )?
             .checked_add(name_bytes as u64)?
@@ -173,7 +201,10 @@ fn mask_payload_size(mask: &LayerMask) -> Option<u64> {
     }
 }
 
-pub fn layer_mask_creation_error(document: &Document, layer: usize) -> Option<&'static str> {
+pub fn layer_mask_creation_error(
+    document: &Document,
+    layer: usize,
+) -> Option<&'static str> {
     if let Some(reason) = document.layer_mask_creation_reason(layer) {
         return Some(reason);
     }
@@ -188,9 +219,13 @@ pub fn layer_mask_creation_error(document: &Document, layer: usize) -> Option<&'
     }
 }
 
-pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'static str> {
+pub fn layer_duplication_error(
+    document: &Document,
+    selection: u64,
+) -> Option<&'static str> {
     if document.has_non_raster_layers() {
-        if let Some(reason) = document.layer_tree_duplication_reason(selection) {
+        if let Some(reason) = document.layer_tree_duplication_reason(selection)
+        {
             return Some(reason);
         }
         let expanded = document.layer_selection_subtrees(selection).unwrap();
@@ -206,7 +241,9 @@ pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'
                 bytes = bytes
                     .checked_add(44 + 8 * u64::from(layer.parent.is_some()))?
                     .checked_add(layer.name.len() as u64)?
-                    .checked_add(3 * u64::from(layer.kind.solid_color().is_some()))?
+                    .checked_add(
+                        3 * u64::from(layer.kind.solid_color().is_some()),
+                    )?
                     .checked_add(5 * u64::from(roots & (1 << index) != 0))?
                     .checked_add(layer.pixels.len() as u64)?;
                 if let Some(mask) = &layer.mask {
@@ -240,16 +277,20 @@ pub fn layer_duplication_error(document: &Document, selection: u64) -> Option<&'
     }) else {
         return Some("The duplicated layer names exceed the snapshot budget.");
     };
-    if let Some(reason) = layer_growth_count_error(document, selected.len(), name_bytes) {
+    if let Some(reason) =
+        layer_growth_count_error(document, selected.len(), name_bytes)
+    {
         return Some(reason);
     }
     let allowed = || -> Option<bool> {
-        let pixels = u64::from(document.width).checked_mul(u64::from(document.height))?;
+        let pixels = u64::from(document.width)
+            .checked_mul(u64::from(document.height))?;
         let mut logical = document.logical_pixel_bytes();
         let mut snapshot = snapshot_size(document)?;
         for layer in selected {
-            logical =
-                logical.checked_add(pixels.checked_mul(4 + u64::from(layer.mask.is_some()))?)?;
+            logical = logical.checked_add(
+                pixels.checked_mul(4 + u64::from(layer.mask.is_some()))?,
+            )?;
             snapshot = snapshot
                 .checked_add(44)?
                 .checked_add(layer.name.len() as u64)?
@@ -279,11 +320,7 @@ pub fn layer_folder_growth_error(
         let parent = document.layers[roots.trailing_zeros() as usize].parent;
         (
             parent,
-            if parent.is_none() {
-                roots.count_ones() as u64 * 8
-            } else {
-                0
-            },
+            if parent.is_none() { roots.count_ones() as u64 * 8 } else { 0 },
         )
     } else {
         let active = &document.layers[document.active];
@@ -312,7 +349,9 @@ pub fn layer_reparent_error(
     boundary: usize,
     parent: Option<parfait_core::LayerId>,
 ) -> Option<&'static str> {
-    if let Some(reason) = document.layer_reparent_reason(selection, boundary, parent) {
+    if let Some(reason) =
+        document.layer_reparent_reason(selection, boundary, parent)
+    {
         return Some(reason);
     }
     let roots = document.layer_selection_roots(selection).unwrap();
@@ -327,8 +366,9 @@ pub fn layer_reparent_error(
             }
         }
     }
-    (bytes > SNAPSHOT_LIMIT)
-        .then_some("Moving these layers would exceed the 512 MiB snapshot budget.")
+    (bytes > SNAPSHOT_LIMIT).then_some(
+        "Moving these layers would exceed the 512 MiB snapshot budget.",
+    )
 }
 
 #[cfg(test)]
@@ -392,7 +432,8 @@ mod tests {
         let mut document = Document::new(7, 5);
         document.add_layer();
         assert!(layer_folder_growth_error(&document, Some(6), 6).is_none());
-        let folder = document.group_layers_in_folder(6, "Folder".into()).unwrap();
+        let folder =
+            document.group_layers_in_folder(6, "Folder".into()).unwrap();
         document.create_layer_mask(3, 127);
         let bytes = snapshot_size(&document).unwrap();
         assert_eq!(
@@ -458,9 +499,11 @@ mod tests {
     }
 
     #[test]
-    fn oversized_valid_shared_buffer_document_is_rejected_before_replacing_saved_generation() {
+    fn oversized_valid_shared_buffer_document_is_rejected_before_replacing_saved_generation()
+     {
         let dir = tempfile::tempdir().unwrap();
-        let mut store = crate::Store::open(&dir.path().join("budget.parfait")).unwrap();
+        let mut store =
+            crate::Store::open(&dir.path().join("budget.parfait")).unwrap();
         let original = Document::new(4, 4);
         store.save(&original).unwrap();
         let mut oversized = Document::new(1, 1);
@@ -509,10 +552,8 @@ mod tests {
             Some(MaskCoverage::Dense(std::sync::Arc::new(vec![127; 35]))),
         ] {
             let mut document = Document::new(7, 5);
-            document.layers[1].mask = coverage.map(|coverage| LayerMask {
-                enabled: true,
-                coverage,
-            });
+            document.layers[1].mask =
+                coverage.map(|coverage| LayerMask { enabled: true, coverage });
             for enabled in [true, false] {
                 if let Some(mask) = &mut document.layers[1].mask {
                     mask.enabled = enabled;

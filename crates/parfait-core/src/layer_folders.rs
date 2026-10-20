@@ -9,7 +9,9 @@ mod tests;
 #[cfg(test)]
 mod through_tests;
 
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize,
+)]
 pub enum LayerKind {
     #[default]
     Raster,
@@ -25,15 +27,11 @@ pub(crate) struct FolderLayout {
 
 impl Document {
     pub fn has_folders(&self) -> bool {
-        self.layers
-            .iter()
-            .any(|layer| layer.kind == LayerKind::Folder)
+        self.layers.iter().any(|layer| layer.kind == LayerKind::Folder)
     }
 
     pub fn has_non_raster_layers(&self) -> bool {
-        self.layers
-            .iter()
-            .any(|layer| layer.kind != LayerKind::Raster)
+        self.layers.iter().any(|layer| layer.kind != LayerKind::Raster)
     }
 
     pub(crate) fn folder_layout(&self) -> Option<FolderLayout> {
@@ -48,11 +46,14 @@ impl Document {
         for (index, layer) in self.layers.iter().enumerate() {
             if let Some(parent) = layer.parent {
                 let parent = self.layer_index(parent)?;
-                if parent <= index || self.layers[parent].kind != LayerKind::Folder {
+                if parent <= index
+                    || self.layers[parent].kind != LayerKind::Folder
+                {
                     return None;
                 }
                 layout.parents[index] = parent;
-                layout.starts[parent] = layout.starts[parent].min(layout.starts[index]);
+                layout.starts[parent] =
+                    layout.starts[parent].min(layout.starts[index]);
                 sizes[parent] += sizes[index];
             }
         }
@@ -81,7 +82,11 @@ impl Document {
         self.layer_path_allows_edit(index, false)
     }
 
-    fn layer_path_allows_edit(&self, index: usize, require_visible: bool) -> bool {
+    fn layer_path_allows_edit(
+        &self,
+        index: usize,
+        require_visible: bool,
+    ) -> bool {
         let Some(mut layer) = self.layers.get(index) else {
             return false;
         };
@@ -100,7 +105,10 @@ impl Document {
         false
     }
 
-    pub(crate) fn folder_edit_reason(&self, parent: Option<LayerId>) -> Option<&'static str> {
+    pub(crate) fn folder_edit_reason(
+        &self,
+        parent: Option<LayerId>,
+    ) -> Option<&'static str> {
         if !self.validate() {
             return Some("The drawing has an invalid layer tree.");
         }
@@ -125,7 +133,8 @@ impl Document {
         } else {
             active.parent
         };
-        let position = self.active + usize::from(active.kind != LayerKind::Folder);
+        let position =
+            self.active + usize::from(active.kind != LayerKind::Folder);
         self.insert_layer_folder(name, parent, position)
     }
 
@@ -167,7 +176,11 @@ impl Document {
         Some(id)
     }
 
-    pub fn group_layers_in_folder(&mut self, mut selection: u64, name: String) -> Option<LayerId> {
+    pub fn group_layers_in_folder(
+        &mut self,
+        mut selection: u64,
+        name: String,
+    ) -> Option<LayerId> {
         if self.layer_folder_creation_reason(Some(selection)).is_some()
             || self.layers.is_empty()
             || self.layers.len() >= 64
@@ -202,9 +215,8 @@ impl Document {
             }
         }
         let highest = 63 - selected.leading_zeros() as usize;
-        let insertion = (0..=highest)
-            .filter(|index| selected & (1 << index) == 0)
-            .count();
+        let insertion =
+            (0..=highest).filter(|index| selected & (1 << index) == 0).count();
         let before = self.clone();
         let id = self.insert_layer_folder(name, parent, self.layers.len())?;
         let folder = self.layers.pop().unwrap();
@@ -252,9 +264,9 @@ impl Document {
                 layer.parent = parent;
             }
         }
-        self.active = self
-            .layer_index(active)
-            .unwrap_or_else(|| index.saturating_sub(1).min(self.layers.len() - 1));
+        self.active = self.layer_index(active).unwrap_or_else(|| {
+            index.saturating_sub(1).min(self.layers.len() - 1)
+        });
         self.touch();
         true
     }

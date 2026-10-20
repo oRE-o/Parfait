@@ -84,7 +84,8 @@ fn legacy_bytes(document: &Document, version: u8) -> Vec<u8> {
 }
 
 #[test]
-fn exact_prior_kind_layouts_preserve_artwork_and_selection_without_converting_old_paper() {
+fn exact_prior_kind_layouts_preserve_artwork_and_selection_without_converting_old_paper()
+ {
     for version in [7, 8, 9] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("legacy.parfait");
@@ -92,11 +93,8 @@ fn exact_prior_kind_layouts_preserve_artwork_and_selection_without_converting_ol
         let mut document = Document::new(8, 5);
         document.layers[1].pixels = Arc::new([20, 80, 150, 128].repeat(40));
         document.group_layers_in_folder(2, "Folder".into()).unwrap();
-        document.layers[2].blend_mode = if version == 7 {
-            BlendMode::Multiply
-        } else {
-            BlendMode::Through
-        };
+        document.layers[2].blend_mode =
+            if version == 7 { BlendMode::Multiply } else { BlendMode::Through };
         document.create_layer_mask(1, 193);
         if version == 9 {
             document.set_selection(Some(MaskCoverage::Dense(Arc::new(
@@ -104,10 +102,7 @@ fn exact_prior_kind_layouts_preserve_artwork_and_selection_without_converting_ol
             ))));
         }
         inject(&store, document.revision, &legacy_bytes(&document, version));
-        store
-            .connection
-            .pragma_update(None, "user_version", version)
-            .unwrap();
+        store.connection.pragma_update(None, "user_version", version).unwrap();
         let restored = store.load().unwrap().unwrap().document;
         assert_eq!(restored, document);
         assert_eq!(restored.layers[0].kind, LayerKind::Raster);
@@ -115,25 +110,22 @@ fn exact_prior_kind_layouts_preserve_artwork_and_selection_without_converting_ol
         assert_eq!(
             store
                 .connection
-                .pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+                .pragma_query_value::<i64, _>(None, "user_version", |row| row
+                    .get(0))
                 .unwrap(),
             10
         );
         drop(store);
         assert_eq!(
-            Store::open(&path)
-                .unwrap()
-                .load()
-                .unwrap()
-                .unwrap()
-                .document,
+            Store::open(&path).unwrap().load().unwrap().unwrap().document,
             document
         );
     }
 }
 
 #[test]
-fn solid_parameters_and_shared_masks_roundtrip_with_exact_version_ten_byte_accounting() {
+fn solid_parameters_and_shared_masks_roundtrip_with_exact_version_ten_byte_accounting()
+ {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("solid.parfait");
     let mut document = Document::new_with_paper(8, 5);
@@ -141,9 +133,7 @@ fn solid_parameters_and_shared_masks_roundtrip_with_exact_version_ten_byte_accou
     document.set_selection(Some(MaskCoverage::Dense(Arc::new(
         (0..40).map(|index| (index * 7) as u8).collect(),
     ))));
-    document
-        .create_solid_layer([30, 80, 160], false, "Fill".into())
-        .unwrap();
+    document.create_solid_layer([30, 80, 160], false, "Fill".into()).unwrap();
     document.group_layers_in_folder(4, "Group".into()).unwrap();
     document.layers[3].blend_mode = BlendMode::Through;
     document.layers[2].opacity = 0.65;
@@ -173,18 +163,18 @@ fn solid_parameters_and_shared_masks_roundtrip_with_exact_version_ten_byte_accou
         )
         .unwrap();
     let mut raw = Vec::new();
-    ZlibDecoder::new(payload.as_slice())
-        .read_to_end(&mut raw)
-        .unwrap();
+    ZlibDecoder::new(payload.as_slice()).read_to_end(&mut raw).unwrap();
     assert!(raw.starts_with(SNAPSHOT_V10));
     assert_eq!(snapshot_size(&restored).unwrap(), raw.len() as u64);
 }
 
 #[test]
-fn mislabeled_new_kinds_and_invalid_paper_heads_fall_back_to_committed_artwork() {
+fn mislabeled_new_kinds_and_invalid_paper_heads_fall_back_to_committed_artwork()
+{
     for version in [7, 8, 9, 10] {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open(&directory.path().join("fallback.parfait")).unwrap();
+        let mut store =
+            Store::open(&directory.path().join("fallback.parfait")).unwrap();
         let original = Document::new_with_paper(8, 5);
         store.save(&original).unwrap();
         let mut damaged = original.clone();
@@ -229,7 +219,8 @@ fn mislabeled_new_kinds_and_invalid_paper_heads_fall_back_to_committed_artwork()
 }
 
 #[test]
-fn solid_growth_and_rasterization_budget_guards_count_color_payload_and_actual_mask_shape() {
+fn solid_growth_and_rasterization_budget_guards_count_color_payload_and_actual_mask_shape()
+ {
     let mut document = Document::new(1, 1);
     document.width = 4096;
     document.height = 4096;
@@ -249,22 +240,14 @@ fn solid_growth_and_rasterization_budget_guards_count_color_payload_and_actual_m
     }
     document.selection = Some(MaskCoverage::Dense(mask));
     assert!(document.validate());
-    assert!(
-        document
-            .solid_layer_creation_reason(false, "Fill")
-            .is_none()
-    );
+    assert!(document.solid_layer_creation_reason(false, "Fill").is_none());
     assert!(solid_layer_growth_error(&document, false, "Fill").is_some());
     document.selection = Some(MaskCoverage::Uniform(128));
     assert!(solid_layer_growth_error(&document, false, "Fill").is_none());
-    document
-        .create_solid_layer([50; 3], false, "Fill".into())
-        .unwrap();
+    document.create_solid_layer([50; 3], false, "Fill".into()).unwrap();
     assert!(solid_layer_growth_error(&document, false, "Extra").is_some());
     assert!(solid_layer_growth_error(&document, true, "Paper").is_none());
-    document
-        .create_solid_layer([240; 3], true, "Paper".into())
-        .unwrap();
+    document.create_solid_layer([240; 3], true, "Paper".into()).unwrap();
     assert!(solid_rasterization_error(&document, 0).is_some());
     assert!(document.validate());
     let small = Document::new_with_paper(8, 5);

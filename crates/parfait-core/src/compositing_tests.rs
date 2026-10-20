@@ -18,7 +18,9 @@ fn reference(document: &Document, rect: PixelRect, mask: u64) -> Vec<u8> {
                 }
                 let source = &base.pixels[offset..offset + 4];
                 let mut clipped_color = None;
-                for (clip_index, clip) in document.layers.iter().enumerate().skip(index + 1) {
+                for (clip_index, clip) in
+                    document.layers.iter().enumerate().skip(index + 1)
+                {
                     if !clip.clipped {
                         break;
                     }
@@ -34,14 +36,16 @@ fn reference(document: &Document, rect: PixelRect, mask: u64) -> Vec<u8> {
                         let mut color = [0, 0, 0, 255];
                         for channel in 0..3 {
                             let source = source[channel] as f32 / 255.;
-                            let blended = base
-                                .blend_mode
-                                .channel(backdrop[channel] as f32 / 255., source);
+                            let blended = base.blend_mode.channel(
+                                backdrop[channel] as f32 / 255.,
+                                source,
+                            );
                             color[channel] = ((source * (1. - backdrop_alpha)
                                 + blended * backdrop_alpha)
                                 * 255.)
                                 .round()
-                                .clamp(0., 255.) as u8;
+                                .clamp(0., 255.)
+                                as u8;
                         }
                         color
                     });
@@ -94,7 +98,8 @@ fn fixture(width: u32, height: u32, count: usize, seed: &mut u32) -> Document {
             f32::MIN_POSITIVE,
             f32::from_bits(1),
         ][index % 7];
-        layer.blend_mode = BlendMode::ALL[value as usize % BlendMode::ALL.len()];
+        layer.blend_mode =
+            BlendMode::ALL[value as usize % BlendMode::ALL.len()];
         for pixel in Arc::make_mut(&mut layer.pixels).as_chunks_mut::<4>().0 {
             *pixel = next(seed).to_le_bytes();
         }
@@ -104,24 +109,14 @@ fn fixture(width: u32, height: u32, count: usize, seed: &mut u32) -> Document {
 
 fn verify(document: &Document, mask: u64) {
     for rect in [
-        PixelRect {
-            x0: 0,
-            y0: 0,
-            x1: document.width,
-            y1: document.height,
-        },
+        PixelRect { x0: 0, y0: 0, x1: document.width, y1: document.height },
         PixelRect {
             x0: document.width / 3,
             y0: document.height / 3,
             x1: document.width + 9,
             y1: document.height + 1,
         },
-        PixelRect {
-            x0: document.width + 1,
-            y0: 0,
-            x1: 0,
-            y1: document.height,
-        },
+        PixelRect { x0: document.width + 1, y0: 0, x1: 0, y1: document.height },
     ] {
         assert_eq!(
             document.composite_region_layers(rect, mask),
@@ -141,7 +136,8 @@ fn row_compositor_matches_pixel_reference_for_all_base_and_clip_mode_pairs() {
         for base_mode in BlendMode::ALL {
             for clip_mode in BlendMode::ALL {
                 for layer in &mut document.layers {
-                    layer.blend_mode = if layer.clipped { clip_mode } else { base_mode };
+                    layer.blend_mode =
+                        if layer.clipped { clip_mode } else { base_mode };
                 }
                 let before = document.clone();
                 for mask in [u64::MAX, 0, 1, 0b10101010, 0b11101111] {

@@ -42,7 +42,9 @@ fn interpolate_reference(
             }
             let mut result = [0; 4];
             for channel in 0..3 {
-                result[channel] = ((f64::from(before[channel]) * previous_alpha * (1. - factor)
+                result[channel] = ((f64::from(before[channel])
+                    * previous_alpha
+                    * (1. - factor)
                     + f64::from(after[channel]) * current_alpha * factor)
                     / alpha)
                     .round()
@@ -56,7 +58,8 @@ fn interpolate_reference(
 
 fn close(actual: &[u8], expected: &[u8]) {
     assert_eq!(actual.len(), expected.len());
-    for (offset, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+    for (offset, (actual, expected)) in actual.iter().zip(expected).enumerate()
+    {
         assert!(
             actual.abs_diff(*expected) <= 1,
             "byte {offset}: {actual} != {expected}"
@@ -97,9 +100,7 @@ fn through_composition_timing_workload() {
             );
         }
         let flat = document.composite();
-        document
-            .group_layers_in_folder(0b11110000, "Inner".into())
-            .unwrap();
+        document.group_layers_in_folder(0b11110000, "Inner".into()).unwrap();
         document.layers[8].blend_mode = BlendMode::Through;
         document
             .group_layers_in_folder((1 << 8) | 0b1111, "Outer".into())
@@ -112,7 +113,10 @@ fn through_composition_timing_workload() {
                 interpolate_reference(
                     &vec![0; flat.len()],
                     &flat,
-                    std::iter::repeat_n(0.63_f32 as f64 * 193. / 255., flat.len() / 4),
+                    std::iter::repeat_n(
+                        0.63_f32 as f64 * 193. / 255.,
+                        flat.len() / 4,
+                    ),
                 )
             } else {
                 flat.clone()
@@ -140,7 +144,8 @@ fn through_composition_timing_workload() {
 }
 
 #[test]
-fn full_pass_through_matches_flat_blending_for_all_pixel_modes_and_shared_content() {
+fn full_pass_through_matches_flat_blending_for_all_pixel_modes_and_shared_content()
+ {
     for mode in BlendMode::ALL {
         let mut document = flat();
         document.layers[1].blend_mode = mode;
@@ -163,12 +168,7 @@ fn full_pass_through_matches_flat_blending_for_all_pixel_modes_and_shared_conten
             ));
         }
         let revision = document.revision;
-        document.composite_region(PixelRect {
-            x0: 2,
-            y0: 1,
-            x1: 11,
-            y1: 6,
-        });
+        document.composite_region(PixelRect { x0: 2, y0: 1, x1: 11, y1: 6 });
         assert_eq!(document.revision, revision);
     }
 }
@@ -190,26 +190,23 @@ fn group_opacity_and_dense_masks_interpolate_once_in_premultiplied_space() {
             MaskCoverage::Uniform(0),
             MaskCoverage::Uniform(255),
             MaskCoverage::Uniform(127),
-            MaskCoverage::Dense(Arc::new((0..91).map(|index| (index * 37) as u8).collect())),
+            MaskCoverage::Dense(Arc::new(
+                (0..91).map(|index| (index * 37) as u8).collect(),
+            )),
         ] {
             document.layers[3].opacity = opacity;
-            document.layers[3].mask = Some(LayerMask {
-                enabled: true,
-                coverage: coverage.clone(),
-            });
+            document.layers[3].mask =
+                Some(LayerMask { enabled: true, coverage: coverage.clone() });
             let expected = interpolate_reference(
                 &before,
                 &combined,
-                (0..91).map(|index| f64::from(opacity) * f64::from(coverage.value(index)) / 255.),
+                (0..91).map(|index| {
+                    f64::from(opacity) * f64::from(coverage.value(index)) / 255.
+                }),
             );
             let full = document.composite();
             close(&full, &expected);
-            let rect = PixelRect {
-                x0: 2,
-                y0: 1,
-                x1: 11,
-                y1: 6,
-            };
+            let rect = PixelRect { x0: 2, y0: 1, x1: 11, y1: 6 };
             let expected_region: Vec<_> = (1..6)
                 .flat_map(|row| {
                     full[(row * 13 + 2) * 4..(row * 13 + 11) * 4]
@@ -248,10 +245,8 @@ fn nested_groups_scope_backdrops_and_apply_each_group_factor_once() {
     document.group_layers_in_folder(4, "Inner".into()).unwrap();
     document.layers[3].blend_mode = BlendMode::Through;
     document.layers[3].opacity = 0.5;
-    document.layers[3].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(127),
-    });
+    document.layers[3].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(127) });
     document.group_layers_in_folder(10, "Outer".into()).unwrap();
     document.layers[4].blend_mode = BlendMode::Through;
     document.layers[4].opacity = 0.3;
@@ -262,7 +257,11 @@ fn nested_groups_scope_backdrops_and_apply_each_group_factor_once() {
     );
     close(
         &document.composite(),
-        &interpolate_reference(&base, &inner, std::iter::repeat_n(f64::from(0.3f32), 91)),
+        &interpolate_reference(
+            &base,
+            &inner,
+            std::iter::repeat_n(f64::from(0.3f32), 91),
+        ),
     );
     document.layers[3].opacity = 1.;
     document.layers[3].mask = None;
@@ -293,7 +292,8 @@ fn clipping_to_through_base_is_suppressed_and_clipped_through_is_isolated() {
 }
 
 #[test]
-fn through_visibility_draft_filtering_and_hit_testing_keep_the_same_coverage_scope() {
+fn through_visibility_draft_filtering_and_hit_testing_keep_the_same_coverage_scope()
+ {
     let mut document = flat();
     let mut backdrop = document.clone();
     backdrop.layers.truncate(1);
@@ -311,10 +311,8 @@ fn through_visibility_draft_filtering_and_hit_testing_keep_the_same_coverage_sco
     let mut expected = flat();
     expected.layers[2].visible = false;
     assert_eq!(document.composite_for_export(), expected.composite());
-    document.layers[3].mask = Some(LayerMask {
-        enabled: true,
-        coverage: MaskCoverage::Uniform(0),
-    });
+    document.layers[3].mask =
+        Some(LayerMask { enabled: true, coverage: MaskCoverage::Uniform(0) });
     assert_eq!(document.composite(), base);
     document.layers[0].pixels = Arc::new([20, 40, 60, 255].repeat(91));
     assert_eq!(document.layer_at(1, 1), Some(0));

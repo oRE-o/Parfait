@@ -40,7 +40,14 @@ impl ParameterLayout {
     fn geometry(self, rect: Rect) -> ParameterGeometry {
         let right = rect.right() - 2.;
         let number_right = right - 36.;
-        let (number_width, top, bottom, track_top, dynamics_top, dynamics_height) = match self {
+        let (
+            number_width,
+            top,
+            bottom,
+            track_top,
+            dynamics_top,
+            dynamics_height,
+        ) = match self {
             Self::Palette => (49., 8., 33., 25., 6., 28.),
             Self::Detail => (42., 2., 25., 18., 2., 24.),
         };
@@ -73,13 +80,18 @@ fn fraction(value: f32, range: &RangeInclusive<f32>, logarithmic: bool) -> f32 {
     let minimum = *range.start();
     let maximum = *range.end();
     if logarithmic {
-        (value.clamp(minimum, maximum) / minimum).ln() / (maximum / minimum).ln()
+        (value.clamp(minimum, maximum) / minimum).ln()
+            / (maximum / minimum).ln()
     } else {
         (value.clamp(minimum, maximum) - minimum) / (maximum - minimum)
     }
 }
 
-fn from_fraction(fraction: f32, range: &RangeInclusive<f32>, logarithmic: bool) -> f32 {
+fn from_fraction(
+    fraction: f32,
+    range: &RangeInclusive<f32>,
+    logarithmic: bool,
+) -> f32 {
     let minimum = *range.start();
     let maximum = *range.end();
     let fraction = fraction.clamp(0., 1.);
@@ -90,10 +102,19 @@ fn from_fraction(fraction: f32, range: &RangeInclusive<f32>, logarithmic: bool) 
     }
 }
 
-fn chevron(ui: &mut egui::Ui, rect: Rect, upward: bool, label: &str) -> Response {
+fn chevron(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    upward: bool,
+    label: &str,
+) -> Response {
     let response = ui.interact(rect, ui.id().with(upward), Sense::click());
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            label,
+        )
     });
     let visuals = ui.style().interact(&response);
     if response.hovered() || response.has_focus() {
@@ -112,7 +133,11 @@ fn chevron(ui: &mut egui::Ui, rect: Rect, upward: bool, label: &str) -> Response
     response.on_hover_text(label)
 }
 
-pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> ParameterResponse {
+pub fn parameter(
+    ui: &mut egui::Ui,
+    value: &mut f32,
+    options: Parameter<'_>,
+) -> ParameterResponse {
     let original = *value;
     let (rect, mut response) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), options.layout.height()),
@@ -169,7 +194,11 @@ pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> 
     }
     *value = value.clamp(*options.range.start(), *options.range.end());
     slider.widget_info(|| {
-        egui::WidgetInfo::slider(ui.is_enabled(), f64::from(*value), options.label)
+        egui::WidgetInfo::slider(
+            ui.is_enabled(),
+            f64::from(*value),
+            options.label,
+        )
     });
     let border = if slider.hovered() || slider.has_focus() {
         Color32::from_gray(185)
@@ -179,7 +208,9 @@ pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> 
     let filled = Rect::from_min_max(
         track.min,
         egui::pos2(
-            track.left() + track.width() * fraction(*value, &options.range, options.logarithmic),
+            track.left()
+                + track.width()
+                    * fraction(*value, &options.range, options.logarithmic),
             track.bottom(),
         ),
     );
@@ -201,7 +232,11 @@ pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> 
             .layout(egui::Layout::right_to_left(egui::Align::Center)),
         |ui| {
             ui.style_mut().override_font_id =
-                Some(egui::FontId::proportional(if compact { 12.5 } else { 16. }));
+                Some(egui::FontId::proportional(if compact {
+                    12.5
+                } else {
+                    16.
+                }));
             ui.visuals_mut().button_frame = false;
             ui.add_sized(
                 number_rect.size(),
@@ -242,7 +277,8 @@ pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> 
     let mut dynamics_clicked = false;
     if let Some(active) = options.dynamics {
         let button_rect = geometry.dynamics;
-        let button = ui.interact(button_rect, ui.id().with("dynamics"), Sense::click());
+        let button =
+            ui.interact(button_rect, ui.id().with("dynamics"), Sense::click());
         #[cfg(test)]
         ui.data_mut(|data| {
             data.insert_temp(
@@ -315,10 +351,7 @@ pub fn parameter(ui: &mut egui::Ui, value: &mut f32, options: Parameter<'_>) -> 
         [rect.left_bottom(), rect.right_bottom()],
         Stroke::new(0.7, Color32::from_gray(107)),
     );
-    ParameterResponse {
-        response,
-        dynamics_clicked,
-    }
+    ParameterResponse { response, dynamics_clicked }
 }
 
 #[cfg(test)]
@@ -377,8 +410,8 @@ mod tests {
             button: egui::PointerButton::Primary,
             modifiers: Default::default(),
         };
-        let increase =
-            geometry.arrows.center_top() + egui::vec2(0., geometry.arrows.height() * 0.25);
+        let increase = geometry.arrows.center_top()
+            + egui::vec2(0., geometry.arrows.height() * 0.25);
         frame(vec![
             egui::Event::PointerMoved(increase),
             button(increase, true),
@@ -417,10 +450,7 @@ mod tests {
         }]);
         assert_eq!(minimum, 1.);
         let number = geometry.number.center();
-        frame(vec![
-            egui::Event::PointerMoved(number),
-            button(number, true),
-        ]);
+        frame(vec![egui::Event::PointerMoved(number), button(number, true)]);
         frame(vec![button(number, false)]);
         frame(vec![egui::Event::Key {
             key: egui::Key::A,
@@ -447,7 +477,8 @@ mod tests {
     }
 
     #[test]
-    fn both_row_densities_keep_targets_separate_and_disabled_values_unchanged() {
+    fn both_row_densities_keep_targets_separate_and_disabled_values_unchanged()
+    {
         for layout in [ParameterLayout::Palette, ParameterLayout::Detail] {
             let ctx = egui::Context::default();
             let mut value = 100.;
@@ -527,7 +558,10 @@ mod tests {
             for value in [1., 7., 32., 256., 512.] {
                 let position = fraction(value, &(1. ..=512.), logarithmic);
                 assert!(
-                    (from_fraction(position, &(1. ..=512.), logarithmic) - value).abs() < 0.001
+                    (from_fraction(position, &(1. ..=512.), logarithmic)
+                        - value)
+                        .abs()
+                        < 0.001
                 );
             }
             assert_eq!(from_fraction(-1., &(1. ..=512.), logarithmic), 1.);

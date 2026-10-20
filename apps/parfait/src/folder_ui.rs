@@ -5,13 +5,19 @@ use parfait_core::{LayerId, LayerKind};
 mod tests;
 
 impl Parfait {
-    pub(crate) fn folder_command_reason(&self, command: Command) -> Option<&'static str> {
+    pub(crate) fn folder_command_reason(
+        &self,
+        command: Command,
+    ) -> Option<&'static str> {
         match command {
             Command::NewLayerFolder | Command::GroupLayersInFolder => {
                 parfait_storage::layer_folder_growth_error(
                     &self.doc,
-                    (command == Command::GroupLayersInFolder).then(|| self.selected_layer_mask()),
-                    "폴더 ".len() + self.doc.next_layer_id.max(1).ilog10() as usize + 1,
+                    (command == Command::GroupLayersInFolder)
+                        .then(|| self.selected_layer_mask()),
+                    "폴더 ".len()
+                        + self.doc.next_layer_id.max(1).ilog10() as usize
+                        + 1,
                 )
             }
             Command::UngroupLayerFolder => {
@@ -63,7 +69,9 @@ impl Parfait {
         selection: u64,
     ) -> Option<&'static str> {
         match command {
-            Command::DeleteLayer => self.doc.layer_tree_delete_reason(selection),
+            Command::DeleteLayer => {
+                self.doc.layer_tree_delete_reason(selection)
+            }
             Command::DuplicateLayer => {
                 parfait_storage::layer_duplication_error(&self.doc, selection)
             }
@@ -81,18 +89,25 @@ impl Parfait {
                 );
                 let edge = matches!(
                     command,
-                    Command::MoveActiveLayerToTop | Command::MoveActiveLayerToBottom
+                    Command::MoveActiveLayerToTop
+                        | Command::MoveActiveLayerToBottom
                 );
                 self.doc
                     .layer_sibling_order(selection, upward, edge)
                     .is_none()
-                    .then_some("움직일 수 있는 같은 폴더의 레이어를 선택해 주세요.")
+                    .then_some(
+                        "움직일 수 있는 같은 폴더의 레이어를 선택해 주세요.",
+                    )
             }
             _ => None,
         }
     }
 
-    pub(crate) fn execute_tree_collection(&mut self, command: Command, selection: u64) {
+    pub(crate) fn execute_tree_collection(
+        &mut self,
+        command: Command,
+        selection: u64,
+    ) {
         if self.stroke.is_some()
             || self.dialog_open()
             || self.layer_list.owns_pointer()
@@ -116,17 +131,22 @@ impl Parfait {
         ) {
             let upward = matches!(
                 command,
-                Command::MoveLayerUp | Command::MoveActiveLayerUp | Command::MoveActiveLayerToTop
+                Command::MoveLayerUp
+                    | Command::MoveActiveLayerUp
+                    | Command::MoveActiveLayerToTop
             );
             let edge = matches!(
                 command,
-                Command::MoveActiveLayerToTop | Command::MoveActiveLayerToBottom
+                Command::MoveActiveLayerToTop
+                    | Command::MoveActiveLayerToBottom
             );
-            let order = self
-                .doc
-                .layer_sibling_order(selection, upward, edge)
-                .unwrap();
-            self.apply_layer_order_named(order, self.selected_layer_mask(), command.label());
+            let order =
+                self.doc.layer_sibling_order(selection, upward, edge).unwrap();
+            self.apply_layer_order_named(
+                order,
+                self.selected_layer_mask(),
+                command.label(),
+            );
         } else {
             let mut copied = None;
             self.edit_named(command.label(), |document| {
@@ -136,27 +156,33 @@ impl Parfait {
                     copied = document.duplicate_layer_subtrees(selection);
                 }
             });
-            self.set_layer_selection(copied.unwrap_or(1 << self.doc.active), self.doc.active);
+            self.set_layer_selection(
+                copied.unwrap_or(1 << self.doc.active),
+                self.doc.active,
+            );
         }
         self.reveal_layer(self.doc.active);
     }
 
-    pub(crate) fn tree_flag_reason(&self, command: Command) -> Option<&'static str> {
+    pub(crate) fn tree_flag_reason(
+        &self,
+        command: Command,
+    ) -> Option<&'static str> {
         if !self.doc.has_non_raster_layers() {
             return None;
         }
         let selection = self.selected_layer_mask();
         if matches!(
             command,
-            Command::LayerClipping | Command::LayerReference | Command::LayerDraft
-        ) && self
-            .doc
-            .layers
-            .iter()
-            .enumerate()
-            .any(|(index, layer)| selection & (1 << index) != 0 && layer.kind.is_paper())
-        {
-            return Some("용지는 클리핑이나 참조, 밑그림으로 설정할 수 없습니다.");
+            Command::LayerClipping
+                | Command::LayerReference
+                | Command::LayerDraft
+        ) && self.doc.layers.iter().enumerate().any(|(index, layer)| {
+            selection & (1 << index) != 0 && layer.kind.is_paper()
+        }) {
+            return Some(
+                "용지는 클리핑이나 참조, 밑그림으로 설정할 수 없습니다.",
+            );
         }
         match command {
             Command::DeleteLayer
@@ -199,9 +225,9 @@ impl Parfait {
         boundary: usize,
         parent: Option<LayerId>,
     ) {
-        if let Some(reason) =
-            parfait_storage::layer_reparent_error(&self.doc, selection, boundary, parent)
-        {
+        if let Some(reason) = parfait_storage::layer_reparent_error(
+            &self.doc, selection, boundary, parent,
+        ) {
             self.notice = Some(reason.into());
             return;
         }

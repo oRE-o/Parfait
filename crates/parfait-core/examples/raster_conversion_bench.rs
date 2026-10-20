@@ -26,10 +26,13 @@ fn main() {
             for _ in 0..20 {
                 let mut document = source.clone();
                 if !shared {
-                    document.layers[1].pixels = Arc::new(source.layers[1].pixels.as_ref().clone());
+                    document.layers[1].pixels =
+                        Arc::new(source.layers[1].pixels.as_ref().clone());
                 }
                 let start = Instant::now();
-                assert!(document.convert_layer_pixels(1, black_box(conversion)));
+                assert!(
+                    document.convert_layer_pixels(1, black_box(conversion))
+                );
                 times.push(start.elapsed().as_secs_f64() * 1000.);
                 for (output, input) in document.layers[1]
                     .pixels
@@ -55,14 +58,17 @@ fn main() {
                                     0,
                                     0,
                                     0,
-                                    (f64::from(input[3]) * (255. - gray) / 255.).round() as u8,
+                                    (f64::from(input[3]) * (255. - gray) / 255.)
+                                        .round()
+                                        as u8,
                                 ]
                             }
                         }
                     };
                     assert_eq!(*output, expected);
-                    checksum = checksum
-                        .wrapping_add(output.iter().map(|byte| u64::from(*byte)).sum::<u64>());
+                    checksum = checksum.wrapping_add(
+                        output.iter().map(|byte| u64::from(*byte)).sum::<u64>(),
+                    );
                 }
                 let before = document.clone();
                 assert!(!document.convert_layer_pixels(1, conversion));

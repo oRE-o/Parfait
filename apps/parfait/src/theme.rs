@@ -35,8 +35,10 @@ pub fn apply(ctx: &egui::Context) {
         widget.corner_radius = egui::CornerRadius::ZERO;
     }
     style.visuals.button_frame = true;
-    style.visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1., Color32::from_gray(133));
-    style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1., Color32::from_gray(183));
+    style.visuals.widgets.inactive.bg_stroke =
+        egui::Stroke::new(1., Color32::from_gray(133));
+    style.visuals.widgets.hovered.bg_stroke =
+        egui::Stroke::new(1., Color32::from_gray(183));
     style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1., ACCENT);
     style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1., ACCENT);
     style.visuals.widgets.active.bg_fill = Color32::from_gray(58);
@@ -47,7 +49,8 @@ pub fn apply(ctx: &egui::Context) {
     style.visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(87);
     style.visuals.widgets.hovered.bg_fill = Color32::from_gray(88);
     style.visuals.widgets.hovered.weak_bg_fill = Color32::from_gray(82);
-    style.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1., Color32::from_gray(46));
+    style.visuals.widgets.noninteractive.bg_stroke =
+        egui::Stroke::new(1., Color32::from_gray(46));
     style.spacing.item_spacing = egui::vec2(4., 4.);
     style.spacing.button_padding = egui::vec2(5., 2.);
     style.spacing.interact_size = egui::vec2(20., 20.);
@@ -58,9 +61,7 @@ pub fn apply(ctx: &egui::Context) {
         egui::TextStyle::Button,
         egui::TextStyle::Monospace,
     ] {
-        style
-            .text_styles
-            .insert(text, egui::FontId::proportional(12.));
+        style.text_styles.insert(text, egui::FontId::proportional(12.));
     }
     ctx.set_style_of(egui::Theme::Dark, style);
     ctx.set_theme(egui::ThemePreference::Dark);
@@ -76,7 +77,8 @@ fn font_definitions() -> egui::FontDefinitions {
         ))
         .into(),
     );
-    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace]
+    {
         fonts
             .families
             .entry(family)
@@ -85,8 +87,10 @@ fn font_definitions() -> egui::FontDefinitions {
     }
     fonts.font_data.insert(
         "fontawesome-solid".into(),
-        egui::FontData::from_static(include_bytes!("../assets/fontawesome/fa-solid-900.ttf"))
-            .into(),
+        egui::FontData::from_static(include_bytes!(
+            "../assets/fontawesome/fa-solid-900.ttf"
+        ))
+        .into(),
     );
     fonts.families.insert(
         egui::FontFamily::Name("icons".into()),
@@ -101,7 +105,9 @@ mod tests {
     #[test]
     fn pretendard_is_shared_by_all_text_families_and_icons_remain_separate() {
         let definitions = font_definitions();
-        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        for family in
+            [egui::FontFamily::Proportional, egui::FontFamily::Monospace]
+        {
             assert_eq!(definitions.families[&family][0], "Pretendard");
         }
         assert_eq!(
@@ -114,15 +120,27 @@ mod tests {
         let mut output = ctx.run_ui(Default::default(), |ui| {
             ui.label("가나다 브러시 설정 100% 200px");
             ui.ctx().fonts_mut(|fonts| {
-                for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-                    assert!(
-                        fonts.has_glyphs(&egui::FontId::new(12., family), "가나다힣ABC0123%°×")
-                    );
+                for family in [
+                    egui::FontFamily::Proportional,
+                    egui::FontFamily::Monospace,
+                ] {
+                    assert!(fonts.has_glyphs(
+                        &egui::FontId::new(12., family),
+                        "가나다힣ABC0123%°×"
+                    ));
                 }
-                let icon_font = egui::FontId::new(14., egui::FontFamily::Name("icons".into()));
-                let missing =
-                    fonts.layout_no_wrap("\u{10ffff}".into(), icon_font.clone(), Color32::WHITE);
-                for kind in [crate::widgets::Icon::Pen, crate::widgets::Icon::Grip] {
+                let icon_font = egui::FontId::new(
+                    14.,
+                    egui::FontFamily::Name("icons".into()),
+                );
+                let missing = fonts.layout_no_wrap(
+                    "\u{10ffff}".into(),
+                    icon_font.clone(),
+                    Color32::WHITE,
+                );
+                for kind in
+                    [crate::widgets::Icon::Pen, crate::widgets::Icon::Grip]
+                {
                     let icon = fonts.layout_no_wrap(
                         kind.glyph().into(),
                         icon_font.clone(),
@@ -144,11 +162,8 @@ mod tests {
     fn control_plus_does_not_change_ui_scale() {
         let ctx = egui::Context::default();
         apply(&ctx);
-        let modifiers = egui::Modifiers {
-            ctrl: true,
-            command: true,
-            ..Default::default()
-        };
+        let modifiers =
+            egui::Modifiers { ctrl: true, command: true, ..Default::default() };
         for events in [
             vec![egui::Event::ModifiersChanged(modifiers)],
             vec![egui::Event::Key {
@@ -161,10 +176,7 @@ mod tests {
             vec![],
         ] {
             let mut out = ctx.run_ui(
-                egui::RawInput {
-                    events,
-                    ..Default::default()
-                },
+                egui::RawInput { events, ..Default::default() },
                 |ui| {
                     ui.label("Scale test");
                 },
