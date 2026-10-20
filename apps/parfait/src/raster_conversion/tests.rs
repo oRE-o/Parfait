@@ -34,9 +34,10 @@ fn frame(
 fn conversions_are_active_only_undoable_and_durable_with_masks() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.layers[1].pixels = Arc::new([128, 128, 128, 128].repeat(64));
-    app.doc.layers[1].mask = Some(LayerMask {
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.layers[1].pixels =
+        Arc::new([128, 128, 128, 128].repeat(64));
+    app.documents.session.document.layers[1].mask = Some(LayerMask {
         enabled: false,
         coverage: MaskCoverage::Dense(Arc::new(vec![100; 64])),
     });
@@ -45,30 +46,39 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
     app.brush.opacity = 0.;
     app.brush.erase = true;
     let context = egui::Context::default();
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     app.execute_command(Command::BrightnessToOpacity, &context);
-    assert_eq!(app.doc.layers[1].pixels.as_slice(), [0, 0, 0, 64].repeat(64));
-    assert_eq!(app.doc.layers[0], before.layers[0]);
-    assert_eq!(app.doc.layers[1].mask, before.layers[1].mask);
+    assert_eq!(
+        app.documents.session.document.layers[1].pixels.as_slice(),
+        [0, 0, 0, 64].repeat(64)
+    );
+    assert_eq!(app.documents.session.document.layers[0], before.layers[0]);
+    assert_eq!(
+        app.documents.session.document.layers[1].mask,
+        before.layers[1].mask
+    );
     assert_eq!(app.selected_layer_mask(), 3);
-    assert_eq!(app.history.rows().count(), 2);
-    let extracted = app.doc.clone();
+    assert_eq!(app.documents.session.history.rows().count(), 2);
+    let extracted = app.documents.session.document.clone();
     app.undo();
-    assert!(app.doc.same_edit_state(&before));
+    assert!(app.documents.session.document.same_edit_state(&before));
     app.redo();
-    assert!(app.doc.same_edit_state(&extracted));
-    app.doc.layers[1].alpha_locked = true;
+    assert!(app.documents.session.document.same_edit_state(&extracted));
+    app.documents.session.document.layers[1].alpha_locked = true;
     app.execute_command(Command::ConvertToDrawingColor, &context);
     assert_eq!(
-        app.doc.layers[1].pixels.as_slice(),
+        app.documents.session.document.layers[1].pixels.as_slice(),
         [35, 180, 90, 64].repeat(64)
     );
-    assert_eq!(app.doc.layers[1].mask, before.layers[1].mask);
-    let converted = app.doc.clone();
+    assert_eq!(
+        app.documents.session.document.layers[1].mask,
+        before.layers[1].mask
+    );
+    let converted = app.documents.session.document.clone();
     app.force_save();
     drop(app);
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    assert_eq!(app.doc, converted);
+    assert_eq!(app.documents.session.document, converted);
     assert!(
         app.command_disabled_reason(Command::BrightnessToOpacity).is_some()
     );
@@ -76,7 +86,7 @@ fn conversions_are_active_only_undoable_and_durable_with_masks() {
         app.command_disabled_reason(Command::ConvertToDrawingColor).is_none()
     );
     app.execute_command(Command::ConvertToDrawingColor, &context);
-    assert!(app.doc.layers[1].alpha_locked);
+    assert!(app.documents.session.document.layers[1].alpha_locked);
 }
 
 #[test]
@@ -87,13 +97,13 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
         for blocker in 0..6 {
             let directory = tempfile::tempdir().unwrap();
             let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-            app.doc = Document::new(32, 32);
-            app.doc.layers[1].pixels =
+            app.documents.session.document = Document::new(32, 32);
+            app.documents.session.document.layers[1].pixels =
                 Arc::new([160, 120, 80, 255].repeat(1024));
-            app.doc.create_layer_mask(1, 127);
+            app.documents.session.document.create_layer_mask(1, 127);
             app.confirm_new = blocker == 0;
             app.workspace.resizing = blocker == 1;
-            app.doc.layers[1].locked = blocker == 2;
+            app.documents.session.document.layers[1].locked = blocker == 2;
             if blocker == 3 {
                 app.select_layer_target(1, true);
             }
@@ -107,22 +117,22 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
                 }));
             }
             if blocker == 5 {
-                app.doc.layers[1].alpha_locked =
+                app.documents.session.document.layers[1].alpha_locked =
                     command == Command::BrightnessToOpacity;
-                app.doc.layers[1].locked =
+                app.documents.session.document.layers[1].locked =
                     command == Command::ConvertToDrawingColor;
             }
-            let before = app.doc.clone();
-            let rows = app.history.rows().count();
+            let before = app.documents.session.document.clone();
+            let rows = app.documents.session.history.rows().count();
             let context = egui::Context::default();
             assert!(app.command_disabled_reason(command).is_some());
             app.execute_command(command, &context);
-            assert_eq!(app.doc, before);
+            assert_eq!(app.documents.session.document, before);
             assert!(Arc::ptr_eq(
-                &app.doc.layers[1].pixels,
+                &app.documents.session.document.layers[1].pixels,
                 &before.layers[1].pixels
             ));
-            assert_eq!(app.history.rows().count(), rows);
+            assert_eq!(app.documents.session.history.rows().count(), rows);
         }
     }
 }
@@ -131,8 +141,9 @@ fn guards_refuse_mask_and_locked_targets_or_owned_gestures_without_edits() {
 fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.layers[1].pixels = Arc::new([60, 50, 40, 200].repeat(64));
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.layers[1].pixels =
+        Arc::new([60, 50, 40, 200].repeat(64));
     app.keymap
         .assign(
             Command::ConvertToDrawingColor,
@@ -142,9 +153,9 @@ fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
         )
         .unwrap();
     let context = egui::Context::default();
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     frame(&mut app, &context, vec![key(true, false)], true);
-    assert_eq!(app.doc, before);
+    assert_eq!(app.documents.session.document, before);
     frame(&mut app, &context, vec![key(false, false)], false);
     context.memory_mut(|memory| {
         if let Some(focus) = memory.focused() {
@@ -152,21 +163,21 @@ fn conversion_shortcut_ignores_repeat_and_text_focus_and_noop_keeps_redo() {
         }
     });
     frame(&mut app, &context, vec![key(true, false)], false);
-    let after = app.doc.clone();
+    let after = app.documents.session.document.clone();
     assert!(!after.same_edit_state(&before));
     app.brush.color = [200, 180, 20];
     frame(&mut app, &context, vec![key(true, true)], false);
-    assert_eq!(app.doc, after);
+    assert_eq!(app.documents.session.document, after);
     frame(&mut app, &context, vec![key(false, false)], false);
     app.undo();
-    assert!(app.history.can_redo());
+    assert!(app.documents.session.history.can_redo());
     app.brush.color = [60, 50, 40];
-    let unchanged = app.doc.clone();
+    let unchanged = app.documents.session.document.clone();
     frame(&mut app, &context, vec![key(true, false)], false);
-    assert!(app.history.can_redo());
-    assert_eq!(app.doc, unchanged);
+    assert!(app.documents.session.history.can_redo());
+    assert_eq!(app.documents.session.document, unchanged);
     assert!(Arc::ptr_eq(
-        &app.doc.layers[1].pixels,
+        &app.documents.session.document.layers[1].pixels,
         &unchanged.layers[1].pixels
     ));
 }

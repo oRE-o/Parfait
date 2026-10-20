@@ -523,6 +523,19 @@ impl Command {
 
 impl Parfait {
     pub fn execute_command(&mut self, command: Command, ctx: &egui::Context) {
+        let target = self.documents.session.key;
+        self.execute_command_for(target, command, ctx);
+    }
+
+    pub(crate) fn execute_command_for(
+        &mut self,
+        target: crate::document_session::SessionKey,
+        command: Command,
+        ctx: &egui::Context,
+    ) {
+        if self.documents.session.key != target {
+            return;
+        }
         if let Some(reason) = self.command_disabled_reason(command) {
             self.notice = Some(reason.into());
             return;
@@ -593,8 +606,8 @@ impl Parfait {
             | Command::CopyVisibleLayers
             | Command::FlattenImage
             | Command::ClearLayer => self.combine_layer_command(command),
-            Command::ZoomIn => self.view.step_zoom(1),
-            Command::ZoomOut => self.view.step_zoom(-1),
+            Command::ZoomIn => self.documents.session.view.step_zoom(1),
+            Command::ZoomOut => self.documents.session.view.step_zoom(-1),
             Command::ActualSize => self.view_command(ViewCommand::ActualSize),
             Command::DoubleSize => self.view_command(ViewCommand::DoubleSize),
             Command::FitCanvas => self.view_command(ViewCommand::Fit),

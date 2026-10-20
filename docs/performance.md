@@ -8,6 +8,76 @@ Run `cargo run --release -p parfait-core --example procedural_bench`. On Apple M
 
 Six sequential before/after selection-free stroke runs preserve all ten checksums and scratch capacities. The first three pairs use before/after order, the final three reverse it. Median run p95 values include Paint/PerStroke 2.3616→2.7594 ms and Smudge/PerStroke 3.8004→4.1226 ms, with substantial tail variability. Typical p50 costs stay closer, but these mixed results do not establish zero timing regression. No brush algorithm or additional selection-free stroke buffer is introduced by the solid types. Repeat isolated tail measurements before making responsiveness claims; this CPU workload is not physical pen latency.
 
+## Multi-document 1B State Identity
+
+The retained 1B scope adds History state IDs and an explicit streaming digest API, not tabs or rendering algorithms. The application never invokes the digest during pointer movement or modified-status rendering. Transaction start reserves entropy once per edit transaction, not once per pointer move. Artwork encoding and autosave durability remain unchanged; original-save baseline migration is deferred to 4A.
+
+The existing 512×384 folder/mask/selection workload below was repeated on the start-of-task 1A source snapshot and retained 1B source, using Rust 1.99.1 / macOS arm64 and the workspace release profile. Each executable was preserved before alternating three pairs (the second reversed), with no concurrent builds. Values are minimum–maximum across all three runs, not pooled percentiles. No timing/RSS acceptance tolerance was fixed beforehand, so these are diagnostic observations, not a no-regression or latency claim.
+
+| Metric | Before 1B | After 1B |
+| --- | ---: | ---: |
+| Canvas CPU frame p50, ms | 0.005917–0.008500 | 0.006584–0.007625 |
+| Canvas CPU frame p95, ms | 0.026750–0.032209 | 0.032042–0.034042 |
+| Canvas CPU frame p99, ms | 0.028292–0.035666 | 0.038583–0.055000 |
+| Canvas CPU frame maximum, ms | 0.056834–0.078875 | 0.065583–0.096750 |
+| Synchronous original-save p50, ms | 15.942167–16.571542 | 15.849167–16.617000 |
+| Synchronous original-save p95, ms | 17.042000–17.717542 | 16.519375–17.264500 |
+| Complete headless process peak RSS, MiB | 38.578–40.547 | 38.078–40.469 |
+
+All six runs retain raster checksum `32465291941967`, complete composite checksum `63671080545421` and logical pixel bytes `2162688`, plus exact byte/readback assertions. The timer encloses headless egui canvas CPU work (256 updates); nine synchronous original-save samples include commit/checkpoint. It excludes the native event loop, full app UI, GPU presentation and physical input. Peak RSS is the entire test child's high-water mark from a fresh `resource.getrusage` wrapper, not a native GUI working set or the logical buffer budget. The before source/binaries were retained only in temporary QA storage, not a new historical overlay in this repository; the current workload remains reproducible with the command below.
+
+```sh
+cargo test --release -p parfait --offline multi_document_baseline_release_workload -- --ignored --nocapture --test-threads=1
+```
+
+## Multi-document 1A Session Extraction
+
+1A moves the single live document and its editing state into `DocumentSession`, and render caches into one `WindowRenderCache`. It adds only small identity/ownership fields and egui identity scopes; it does not change the pixel algorithms, history limit, storage encoding, snapshot policy or worker count. Moving a session preserves the existing pixel/mask/selection Arcs, verified by pointer identity and unchanged strong counts. There is still one document and one fixed autosave worker. This is not completion of multiple tabs or global memory budgets.
+
+The preserved before executable links base `e734ff62ca3b6af3725cdf7047ad338674450ded` plus only the baseline test/registration. The after executable links the uncommitted 1A working tree. Both use the workspace's release profile (thin LTO), Rust 1.99.1 and macOS 26.4.1 arm64. The exact hardware model could not be queried in the sandbox; this is not the named modest reference-machine acceptance run. The former raw evidence and historical overlay were removed from this checkout. The following values remain historical observations; the old before-build is not reproducibly archived in the current tree.
+
+The workload uses a deterministic 512×384 document, two RGBA raster layers, an isolated folder, Dense child mask, Uniform-193 folder mask and fractional Dense selection. Logical pixel reservations are 2,162,688 bytes. An independent integer oracle verifies the initial complete composite. After three warm frames, one 32-pixel pointer stroke runs for 256 updates, 1.5 document pixels apart at synthetic 60 Hz timestamps. Unchanged/no-dab updates are included. Each timer encloses `egui::Context::run_ui` of the real canvas handler: input processing, core stroke work, CPU composition, boundary preparation and texture-delta creation. Texture-delta cleanup, final checksum verification and setup are outside the timer. This excludes eframe/native event delivery, the rest of the app UI, tessellation/GPU presentation and hardware input. It is a **headless canvas CPU frame**, not end-to-end pen latency or the native app's full frame time.
+
+Nine original-save samples call the real synchronous `save_project_to`, including path validation, immutable snapshot preparation, encoding/compression, SQLite commit/clean/checkpoint and autosave submission. Each saved document is reopened and compared outside the timer, normalizing only the independent disk revision. Original autosave remains enabled; durability is not disabled to improve timings. Verification/readback and fixture cleanup are untimed. A future asynchronous-save workload must wait for the actual successful original commit, not time queue submission as a completed save.
+
+Three final before/after pairs were interleaved, reversing pair two, without concurrent builds, the native QA app or UI automation. Other desktop apps remained running. Each table cell is the minimum–maximum across **all three runs**, not pooled percentiles or selected best runs:
+
+| Metric | Before | After 1A |
+| --- | ---: | ---: |
+| Canvas CPU frame p50, ms | 0.005792–0.005958 | 0.006084–0.016083 |
+| Canvas CPU frame p95, ms | 0.026041–0.028333 | 0.026417–0.082917 |
+| Canvas CPU frame p99, ms | 0.028417–0.038625 | 0.027291–0.121292 |
+| Canvas CPU frame maximum, ms | 0.053333–0.112417 | 0.052666–0.478250 |
+| Synchronous original-save p50, ms | 15.875333–18.559583 | 15.564666–21.601958 |
+| Synchronous original-save p95, ms | 17.344083–40.992667 | 16.423208–36.075958 |
+| Complete headless test-process peak RSS, MiB | 38.71875–40.890625 | 37.859375–40.390625 |
+
+The third after run has visibly higher frame costs; both variants also have save-time outliers. These observations are retained, not attributed to a proven cause or hidden as noise. No pre-agreed timing/RSS tolerance or isolated-device baseline exists, so timing effects remain **unjudged**, not a no-regression or speedup result. In particular, this does not claim the native 16.7 ms target is met. The scope is one small document, not large-brush/layer/memory-pressure coverage.
+
+The raster checksum is 32465291941967 and complete composite checksum is 63671080545421 in every before/after run; exact decoded artwork assertions also pass. Nearest-rank percentiles use 256 frame samples and nine save samples per run. Save p95 is consequently that run's maximum, and save p99 is intentionally not reported. Peak RSS comes from `resource.getrusage(RUSAGE_CHILDREN).ru_maxrss`, in bytes on macOS, with a fresh Python wrapper for each single test child. It includes fixture construction, readback, headless egui, history, caches and worker memory across the entire test process; it is not the live native GUI/GPU working set or the document's buffer budget.
+
+```sh
+cargo test --release -p parfait multi_document_baseline_release_workload -- --ignored --nocapture --test-threads=1
+```
+
+For per-executable peak RSS, preserve the executable from `cargo test --no-run`, then run a fresh wrapper for each sample:
+
+```sh
+python3 - "$test_executable" <<'PY'
+import resource
+import subprocess
+import sys
+subprocess.run([
+    sys.argv[1], "multi_document_baseline_release_workload",
+    "--ignored", "--nocapture", "--test-threads=1",
+], check=True)
+print("max_rss_bytes", resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
+PY
+```
+
+Earlier exploratory measurements overlapped builds and are excluded from the final six-run evidence. `/usr/bin/time -l` could not query the sandbox's kernel clock service; the independent child-resource wrapper supplies the reported RSS instead. A separate native release startup/framebuffer smoke check is described in [testing](testing.md#multi-document-1a-single-session-ownership-extraction). It does not provide native input timing, physical-tablet compatibility or Windows/Linux results.
+
+
 ## Selection Boundary Display
 
 The selection overlay adds no runtime dependency, worker or image texture. It caches two vector dash phases, bounded to 16,384 quads per phase and 3.25 MiB combined vertex/index payload. Temporary contour segments are also bounded by that quad budget. Coverage is shared, not copied into the cache. Viewport-limited document-grid traversal uses a 262,144-cell preflight with conservative margins; power-of-two display LOD reduces dense boundaries and is labelled on the canvas. This can simplify small islands at low zoom or very high complexity, but never changes writing coverage. Unrelated pixel edits reuse the mesh; animation only chooses an Arc-backed phase every 200 ms. The unsigned release executable is 13,126,736 bytes, up 33,312 bytes from the preceding integrated engine checkpoint; this is binary size, not total process memory.

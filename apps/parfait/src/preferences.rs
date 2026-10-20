@@ -111,7 +111,7 @@ impl Parfait {
         }
     }
     pub fn persist_preferences(&mut self, force: bool) {
-        if (!force && self.stroke.is_some())
+        if (!force && self.documents.session.editing.stroke.is_some())
             || self.preferences_read_failed
             || (!force && self.preferences_tick.elapsed().as_secs_f32() < 1.)
         {
@@ -347,7 +347,7 @@ mod tests {
     fn unchanged_material_library_poll_benchmark() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = parfait_core::Document::new(16, 16);
+        app.documents.session.document = parfait_core::Document::new(16, 16);
         let mask = std::sync::Arc::new(vec![128; 256 * 256]);
         app.presets = (0..64)
             .map(|index| Preset {
@@ -398,14 +398,14 @@ mod tests {
             background: 72,
             rotation_step: 17.,
         };
-        app.view.flip_horizontal = true;
+        app.documents.session.view.flip_horizontal = true;
         app.persist_preferences(true);
         let expected = app.display;
         let json = app.saved_preferences_json();
         drop(app);
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         assert_eq!(app.display, expected);
-        assert!(!app.view.flip_horizontal);
+        assert!(!app.documents.session.view.flip_horizontal);
         let path = dir.path().join("preferences.sqlite");
         for version in 1..=6 {
             let mut legacy: serde_json::Value =

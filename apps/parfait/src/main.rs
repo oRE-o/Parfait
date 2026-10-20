@@ -10,6 +10,8 @@ mod chrome;
 mod curve_editor;
 mod diagnostics;
 mod display;
+mod document_session;
+mod documents;
 mod editing;
 mod folder_ui;
 mod history_palette;
@@ -21,6 +23,8 @@ mod layer_organize;
 mod layers;
 mod mask_area;
 mod menus;
+#[cfg(test)]
+mod multi_document_tests;
 mod panels;
 mod pixel_selection;
 mod preferences;
@@ -30,6 +34,7 @@ mod rulers;
 mod shortcuts;
 mod theme;
 mod widgets;
+mod window_render_cache;
 mod workspace;
 use std::path::PathBuf;
 

@@ -205,7 +205,6 @@ impl Document {
     pub fn same_edit_state(&self, other: &Self) -> bool {
         self.width == other.width
             && self.height == other.height
-            && self.name == other.name
             && match (&self.selection, &other.selection) {
                 (None, None) => true,
                 (Some(current), Some(previous)) => {

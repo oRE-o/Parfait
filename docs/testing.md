@@ -6,6 +6,59 @@ The malformed-tree recovery test now labels its deliberately invalid current doc
 
 A signed native macOS fixture matches all 14 file-backed sections of the release executable and displays parameter-only Paper/Fill through a masked, translucent Through folder. Real pointer attempts on paper opacity, blend and row order preserve layer data. A real eraser stroke changes only the fill mask; Undo restores every coverage value, color parameter and raw pixel hash. Painting unsupported fill content is a no-op and retains redo. Normal close of process 9560 and relaunch as 10644 retain the complete decoded v10 snapshot probe. A read-only SQLite backup of an owned v9 QA drawing also migrates with every pixel, mask, ID, metadata field and selection intact, leaving its source untouched. This validates rendering and durability on macOS, not type-creation/color-editing UI, physical tablets or other platforms.
 
+## Multi-document 1B: logical state identity and digest
+
+The retained scope is 1B only; manager/tab/input-switch implementation (2A) was withdrawn after scope clarification. The final retained working tree passes 383 workspace tests with six opt-in workloads ignored, formatting and warnings-denied all-target Clippy, on macOS arm64 / Rust 1.99.1. The format remains v10; exact v1–v10 compatibility, malformed-head fallback and real killed-process recovery tests remain required. These are process-crash checks, not power-loss guarantees.
+
+- History: random-state generation failure, changed/no-op/cancel/Undo/Redo ID transitions and filename synchronization without losing redo. App construction and all production transaction starts use fallible initialization before document mutation. Save As keeps the current state ID, filename metadata survives Undo/Redo and layer names still form part of artwork.
+- Digest: individual artwork fields including parent-only changes, zero normalization, invalid floats, Dense/Uniform equivalence, absent versus zero selection/mask, solid colors, and metadata exclusions. An independently encoded 135-byte 1×1 vector fixes SHA-256 to `cb58d5ab406860a74314555583ef93c13eef3c5202dc78fc872e9f50d83b857d`.
+- Storage: independently decoded v10 artwork has the same digest despite new Arc allocations and changed file metadata. Production storage code, compression/checksum/transaction encoding and durability settings are unchanged.
+- Effects: existing real egui pointer/menu/dialog tests, pixel/composite oracle, no-op redo, shared buffers and original-save/recovery reopen remain required. Source audit confirms no production pointer or modified-status call invokes `art_digest_v1`; it is currently an explicit core API, not an automatic per-frame scan.
+
+```sh
+cargo test --workspace --offline
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --offline -- -D warnings
+cargo test --release -p parfait --offline multi_document_baseline_release_workload -- --ignored --nocapture --test-threads=1
+```
+
+The existing shared saved snapshot remains the original-save baseline until 4A; digest use for original validation and persistent metadata is not implemented. Multiple tabs, per-document recovery, asynchronous operations, native multi-tab input, physical pen and Windows/Linux are not claimed. See [performance](performance.md) for the release workload's CPU-only scope and limitations.
+
+## Multi-document 1A: single-session ownership extraction
+
+The 1A working tree passes 363 workspace tests with six opt-in workloads ignored, formatting and warnings-denied all-target Clippy on macOS 26.4.1 arm64 / Rust 1.99.1. Seven new ordinary tests and one release-only workload live in `apps/parfait/src/multi_document_tests.rs`. Existing test assertions are retained while app field paths follow their new owners. The core and storage sources, v1–v9 migration fixtures and production durability protocol are unchanged. Existing subprocess kills during an uncommitted transaction and after commit both pass; these are process-crash checks, not hardware power-loss guarantees.
+
+Before extraction, the first three new tests passed against the old app. A/B have equal dimensions, layer IDs and revisions but independently allocated, different pixels/names. M has an isolated folder, a Dense child mask, a Uniform-193 folder mask, fractional Dense selection and transparent RGB. A fixture-specific integer oracle independently checks complete composition and cropped regions, without calling production blending. H executes two named edits and Undo, preserving the future through no-op and failed Save As. An actual egui pointer stroke preserves selection holes, masks and other layers, supports exact Undo/Redo, round-trips through the app's original-save API and survives recovery reopen; only the independently advanced revision is normalized for decoded comparison. History intentionally restarts empty and the project association remains absent.
+
+Frozen weighted byte checksums, in addition to full byte/oracle assertions:
+
+| Probe | Value |
+| --- | ---: |
+| M original raster | 498223128 |
+| M independent complete composite | 973944324 |
+| M Dense selection | 33054528 |
+| 32×24 pointer-painted raster | 496657091 |
+| Pointer-painted complete composite | 972926990 |
+
+These test checksums are not a new on-disk digest or security authenticator. Session tests also assert unchanged Arc strong counts when ownership moves, shared pixel/mask/selection buffers, unchanged common brush/keymap/display settings, new identities only on successful New/Open and retained identity on Save As/failed Open. At the same DocumentId/revision/LayerId but a different epoch, actual modal field IDs change, old commands and rename/detail drafts are refused and the window texture/thumbnail caches are rebuilt or cleared. Injected old stroke and layer-edit owners cannot modify or populate the replacement session's History.
+
+Validation commands (all run successfully):
+
+```sh
+cargo test --workspace --offline
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --offline -- -D warnings
+cargo test --release -p parfait --offline multi_document_baseline_release_workload -- --ignored --nocapture --test-threads=1
+```
+
+The first expanded modal test failed because its test Context had not registered the icon font; applying the normal app theme fixed the fixture. An initial Clippy run rejected a constant assertion in the opt-in workload guard; it now follows the existing runtime panic guard convention. These failed attempts are not counted as successful runs. The final complete rerun includes the stale-input owner test and has 363 passing tests.
+
+A native release executable also loaded an independently generated, isolated 512×384 mask fixture and exported its real framebuffer. The inspected frame showed the expected masked clipped red/blue stripes in the canvas and navigator, content/mask layer previews and separate original/recovery status. Launching inside the sandbox could not reach macOS GUI services; the successful isolated smoke run used host GUI access, after terminating the failed QA process. Both QA processes were cleaned up; no user project/data directory was used. This is startup/rendering smoke coverage, not native editing, normal-close validation, physical-pen testing, a screenshot pixel-equivalence claim or Windows/Linux certification. Normal save/reopen and edit cancellation are covered by automated app tests instead.
+
+### Historical evidence availability
+
+The former 1A historical patch, raw JSON and native image were removed from this checkout. They are not required runtime assets and have not been recreated. The preceding 1A results are historical observations, not a reproducible archived before-build in the current tree. The retained deterministic fixture/workload can be run on the current source; see the current 1B/2A section and [performance](performance.md).
+
 The selection-menu increment passes 356 workspace tests with five opt-in workloads ignored, formatting and warnings-denied all-target Clippy. Tests click all nine actual menu routes and check one-step Undo/Redo, hidden/locked read-only sources, checked rows and folders, single-target mask guards, modal/layout ownership, text-focus-safe shortcuts, v20-to-v21 key preservation and exact saved command results. Budget tests use shared buffers to verify Dense payload metadata at the 512 MiB boundary without serializing a half-gigabyte fixture. Boundary checks cover holes, threshold coverage, cache identity, large pan/high zoom, rotation/flips, clipping, invalid view values and mesh bounds. The opt-in release boundary workload passes separately; see performance.md for its scope and measured costs.
 
 A signed native macOS QA app matches all 14 file-backed release sections. In a separate 64×48 ring drawing, the actual Layer menu creates a selection with 1536 zero, 768 alpha-128 and 768 alpha-255 pixels. Its outer and inner outlines follow native pan and zoom. One 300-pixel pen dab on another layer writes exactly that coverage and leaves the original, paper and selection unchanged. Native Undo restores all original layer bytes; Redo and selection-mask creation retain exact fractional coverage without changing raw pixels. Actual Add/Subtract/Intersect menus produce independently calculated 160/96/32 soft bands from the masked source. Select All/Deselect/Invert keys and three Undo operations restore the original selection and mask. Normal close/relaunch retains the complete decoded snapshot probe. This does not test other operating systems, physical tablets, free selection tools, every folder geometry edge case or mask-linked movement.

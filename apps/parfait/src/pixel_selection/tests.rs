@@ -17,30 +17,30 @@ fn drawing() -> Document {
 fn readonly_selection_keeps_layer_checks_undo_redo_and_noop_identity() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = drawing();
-    app.doc.layers[1].locked = true;
-    app.doc.layers[1].visible = false;
+    app.documents.session.document = drawing();
+    app.documents.session.document.layers[1].locked = true;
+    app.documents.session.document.layers[1].visible = false;
     let context = egui::Context::default();
-    let original = app.doc.clone();
+    let original = app.documents.session.document.clone();
     assert!(
         app.command_disabled_reason(Command::LayerSelectionCreate).is_none()
     );
     app.execute_command(Command::LayerSelectionCreate, &context);
-    assert!(app.doc.selection.is_some());
-    assert_eq!(app.doc.layers, original.layers);
+    assert!(app.documents.session.document.selection.is_some());
+    assert_eq!(app.documents.session.document.layers, original.layers);
     assert_eq!(app.selected_layer_mask(), 2);
-    let selected = app.doc.clone();
-    let rows = app.history.rows().count();
+    let selected = app.documents.session.document.clone();
+    let rows = app.documents.session.history.rows().count();
     app.execute_command(Command::LayerSelectionCreate, &context);
-    assert_eq!(app.doc.revision, selected.revision);
-    assert!(app.doc.same_edit_state(&selected));
-    assert_eq!(app.history.rows().count(), rows);
+    assert_eq!(app.documents.session.document.revision, selected.revision);
+    assert!(app.documents.session.document.same_edit_state(&selected));
+    assert_eq!(app.documents.session.history.rows().count(), rows);
     app.undo();
-    assert!(app.doc.selection.is_none());
+    assert!(app.documents.session.document.selection.is_none());
     app.execute_command(Command::Deselect, &context);
-    assert!(app.history.can_redo());
+    assert!(app.documents.session.history.can_redo());
     app.redo();
-    assert!(app.doc.same_edit_state(&selected));
+    assert!(app.documents.session.document.same_edit_state(&selected));
     for command in [
         Command::LayerSelectionAdd,
         Command::LayerSelectionSubtract,
@@ -48,7 +48,7 @@ fn readonly_selection_keeps_layer_checks_undo_redo_and_noop_identity() {
     ] {
         assert!(app.command_disabled_reason(command).is_none());
         app.execute_command(command, &context);
-        assert!(app.doc.validate());
+        assert!(app.documents.session.document.validate());
     }
 }
 
@@ -57,7 +57,7 @@ fn empty_derivation_clears_prior_selection_and_masks_without_selection_are_usabl
  {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 4);
+    app.documents.session.document = Document::new(8, 4);
     let context = egui::Context::default();
     for command in [
         Command::LayerSelectionAdd,
@@ -68,33 +68,43 @@ fn empty_derivation_clears_prior_selection_and_masks_without_selection_are_usabl
     ] {
         assert!(app.command_disabled_reason(command).is_some());
     }
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     app.execute_command(Command::LayerSelectionCreate, &context);
-    assert!(app.doc.same_edit_state(&before));
-    assert_eq!(app.doc.revision, before.revision);
+    assert!(app.documents.session.document.same_edit_state(&before));
+    assert_eq!(app.documents.session.document.revision, before.revision);
     assert!(app.notice.is_some());
     app.execute_command(Command::SelectAll, &context);
-    assert_eq!(app.doc.selection, Some(MaskCoverage::Uniform(255)));
+    assert_eq!(
+        app.documents.session.document.selection,
+        Some(MaskCoverage::Uniform(255))
+    );
     app.execute_command(Command::LayerSelectionCreate, &context);
-    assert!(app.doc.selection.is_none());
+    assert!(app.documents.session.document.selection.is_none());
     app.undo();
-    assert_eq!(app.doc.selection, Some(MaskCoverage::Uniform(255)));
+    assert_eq!(
+        app.documents.session.document.selection,
+        Some(MaskCoverage::Uniform(255))
+    );
     app.execute_command(Command::Deselect, &context);
     for command in
         [Command::LayerMaskOutsideSelection, Command::LayerMaskSelection]
     {
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         app.execute_command(command, &context);
         assert_eq!(
-            app.doc.layers[1].mask.as_ref().unwrap().coverage,
+            app.documents.session.document.layers[1]
+                .mask
+                .as_ref()
+                .unwrap()
+                .coverage,
             MaskCoverage::Uniform(255)
         );
         assert!(Arc::ptr_eq(
-            &app.doc.layers[1].pixels,
+            &app.documents.session.document.layers[1].pixels,
             &original.layers[1].pixels
         ));
         app.undo();
-        assert!(app.doc.same_edit_state(&original));
+        assert!(app.documents.session.document.same_edit_state(&original));
     }
 }
 
@@ -103,15 +113,19 @@ fn selection_masks_use_fractional_coverage_and_locked_targets_refuse_atomically(
  {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = drawing();
+    app.documents.session.document = drawing();
     let context = egui::Context::default();
     app.execute_command(Command::LayerSelectionCreate, &context);
     for command in
         [Command::LayerMaskOutsideSelection, Command::LayerMaskSelection]
     {
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         app.execute_command(command, &context);
-        let coverage = &app.doc.layers[1].mask.as_ref().unwrap().coverage;
+        let coverage = &app.documents.session.document.layers[1]
+            .mask
+            .as_ref()
+            .unwrap()
+            .coverage;
         for index in 0..32 {
             let expected = original.selection_value(index);
             assert_eq!(
@@ -125,12 +139,12 @@ fn selection_masks_use_fractional_coverage_and_locked_targets_refuse_atomically(
         }
         assert!(app.editing_layer_mask());
         app.undo();
-        app.doc.layers[1].locked = true;
-        let locked = app.doc.clone();
+        app.documents.session.document.layers[1].locked = true;
+        let locked = app.documents.session.document.clone();
         app.execute_command(command, &context);
-        assert!(app.doc.same_edit_state(&locked));
-        assert_eq!(app.doc.revision, locked.revision);
-        app.doc.layers[1].locked = false;
+        assert!(app.documents.session.document.same_edit_state(&locked));
+        assert_eq!(app.documents.session.document.revision, locked.revision);
+        app.documents.session.document.layers[1].locked = false;
     }
 }
 
@@ -174,35 +188,40 @@ fn checked_sources_and_folders_are_readonly_but_masks_require_one_unlocked_targe
  {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = drawing();
-    app.doc.add_layer();
-    app.doc.layers[2].pixels = Arc::new([10, 20, 30, 64].repeat(32));
+    app.documents.session.document = drawing();
+    app.documents.session.document.add_layer();
+    app.documents.session.document.layers[2].pixels =
+        Arc::new([10, 20, 30, 64].repeat(32));
     app.set_layer_selection(6, 2);
-    let original = app.doc.layers.clone();
+    let original = app.documents.session.document.layers.clone();
     let context = egui::Context::default();
     app.execute_command(Command::LayerSelectionCreate, &context);
     assert_eq!(app.selected_layer_mask(), 6);
-    assert_eq!(app.doc.layers, original);
-    assert_eq!(app.doc.selection_value(0), 160);
-    assert_eq!(app.doc.selection_value(7), 64);
+    assert_eq!(app.documents.session.document.layers, original);
+    assert_eq!(app.documents.session.document.selection_value(0), 160);
+    assert_eq!(app.documents.session.document.selection_value(7), 64);
     for command in
         [Command::LayerMaskOutsideSelection, Command::LayerMaskSelection]
     {
-        let before = app.doc.clone();
+        let before = app.documents.session.document.clone();
         assert!(app.command_disabled_reason(command).is_some());
         app.execute_command(command, &context);
-        assert!(app.doc.same_edit_state(&before));
+        assert!(app.documents.session.document.same_edit_state(&before));
     }
-    app.doc.group_layers_in_folder(6, "Source folder".into()).unwrap();
-    app.doc.layers[3].locked = true;
-    app.doc.layers[3].visible = false;
+    app.documents
+        .session
+        .document
+        .group_layers_in_folder(6, "Source folder".into())
+        .unwrap();
+    app.documents.session.document.layers[3].locked = true;
+    app.documents.session.document.layers[3].visible = false;
     app.set_layer_selection(8, 3);
-    app.doc.deselect_pixels();
-    let original = app.doc.layers.clone();
+    app.documents.session.document.deselect_pixels();
+    let original = app.documents.session.document.layers.clone();
     app.execute_command(Command::LayerSelectionCreate, &context);
-    assert_eq!(app.doc.selection_value(0), 160);
-    assert_eq!(app.doc.selection_value(7), 64);
-    assert_eq!(app.doc.layers, original);
+    assert_eq!(app.documents.session.document.selection_value(0), 160);
+    assert_eq!(app.documents.session.document.selection_value(7), 64);
+    assert_eq!(app.documents.session.document.layers, original);
     app.select_layer(1);
     assert!(
         app.command_disabled_reason(Command::LayerMaskOutsideSelection)
@@ -215,8 +234,8 @@ fn every_selection_command_refuses_owned_layout_and_modal_edits_without_history_
  {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = drawing();
-    app.doc.select_all_pixels();
+    app.documents.session.document = drawing();
+    app.documents.session.document.select_all_pixels();
     let context = egui::Context::default();
     for modal in [false, true] {
         if modal {
@@ -225,19 +244,22 @@ fn every_selection_command_refuses_owned_layout_and_modal_edits_without_history_
         } else {
             app.workspace.resizing = true;
         }
-        let before = app.doc.clone();
-        let rows = app.history.rows().count();
+        let before = app.documents.session.document.clone();
+        let rows = app.documents.session.history.rows().count();
         for &command in
             Command::ALL.iter().filter(|command| command.is_pixel_selection())
         {
             assert!(app.command_disabled_reason(command).is_some());
             app.execute_command(command, &context);
-            assert!(app.doc.same_edit_state(&before));
-            assert_eq!(app.doc.revision, before.revision);
-            assert_eq!(app.history.rows().count(), rows);
+            assert!(app.documents.session.document.same_edit_state(&before));
+            assert_eq!(
+                app.documents.session.document.revision,
+                before.revision
+            );
+            assert_eq!(app.documents.session.history.rows().count(), rows);
         }
         app.workspace.resizing = false;
-        app.rename_layer = None;
+        app.documents.session.layer_ui.rename = None;
     }
 }
 
@@ -248,14 +270,17 @@ fn command_results_reopen_with_exact_layers_masks_and_selection() {
     {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = drawing();
+        app.documents.session.document = drawing();
         if command != Command::SelectAll
             && command != Command::LayerSelectionCreate
         {
-            app.doc.set_selection(Some(MaskCoverage::Uniform(64)));
+            app.documents
+                .session
+                .document
+                .set_selection(Some(MaskCoverage::Uniform(64)));
         }
         app.execute_command(command, &egui::Context::default());
-        let expected = app.doc.clone();
+        let expected = app.documents.session.document.clone();
         let path = directory.path().join("command.parfait");
         {
             let mut store = parfait_storage::Store::open(&path).unwrap();

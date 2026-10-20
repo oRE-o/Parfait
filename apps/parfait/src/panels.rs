@@ -23,7 +23,8 @@ impl Parfait {
                 ui.label(
                     RichText::new(format!(
                         "{} × {} px",
-                        self.doc.width, self.doc.height
+                        self.documents.session.document.width,
+                        self.documents.session.document.height
                     ))
                     .weak(),
                 );
@@ -41,17 +42,20 @@ impl Parfait {
                         [180_f32.min(ui.available_width() * 0.25), 20.],
                         egui::Button::new(format!(
                             "{}{}",
-                            self.doc.name,
+                            self.documents.session.document.name,
                             if self.project_is_modified() { " *" } else { "" }
                         ))
                         .truncate()
                         .fill(Color32::from_rgb(81, 88, 101)),
                     )
-                    .on_hover_text(&self.doc.name);
+                    .on_hover_text(&self.documents.session.document.name);
                     ui.label(
-                        RichText::new(format!("{:.1}%", self.view.zoom * 100.))
-                            .small()
-                            .weak(),
+                        RichText::new(format!(
+                            "{:.1}%",
+                            self.documents.session.view.zoom * 100.
+                        ))
+                        .small()
+                        .weak(),
                     );
                     if let Some(message) = self.notice.clone() {
                         ui.separator();
@@ -75,13 +79,19 @@ impl Parfait {
     pub fn bottom_panel(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(format!("{:.1}%", self.view.zoom * 100.));
+                ui.label(format!(
+                    "{:.1}%",
+                    self.documents.session.view.zoom * 100.
+                ));
                 ui.separator();
-                ui.label(format!("{:.1}°", self.view.angle.to_degrees()));
-                if self.view.flip_horizontal {
+                ui.label(format!(
+                    "{:.1}°",
+                    self.documents.session.view.angle.to_degrees()
+                ));
+                if self.documents.session.view.flip_horizontal {
                     ui.label(RichText::new("H-flip").color(ACCENT));
                 }
-                if self.view.flip_vertical {
+                if self.documents.session.view.flip_vertical {
                     ui.label(RichText::new("V-flip").color(ACCENT));
                 }
                 ui.separator();
@@ -170,16 +180,16 @@ impl Parfait {
             });
     }
     pub(crate) fn duplicate_layer(&mut self) {
-        if self.doc.has_non_raster_layers() {
+        if self.documents.session.document.has_non_raster_layers() {
             self.execute_tree_collection(
                 Command::DuplicateLayer,
-                1 << self.doc.active,
+                1 << self.documents.session.document.active,
             );
             return;
         }
         if let Some(reason) = parfait_storage::layer_duplication_error(
-            &self.doc,
-            1 << self.doc.active,
+            &self.documents.session.document,
+            1 << self.documents.session.document.active,
         ) {
             self.notice = Some(reason.into());
             return;
@@ -193,46 +203,61 @@ impl Parfait {
         });
     }
     pub fn update_previews(&mut self, ctx: &egui::Context) {
+        self.render_cache.ensure_session(self.documents.session.key);
         // Thumbnails catch up on pen-up; the canvas/navigator remain live.
-        if self.stroke.is_some() || self.preview_revision == self.doc.revision {
+        if self.documents.session.editing.stroke.is_some()
+            || self.render_cache.preview_revision
+                == self.documents.session.document.revision
+        {
             return;
         }
-        self.layer_previews.truncate(self.doc.layers.len());
-        self.mask_previews.resize_with(self.doc.layers.len(), || None);
-        for (i, layer) in self.doc.layers.iter().enumerate() {
+        self.render_cache
+            .layer_previews
+            .truncate(self.documents.session.document.layers.len());
+        self.render_cache
+            .mask_previews
+            .resize_with(self.documents.session.document.layers.len(), || None);
+        for (i, layer) in
+            self.documents.session.document.layers.iter().enumerate()
+        {
             if let Some(mask) = &layer.mask {
                 let mut pixels = Vec::with_capacity(40 * 40 * 4);
                 for row in 0..40 {
                     for column in 0..40 {
-                        let index = (row * self.doc.height / 40
-                            * self.doc.width
-                            + column * self.doc.width / 40)
-                            as usize;
+                        let index =
+                            (row * self.documents.session.document.height / 40
+                                * self.documents.session.document.width
+                                + column
+                                    * self.documents.session.document.width
+                                    / 40) as usize;
                         let value = mask.coverage.value(index);
                         pixels.extend_from_slice(&[value, value, value, 255]);
                     }
                 }
                 let image =
                     egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
-                if let Some(texture) = &mut self.mask_previews[i] {
+                if let Some(texture) = &mut self.render_cache.mask_previews[i] {
                     texture.set(image, egui::TextureOptions::LINEAR);
                 } else {
-                    self.mask_previews[i] = Some(ctx.load_texture(
-                        format!("mask-{i}"),
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    ));
+                    self.render_cache.mask_previews[i] =
+                        Some(ctx.load_texture(
+                            format!("mask-{i}"),
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        ));
                 }
             } else {
-                self.mask_previews[i] = None;
+                self.render_cache.mask_previews[i] = None;
             }
             let mut pixels = Vec::with_capacity(40 * 40 * 4);
             for y in 0..40 {
                 for x in 0..40 {
-                    let sx = x * self.doc.width / 40;
-                    let sy = y * self.doc.height / 40;
-                    let pixel =
-                        layer.source_pixel((sy * self.doc.width + sx) as usize);
+                    let sx = x * self.documents.session.document.width / 40;
+                    let sy = y * self.documents.session.document.height / 40;
+                    let pixel = layer.source_pixel(
+                        (sy * self.documents.session.document.width + sx)
+                            as usize,
+                    );
                     let a = pixel[3] as f32 / 255.;
                     let bg = if (x / 5 + y / 5) % 2 == 0 { 210. } else { 165. };
                     for component in &pixel[..3] {
@@ -245,19 +270,41 @@ impl Parfait {
             }
             let img =
                 egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
-            if let Some(t) = self.layer_previews.get_mut(i) {
+            if let Some(t) = self.render_cache.layer_previews.get_mut(i) {
                 t.set(img, egui::TextureOptions::LINEAR);
             } else {
-                self.layer_previews.push(ctx.load_texture(
+                self.render_cache.layer_previews.push(ctx.load_texture(
                     format!("layer-{i}"),
                     img,
                     egui::TextureOptions::LINEAR,
                 ));
             }
         }
-        self.preview_revision = self.doc.revision;
+        self.render_cache.preview_revision =
+            self.documents.session.document.revision;
     }
     pub fn palette(
+        &mut self,
+        ui: &mut egui::Ui,
+        palette: crate::workspace::Palette,
+        body_height: f32,
+    ) {
+        use crate::workspace::Palette;
+        self.render_cache.ensure_session(self.documents.session.key);
+        if matches!(
+            palette,
+            Palette::Layers | Palette::History | Palette::Navigator
+        ) {
+            let key = self.documents.session.key;
+            ui.push_id(("document_palette", key), |ui| {
+                self.palette_contents(ui, palette, body_height)
+            });
+        } else {
+            self.palette_contents(ui, palette, body_height);
+        }
+    }
+
+    fn palette_contents(
         &mut self,
         ui: &mut egui::Ui,
         palette: crate::workspace::Palette,
@@ -331,13 +378,14 @@ impl Parfait {
                 ui.color_edit_button_srgb(&mut self.brush.color);
             }
             Palette::Navigator => {
-                if let Some(texture) = &self.texture {
+                if let Some(texture) = &self.render_cache.texture {
                     let w = ui.available_width();
-                    let h = (w * self.doc.height as f32
-                        / self.doc.width as f32)
+                    let h = (w * self.documents.session.document.height as f32
+                        / self.documents.session.document.width as f32)
                         .min((body_height - 66.).clamp(30., 180.));
                     let size = egui::vec2(
-                        h * self.doc.width as f32 / self.doc.height as f32,
+                        h * self.documents.session.document.width as f32
+                            / self.documents.session.document.height as f32,
                         h,
                     );
                     ui.vertical_centered(|ui| {
@@ -350,15 +398,18 @@ impl Parfait {
                     ui.spacing_mut().slider_width =
                         (ui.available_width() - 108.).max(24.);
                     ui.add(
-                        egui::Slider::new(&mut self.view.zoom, 0.05..=12.)
-                            .logarithmic(true)
-                            .show_value(false),
+                        egui::Slider::new(
+                            &mut self.documents.session.view.zoom,
+                            0.05..=12.,
+                        )
+                        .logarithmic(true)
+                        .show_value(false),
                     );
                     ui.add_sized(
                         [44., 24.],
                         egui::Label::new(format!(
                             "{:.1}%",
-                            self.view.zoom * 100.
+                            self.documents.session.view.zoom * 100.
                         ))
                         .halign(egui::Align::RIGHT),
                     );
@@ -371,16 +422,19 @@ impl Parfait {
                     )
                     .clicked()
                     {
-                        self.view.zoom = (self.view.zoom / 1.2).max(0.05);
+                        self.documents.session.view.zoom =
+                            (self.documents.session.view.zoom / 1.2).max(0.05);
                     }
                     if widgets::flat_icon(ui, Icon::Plus, false, "Zoom in", 24.)
                         .clicked()
                     {
-                        self.view.zoom = (self.view.zoom * 1.2).min(12.);
+                        self.documents.session.view.zoom =
+                            (self.documents.session.view.zoom * 1.2).min(12.);
                     }
                 });
                 ui.horizontal(|ui| {
-                    let mut deg = self.view.angle.to_degrees();
+                    let mut deg =
+                        self.documents.session.view.angle.to_degrees();
                     if ui
                         .add_sized(
                             [64., 24.],
@@ -390,7 +444,7 @@ impl Parfait {
                         )
                         .changed()
                     {
-                        self.view.angle = deg.to_radians();
+                        self.documents.session.view.angle = deg.to_radians();
                     }
                     widgets::action_row(ui, |ui| {
                         if widgets::flat_icon(
@@ -413,27 +467,33 @@ impl Parfait {
                         )
                         .clicked()
                         {
-                            self.view.angle = 0.;
+                            self.documents.session.view.angle = 0.;
                         }
                     });
                 });
             }
             Palette::Layers => {
                 let controls_top = ui.cursor().top();
-                let active = self.doc.active;
-                let mut opacity = self.doc.layers[active].opacity;
+                let active = self.documents.session.document.active;
+                let mut opacity =
+                    self.documents.session.document.layers[active].opacity;
                 ui.horizontal(|ui| {
-                    let mut mode = self.doc.layers[active].blend_mode;
-                    if self.doc.layers[active].kind.is_paper() {
+                    let mut mode = self.documents.session.document.layers
+                        [active]
+                        .blend_mode;
+                    if self.documents.session.document.layers[active]
+                        .kind
+                        .is_paper()
+                    {
                         ui.disable();
                     }
                     let width = ui.available_width();
                     let blend = crate::layer_controls::blend_select(
                         ui,
                         &mut mode,
-                        self.doc.layers[active].kind
+                        self.documents.session.document.layers[active].kind
                             == parfait_core::LayerKind::Folder,
-                        self.doc.layers[active].clipped,
+                        self.documents.session.document.layers[active].clipped,
                         (width * 0.4).clamp(72., 120.),
                     );
                     #[cfg(test)]
@@ -445,25 +505,39 @@ impl Parfait {
                     });
                     #[cfg(not(test))]
                     let _ = blend;
-                    if mode != self.doc.layers[active].blend_mode {
+                    if mode
+                        != self.documents.session.document.layers[active]
+                            .blend_mode
+                    {
                         self.edit_named("Layer blend mode", |document| {
                             document.layers[active].blend_mode = mode
                         });
                     }
                     let r = ui
-                        .add_enabled_ui(!self.cancelled_layer_drag, |ui| {
-                            crate::layer_controls::opacity(ui, &mut opacity)
-                        })
+                        .add_enabled_ui(
+                            !self
+                                .documents
+                                .session
+                                .editing
+                                .cancelled_layer_drag,
+                            |ui| {
+                                crate::layer_controls::opacity(ui, &mut opacity)
+                            },
+                        )
                         .inner;
-                    if r.changed() && opacity != self.doc.layers[active].opacity
-                    {
-                        self.begin_layer_edit(
+                    if r.changed()
+                        && opacity
+                            != self.documents.session.document.layers[active]
+                                .opacity
+                        && self.begin_layer_edit(
                             crate::editing::LayerEditKind::Opacity,
                             active,
                             ui.input(|input| input.pointer.any_down()),
-                        );
-                        self.doc.layers[active].opacity = opacity;
-                        self.doc.touch();
+                        )
+                    {
+                        self.documents.session.document.layers[active]
+                            .opacity = opacity;
+                        self.documents.session.document.touch();
                     }
                     self.layer_edit_response(
                         crate::editing::LayerEditKind::Opacity,
@@ -475,27 +549,32 @@ impl Parfait {
                         (
                             Icon::Clipping,
                             Command::LayerClipping,
-                            self.doc.layers[active].clipped,
+                            self.documents.session.document.layers[active]
+                                .clipped,
                         ),
                         (
                             Icon::Reference,
                             Command::LayerReference,
-                            self.doc.layers[active].reference,
+                            self.documents.session.document.layers[active]
+                                .reference,
                         ),
                         (
                             Icon::Pencil,
                             Command::LayerDraft,
-                            self.doc.layers[active].draft,
+                            self.documents.session.document.layers[active]
+                                .draft,
                         ),
                         (
                             Icon::Lock,
                             Command::LayerLock,
-                            self.doc.layers[active].locked,
+                            self.documents.session.document.layers[active]
+                                .locked,
                         ),
                         (
                             Icon::AlphaLock,
                             Command::LayerAlphaLock,
-                            self.doc.layers[active].alpha_locked,
+                            self.documents.session.document.layers[active]
+                                .alpha_locked,
                         ),
                     ] {
                         let reason = self.command_disabled_reason(command);
@@ -609,9 +688,10 @@ mod tests {
     fn paper_controls_and_commands_cannot_write_incompatible_metadata() {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new_with_paper(8, 5);
+        app.documents.session.document =
+            parfait_core::Document::new_with_paper(8, 5);
         app.select_layer(0);
-        let before = app.doc.clone();
+        let before = app.documents.session.document.clone();
         let context = egui::Context::default();
         crate::theme::apply(&context);
         let frame = |app: &mut Parfait, events| {
@@ -669,9 +749,15 @@ mod tests {
                 "{command:?}"
             );
             app.execute_command(command, &context);
-            assert!(app.doc.same_edit_state(&before), "{command:?}");
-            assert_eq!(app.doc.revision, before.revision);
-            assert!(app.doc.validate());
+            assert!(
+                app.documents.session.document.same_edit_state(&before),
+                "{command:?}"
+            );
+            assert_eq!(
+                app.documents.session.document.revision,
+                before.revision
+            );
+            assert!(app.documents.session.document.validate());
         }
         app.set_layer_selection(3, 0);
         assert!(app.command_disabled_reason(Command::LayerDraft).is_some());
@@ -682,7 +768,7 @@ mod tests {
     fn opacity_drag_from_existing_handle_is_one_undoable_edit() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(4, 4);
+        app.documents.session.document = parfait_core::Document::new(4, 4);
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -717,7 +803,7 @@ mod tests {
         };
         frame(&mut app, vec![egui::Event::PointerMoved(start)]);
         frame(&mut app, vec![button(start, true)]);
-        assert_eq!(app.doc.layers[1].opacity, 1.);
+        assert_eq!(app.documents.session.document.layers[1].opacity, 1.);
         frame(&mut app, vec![egui::Event::PointerMoved(end)]);
         frame(
             &mut app,
@@ -725,38 +811,38 @@ mod tests {
         );
         frame(&mut app, vec![egui::Event::PointerMoved(end)]);
         frame(&mut app, vec![button(end, false)]);
-        let changed = app.doc.layers[1].opacity;
+        let changed = app.documents.session.document.layers[1].opacity;
         assert!(changed < 0.8);
-        assert_eq!(app.history.rows().count(), 2);
+        assert_eq!(app.documents.session.history.rows().count(), 2);
         app.undo();
-        assert_eq!(app.doc.layers[1].opacity, 1.);
+        assert_eq!(app.documents.session.document.layers[1].opacity, 1.);
         app.redo();
-        assert_eq!(app.doc.layers[1].opacity, changed);
+        assert_eq!(app.documents.session.document.layers[1].opacity, changed);
         app.undo();
         frame(&mut app, vec![]);
-        let revision = app.doc.revision;
+        let revision = app.documents.session.document.revision;
         frame(
             &mut app,
             vec![egui::Event::PointerMoved(start), button(start, true)],
         );
         frame(&mut app, vec![button(start, false)]);
-        assert_eq!(app.doc.revision, revision);
-        assert!(app.history.can_redo());
+        assert_eq!(app.documents.session.document.revision, revision);
+        assert!(app.documents.session.history.can_redo());
     }
 
     #[test]
     fn palette_contents_fit_narrow_widths_without_changing_artwork() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(32, 24);
-        app.doc.layers[1].name =
+        app.documents.session.document = parfait_core::Document::new(32, 24);
+        app.documents.session.document.layers[1].name =
             "A layer with a very long name that must remain inside its row"
                 .into();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         app.update_previews(&ctx);
-        app.texture = Some(ctx.load_texture(
+        app.render_cache.texture = Some(ctx.load_texture(
             "palette_layout_fixture",
             egui::ColorImage::new([32, 24], vec![Color32::WHITE; 32 * 24]),
             egui::TextureOptions::NEAREST,
@@ -803,7 +889,7 @@ mod tests {
                     measured.width() <= width + 0.1,
                     "{palette:?}: width={width}, content={measured:?}"
                 );
-                assert_eq!(app.doc, artwork);
+                assert_eq!(app.documents.session.document, artwork);
                 if palette == Palette::Layers {
                     let blend: egui::Rect = ctx
                         .data(|data| {
@@ -877,7 +963,7 @@ mod tests {
                         "{palette:?} did not follow the host height {body_height}"
                     );
                     previous_height = measured.height();
-                    assert_eq!(app.doc, artwork);
+                    assert_eq!(app.documents.session.document, artwork);
                 }
             }
         }
@@ -888,8 +974,8 @@ mod tests {
     {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(8, 8);
-        app.doc.layers[1].opacity = 0.33333334;
+        app.documents.session.document = parfait_core::Document::new(8, 8);
+        app.documents.session.document.layers[1].opacity = 0.33333334;
         let context = egui::Context::default();
         crate::theme::apply(&context);
         let render = |app: &mut Parfait, events| {
@@ -909,7 +995,10 @@ mod tests {
         for _ in 0..3 {
             render(&mut app, vec![]);
         }
-        assert_eq!(app.doc.layers[1].opacity, 0.33333334);
+        assert_eq!(
+            app.documents.session.document.layers[1].opacity,
+            0.33333334
+        );
         let arrow: egui::Rect = context
             .data(|data| data.get_temp(egui::Id::new(("opacity_arrow", true))))
             .unwrap();
@@ -924,14 +1013,20 @@ mod tests {
             vec![egui::Event::PointerMoved(arrow.center()), pointer(true)],
         );
         render(&mut app, vec![pointer(false)]);
-        assert_eq!(app.doc.layers[1].opacity, 0.34);
-        assert_eq!(app.history.rows().count(), 2);
+        assert_eq!(app.documents.session.document.layers[1].opacity, 0.34);
+        assert_eq!(app.documents.session.history.rows().count(), 2);
         app.undo();
-        assert_eq!(app.doc.layers[1].opacity, 0.33333334);
+        assert_eq!(
+            app.documents.session.document.layers[1].opacity,
+            0.33333334
+        );
         render(&mut app, vec![]);
-        assert_eq!(app.doc.layers[1].opacity, 0.33333334);
-        assert!(app.history.can_redo());
+        assert_eq!(
+            app.documents.session.document.layers[1].opacity,
+            0.33333334
+        );
+        assert!(app.documents.session.history.can_redo());
         app.redo();
-        assert_eq!(app.doc.layers[1].opacity, 0.34);
+        assert_eq!(app.documents.session.document.layers[1].opacity, 0.34);
     }
 }

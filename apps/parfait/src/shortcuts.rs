@@ -52,8 +52,8 @@ impl Parfait {
         }
         if self.dialog_open()
             || ctx.egui_wants_keyboard_input()
-            || self.stroke.is_some()
-            || self.layer_list.owns_pointer()
+            || self.documents.session.editing.stroke.is_some()
+            || self.documents.session.layer_ui.list.owns_pointer()
         {
             return;
         }
@@ -99,19 +99,22 @@ mod tests {
     fn selection_keys_respect_text_focus_and_preserve_artwork() {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(8, 8);
-        let original = app.doc.layers.clone();
+        app.documents.session.document = parfait_core::Document::new(8, 8);
+        let original = app.documents.session.document.layers.clone();
         let context = egui::Context::default();
         let primary =
             egui::Modifiers { ctrl: true, command: true, ..Default::default() };
         key_frame(&mut app, &context, Key::A, primary, false, false);
         assert_eq!(
-            app.doc.selection,
+            app.documents.session.document.selection,
             Some(parfait_core::MaskCoverage::Uniform(255))
         );
         key_frame(&mut app, &context, Key::D, primary, false, false);
-        assert!(app.doc.selection.is_none());
-        app.doc.set_selection(Some(parfait_core::MaskCoverage::Uniform(64)));
+        assert!(app.documents.session.document.selection.is_none());
+        app.documents
+            .session
+            .document
+            .set_selection(Some(parfait_core::MaskCoverage::Uniform(64)));
         key_frame(
             &mut app,
             &context,
@@ -121,16 +124,16 @@ mod tests {
             false,
         );
         assert_eq!(
-            app.doc.selection,
+            app.documents.session.document.selection,
             Some(parfait_core::MaskCoverage::Uniform(191))
         );
         key_frame(&mut app, &context, Key::D, primary, false, true);
         assert!(context.egui_wants_keyboard_input());
         assert_eq!(
-            app.doc.selection,
+            app.documents.session.document.selection,
             Some(parfait_core::MaskCoverage::Uniform(191))
         );
-        assert_eq!(app.doc.layers, original);
+        assert_eq!(app.documents.session.document.layers, original);
     }
 
     fn key_frame(
@@ -174,15 +177,17 @@ mod tests {
         let control =
             egui::Modifiers { ctrl: true, command: true, ..Default::default() };
         key_frame(&mut app, &ctx, Key::H, shift, false, false);
-        assert!(app.view.flip_horizontal);
+        assert!(app.documents.session.view.flip_horizontal);
         assert_eq!(app.navigation_tool, 0);
         key_frame(&mut app, &ctx, Key::H, shift, true, false);
-        assert!(app.view.flip_horizontal);
+        assert!(app.documents.session.view.flip_horizontal);
         key_frame(&mut app, &ctx, Key::V, shift, false, false);
-        assert!(app.view.flip_vertical);
+        assert!(app.documents.session.view.flip_vertical);
         app.display.rotation_step = 15.;
         key_frame(&mut app, &ctx, Key::ArrowRight, shift, false, false);
-        assert!((app.view.angle.to_degrees() - 15.).abs() < 0.001);
+        assert!(
+            (app.documents.session.view.angle.to_degrees() - 15.).abs() < 0.001
+        );
         key_frame(&mut app, &ctx, Key::R, control, false, false);
         assert!(!app.display.rulers);
         key_frame(&mut app, &ctx, Key::R, control, true, false);
@@ -199,7 +204,7 @@ mod tests {
         key_frame(&mut app, &ctx, Key::K, control, false, false);
         assert!(app.show_display_settings);
         key_frame(&mut app, &ctx, Key::H, shift, false, false);
-        assert!(app.view.flip_horizontal);
+        assert!(app.documents.session.view.flip_horizontal);
         key_frame(
             &mut app,
             &ctx,
@@ -215,22 +220,23 @@ mod tests {
             app.confirm_new = modal == 2;
             app.error = (modal == 3).then(|| "test error".into());
             key_frame(&mut app, &ctx, Key::V, shift, false, false);
-            assert!(app.view.flip_vertical);
+            assert!(app.documents.session.view.flip_vertical);
         }
         app.error = None;
         app.show_help = false;
         app.show_licenses = false;
         app.confirm_new = false;
-        app.stroke = Some(parfait_core::Stroke::begin(
-            &mut app.doc,
-            app.brush.clone(),
-            parfait_core::Point { x: 12., y: 12., pressure: 1. },
-        ));
+        app.documents.session.editing.stroke =
+            Some(parfait_core::Stroke::begin(
+                &mut app.documents.session.document,
+                app.brush.clone(),
+                parfait_core::Point { x: 12., y: 12., pressure: 1. },
+            ));
         key_frame(&mut app, &ctx, Key::H, shift, false, false);
-        assert!(app.view.flip_horizontal);
-        app.stroke = None;
+        assert!(app.documents.session.view.flip_horizontal);
+        app.documents.session.editing.stroke = None;
         key_frame(&mut app, &ctx, Key::H, shift, false, true);
-        assert!(app.view.flip_horizontal);
+        assert!(app.documents.session.view.flip_horizontal);
         assert!(ctx.egui_wants_keyboard_input());
     }
     #[test]
@@ -272,10 +278,10 @@ mod tests {
         assert!((app.brush.size - size * 1.2).abs() < 1e-5);
         frame(&mut app, Key::Tab, false);
         assert!(app.hide_panels);
-        let layers = app.doc.layers.len();
+        let layers = app.documents.session.document.layers.len();
         frame(&mut app, Key::N, true);
-        assert_eq!(app.doc.layers.len(), layers + 1);
+        assert_eq!(app.documents.session.document.layers.len(), layers + 1);
         frame(&mut app, Key::Z, false);
-        assert_eq!(app.doc.layers.len(), layers);
+        assert_eq!(app.documents.session.document.layers.len(), layers);
     }
 }

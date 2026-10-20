@@ -17,16 +17,19 @@ fn selection_and_mask_menu_items_apply_real_edits_and_undo_once() {
     ] {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = Document::new(8, 8);
-        app.doc.layers[1].pixels =
+        app.documents.session.document = Document::new(8, 8);
+        app.documents.session.document.layers[1].pixels =
             std::sync::Arc::new([20, 40, 60, 128].repeat(64));
         if command != Command::LayerSelectionCreate
             && command != Command::SelectAll
         {
-            app.doc.set_selection(Some(MaskCoverage::Uniform(64)));
+            app.documents
+                .session
+                .document
+                .set_selection(Some(MaskCoverage::Uniform(64)));
         }
-        let before = app.doc.clone();
-        let rows = app.history.rows().count();
+        let before = app.documents.session.document.clone();
+        let rows = app.documents.session.history.rows().count();
         let context = egui::Context::default();
         crate::theme::apply(&context);
         frame(&mut app, &context, vec![], 960.);
@@ -60,14 +63,26 @@ fn selection_and_mask_menu_items_apply_real_edits_and_undo_once() {
         });
         click(&mut app, &context, target);
         assert!(!egui::Popup::is_any_open(&context));
-        assert!(!app.doc.same_edit_state(&before), "{command:?}");
-        assert!(app.doc.validate());
-        assert_eq!(app.history.rows().count(), rows.max(1) + 1);
-        let edited = app.doc.clone();
+        assert!(
+            !app.documents.session.document.same_edit_state(&before),
+            "{command:?}"
+        );
+        assert!(app.documents.session.document.validate());
+        assert_eq!(
+            app.documents.session.history.rows().count(),
+            rows.max(1) + 1
+        );
+        let edited = app.documents.session.document.clone();
         app.undo();
-        assert!(app.doc.same_edit_state(&before), "{command:?}");
+        assert!(
+            app.documents.session.document.same_edit_state(&before),
+            "{command:?}"
+        );
         app.redo();
-        assert!(app.doc.same_edit_state(&edited), "{command:?}");
+        assert!(
+            app.documents.session.document.same_edit_state(&edited),
+            "{command:?}"
+        );
     }
 }
 
@@ -80,14 +95,18 @@ fn folder_menu_actions_create_group_and_ungroup_with_one_edit() {
     ] {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = Document::new(8, 8);
-        app.doc.add_layer();
+        app.documents.session.document = Document::new(8, 8);
+        app.documents.session.document.add_layer();
         app.set_layer_selection(6, 2);
         if command == Command::UngroupLayerFolder {
-            app.doc.group_layers_in_folder(6, "Folder".into()).unwrap();
+            app.documents
+                .session
+                .document
+                .group_layers_in_folder(6, "Folder".into())
+                .unwrap();
             app.set_layer_selection(8, 3);
         }
-        let before = app.doc.clone();
+        let before = app.documents.session.document.clone();
         let context = egui::Context::default();
         crate::theme::apply(&context);
         for _ in 0..2 {
@@ -100,17 +119,17 @@ fn folder_menu_actions_create_group_and_ungroup_with_one_edit() {
             });
         click(&mut app, &context, target);
         assert!(!egui::Popup::is_any_open(&context));
-        assert!(app.doc.validate());
-        assert_ne!(app.doc.layers, before.layers);
+        assert!(app.documents.session.document.validate());
+        assert_ne!(app.documents.session.document.layers, before.layers);
         assert_eq!(
-            app.doc.layers.len(),
+            app.documents.session.document.layers.len(),
             if command == Command::UngroupLayerFolder { 3 } else { 4 }
         );
-        assert_eq!(app.history.rows().count(), 2);
+        assert_eq!(app.documents.session.history.rows().count(), 2);
         app.undo();
-        assert_eq!(app.doc.layers, before.layers);
+        assert_eq!(app.documents.session.document.layers, before.layers);
         app.redo();
-        assert_ne!(app.doc.layers, before.layers);
+        assert_ne!(app.documents.session.document.layers, before.layers);
     }
 }
 
@@ -302,8 +321,8 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     );
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let before = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let before = app.documents.session.document.clone();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     for width in [960., 1440.] {
@@ -323,8 +342,8 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
         assert!(status.left() > right);
         assert!(status.right() <= width);
     }
-    assert_eq!(app.doc, before);
-    assert_eq!(app.history.rows().count(), 0);
+    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.session.history.rows().count(), 0);
     assert_eq!(Command::ALL.len(), 93);
 }
 
@@ -332,8 +351,8 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
 fn every_menu_opens_and_escape_closes_without_changing_artwork() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let before = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let before = app.documents.session.document.clone();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
@@ -346,8 +365,8 @@ fn every_menu_opens_and_escape_closes_without_changing_artwork() {
         assert!(viewport.top() >= caption.bottom());
         escape(&mut app, &ctx);
         assert!(!egui::Popup::is_any_open(&ctx));
-        assert_eq!(app.doc, before);
-        assert!(app.stroke.is_none());
+        assert_eq!(app.documents.session.document, before);
+        assert!(app.documents.session.editing.stroke.is_none());
     }
 }
 
@@ -355,22 +374,22 @@ fn every_menu_opens_and_escape_closes_without_changing_artwork() {
 fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let before = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let before = app.documents.session.document.clone();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
     frame(&mut app, &ctx, vec![], 960.);
     open(&mut app, &ctx, TopMenu::Layer);
     click(&mut app, &ctx, rect(&ctx, ("menu_item", Command::NewLayer.label())));
-    assert_eq!(app.doc.layers.len(), 3);
-    assert_eq!(app.history.rows().count(), 2);
+    assert_eq!(app.documents.session.document.layers.len(), 3);
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     assert!(!egui::Popup::is_any_open(&ctx));
     open(&mut app, &ctx, TopMenu::Edit);
     click(&mut app, &ctx, rect(&ctx, ("menu_item", Command::Undo.label())));
-    assert_eq!(app.doc.layers, before.layers);
-    assert!(app.history.can_redo());
-    let before = app.doc.clone();
+    assert_eq!(app.documents.session.document.layers, before.layers);
+    assert!(app.documents.session.history.can_redo());
+    let before = app.documents.session.document.clone();
     open(&mut app, &ctx, TopMenu::Window);
     let visible = app
         .workspace
@@ -404,8 +423,8 @@ fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
     click(&mut app, &ctx, target);
     assert_eq!(app.display.rulers, !rulers);
     escape(&mut app, &ctx);
-    assert_eq!(app.doc, before);
-    assert!(app.history.can_redo());
+    assert_eq!(app.documents.session.document, before);
+    assert!(app.documents.session.history.can_redo());
     assert!(!app.keymap.hint(Command::Undo).is_empty());
     open(&mut app, &ctx, TopMenu::Help);
     click(
@@ -423,12 +442,12 @@ fn localized_menu_commands_reuse_transactions_and_view_window_toggles() {
 fn edit_menu_conversions_change_only_content_and_share_history() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.layers[1].pixels =
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.layers[1].pixels =
         std::sync::Arc::new([128, 128, 128, 128].repeat(64));
-    app.doc.create_layer_mask(1, 127);
+    app.documents.session.document.create_layer_mask(1, 127);
     app.brush.color = [17, 140, 230];
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     let context = egui::Context::default();
     crate::theme::apply(&context);
     frame(&mut app, &context, vec![], 960.);
@@ -445,23 +464,26 @@ fn edit_menu_conversions_change_only_content_and_share_history() {
         assert!(!egui::Popup::is_any_open(&context));
     }
     assert_eq!(
-        app.doc.layers[1].pixels.as_slice(),
+        app.documents.session.document.layers[1].pixels.as_slice(),
         [17, 140, 230, 64].repeat(64)
     );
-    assert_eq!(app.doc.layers[1].mask, before.layers[1].mask);
-    assert_eq!(app.doc.layers[0], before.layers[0]);
-    assert_eq!(app.history.rows().count(), 3);
+    assert_eq!(
+        app.documents.session.document.layers[1].mask,
+        before.layers[1].mask
+    );
+    assert_eq!(app.documents.session.document.layers[0], before.layers[0]);
+    assert_eq!(app.documents.session.history.rows().count(), 3);
     app.undo();
     app.undo();
-    assert!(app.doc.same_edit_state(&before));
+    assert!(app.documents.session.document.same_edit_state(&before));
 }
 
 #[test]
 fn unimplemented_selection_and_filter_items_are_disabled_and_never_paint() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let before = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let before = app.documents.session.document.clone();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
@@ -489,9 +511,9 @@ fn unimplemented_selection_and_filter_items_are_disabled_and_never_paint() {
             .unwrap();
         assert!(!enabled);
         click(&mut app, &ctx, target);
-        assert_eq!(app.doc, before);
-        assert_eq!(app.history.rows().count(), 0);
-        assert!(app.stroke.is_none());
+        assert_eq!(app.documents.session.document, before);
+        assert_eq!(app.documents.session.history.rows().count(), 0);
+        assert!(app.documents.session.editing.stroke.is_none());
         escape(&mut app, &ctx);
     }
 }
@@ -588,14 +610,14 @@ fn layer_organization_menu_routes_execute_active_actions_not_selected_set_moves(
     ] {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = Document::new(8, 8);
+        app.documents.session.document = Document::new(8, 8);
         for _ in 0..3 {
-            app.doc.add_layer();
+            app.documents.session.document.add_layer();
         }
         app.select_layer(2);
         app.set_layer_selection(0b10101, 0);
-        let before = app.doc.clone();
-        let active_id = app.doc.layers[2].id;
+        let before = app.documents.session.document.clone();
+        let active_id = app.documents.session.document.layers[2].id;
         let context = egui::Context::default();
         crate::theme::apply(&context);
         frame(&mut app, &context, vec![], 960.);
@@ -612,21 +634,24 @@ fn layer_organization_menu_routes_execute_active_actions_not_selected_set_moves(
         });
         click(&mut app, &context, target);
         assert!(!egui::Popup::is_any_open(&context));
-        assert_eq!(app.doc.active, destination);
+        assert_eq!(app.documents.session.document.active, destination);
         if command == Command::RenameLayer {
-            assert!(app.rename_layer.is_some());
-            assert_eq!(app.doc, before);
+            assert!(app.documents.session.layer_ui.rename.is_some());
+            assert_eq!(app.documents.session.document, before);
         } else if matches!(
             command,
             Command::SelectLayerAbove | Command::SelectLayerBelow
         ) {
             assert_eq!(app.selected_layer_mask(), 1 << destination);
-            assert!(app.doc.same_edit_state(&before));
-            assert_eq!(app.history.rows().count(), 0);
+            assert!(app.documents.session.document.same_edit_state(&before));
+            assert_eq!(app.documents.session.history.rows().count(), 0);
         } else {
-            assert_eq!(app.doc.layers[destination].id, active_id);
+            assert_eq!(
+                app.documents.session.document.layers[destination].id,
+                active_id
+            );
             assert_eq!(app.selected_layer_mask().count_ones(), 3);
-            assert_eq!(app.history.rows().count(), 2);
+            assert_eq!(app.documents.session.history.rows().count(), 2);
         }
     }
 }
@@ -651,8 +676,8 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
     }
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let artwork = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let artwork = app.documents.session.document.clone();
     app.persist_preferences(true);
     let preferences = app.saved_preferences_json();
     let snapshot: crate::preferences::Preferences =
@@ -661,7 +686,11 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
     frame(&mut app, &ctx, vec![], 960.);
-    let view = (app.view.zoom, app.view.angle, app.view.pan);
+    let view = (
+        app.documents.session.view.zoom,
+        app.documents.session.view.angle,
+        app.documents.session.view.pan,
+    );
     let mut groups = Vec::new();
     for menu in TopMenu::ALL {
         collect(menu, catalog::entries(menu), vec![], &mut groups);
@@ -687,12 +716,19 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
                 checked += 1;
             }
         }
-        assert_eq!(app.doc, artwork);
-        assert_eq!(app.history.rows().count(), 0);
+        assert_eq!(app.documents.session.document, artwork);
+        assert_eq!(app.documents.session.history.rows().count(), 0);
         assert_eq!(app.saved_preferences_json(), preferences);
         assert!(snapshot.matches(&app));
-        assert_eq!((app.view.zoom, app.view.angle, app.view.pan), view);
-        assert!(app.stroke.is_none());
+        assert_eq!(
+            (
+                app.documents.session.view.zoom,
+                app.documents.session.view.angle,
+                app.documents.session.view.pan
+            ),
+            view
+        );
+        assert!(app.documents.session.editing.stroke.is_none());
         escape(&mut app, &ctx);
         assert!(!egui::Popup::is_any_open(&ctx));
     }
@@ -703,8 +739,8 @@ fn every_catalog_group_opens_and_planned_widgets_remain_disabled_without_edits()
 fn long_root_menus_scroll_to_the_last_entry_inside_the_viewport() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let artwork = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let artwork = app.documents.session.document.clone();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
@@ -734,15 +770,15 @@ fn long_root_menus_scroll_to_the_last_entry_inside_the_viewport() {
         assert!(target.bottom() <= 640.);
         escape(&mut app, &ctx);
     }
-    assert_eq!(app.doc, artwork);
+    assert_eq!(app.documents.session.document, artwork);
 }
 
 #[test]
 fn nested_layer_flags_and_subtool_details_keep_the_shared_command_path() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let original = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    let original = app.documents.session.document.clone();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     frame(&mut app, &ctx, vec![], 960.);
@@ -760,18 +796,21 @@ fn nested_layer_flags_and_subtool_details_keep_the_shared_command_path() {
         &ctx,
         rect(&ctx, ("command_toggle", Command::LayerAlphaLock)),
     );
-    assert!(app.doc.layers[1].alpha_locked);
-    assert_eq!(app.doc.layers[1].id, original.layers[1].id);
-    assert_eq!(app.history.rows().count(), 2);
+    assert!(app.documents.session.document.layers[1].alpha_locked);
+    assert_eq!(
+        app.documents.session.document.layers[1].id,
+        original.layers[1].id
+    );
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     escape(&mut app, &ctx);
     app.undo();
-    assert_eq!(app.doc.layers, original.layers);
+    assert_eq!(app.documents.session.document.layers, original.layers);
     open(&mut app, &ctx, TopMenu::Window);
     let target = reveal(&mut app, &ctx, root_path(TopMenu::Window), |ctx| {
         rect(ctx, ("menu_item", Command::SubToolDetail.label()))
     });
     click(&mut app, &ctx, target);
     assert!(app.brush_details.open);
-    assert!(app.history.can_redo());
-    assert_eq!(app.doc.layers, original.layers);
+    assert!(app.documents.session.history.can_redo());
+    assert_eq!(app.documents.session.document.layers, original.layers);
 }

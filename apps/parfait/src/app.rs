@@ -1,6 +1,10 @@
-use crate::canvas::View;
+use crate::{
+    documents::DocumentManager, window_render_cache::WindowRenderCache,
+};
 use eframe::egui;
-use parfait_core::{Brush, Document, History, Stroke};
+#[cfg(test)]
+use parfait_core::Stroke;
+use parfait_core::{Brush, Document};
 use parfait_storage::{Autosave, SaveEvent, Store, lock_session};
 use std::{
     fs::File,
@@ -9,6 +13,8 @@ use std::{
 };
 
 pub struct Parfait {
+    pub(crate) documents: DocumentManager,
+    pub(crate) render_cache: WindowRenderCache,
     pub calibration: parfait_core::PressureCalibration,
     pub calibration_dialog: Option<crate::calibration::CalibrationDialog>,
     pub workspace: crate::workspace::Workspace,
@@ -22,37 +28,14 @@ pub struct Parfait {
     pub brush_details: crate::brush_details::BrushDetails,
     pub capture: Option<crate::diagnostics::Capture>,
     pub navigation_tool: u8,
-    pub layer_previews: Vec<egui::TextureHandle>,
-    pub(crate) mask_previews: Vec<Option<egui::TextureHandle>>,
-    pub(crate) mask_target: Option<parfait_core::LayerId>,
-    pub(crate) mask_overlay: Option<parfait_core::LayerId>,
-    pub(crate) rendered_overlay: Option<parfait_core::LayerId>,
-    pub preview_revision: u64,
-    pub doc: Document,
     pub brush: Brush,
-    pub history: History,
-    pub stroke: Option<Stroke>,
-    pub(crate) layer_edit: Option<crate::editing::LayerEdit>,
-    pub(crate) cancelled_layer_drag: bool,
-    pub(crate) layer_list: crate::layers::LayerList,
-    pub(crate) rename_layer: Option<crate::layer_organize::RenameLayer>,
-    pub(crate) layer_details: Option<crate::layer_details::LayerDetails>,
-    pub(crate) pixel_selection_view: crate::pixel_selection::BoundaryCache,
-    pub view: View,
     pub display: crate::display::DisplaySettings,
     pub show_display_settings: bool,
     pub keymap: crate::shortcuts::Keymap,
     pub shortcut_editor: Option<crate::shortcuts::ShortcutEditor>,
-    pub texture: Option<egui::TextureHandle>,
-    pub rendered: u64,
-    pub saved: u64,
-    pub submitted: u64,
     pub autosave: Autosave,
-    pub last_submit: Instant,
     pub error: Option<String>,
     pub notice: Option<String>,
-    pub project: Option<PathBuf>,
-    pub(crate) project_saved_state: Option<Document>,
     pub recovery_path: PathBuf,
     pub show_help: bool,
     pub show_licenses: bool,
@@ -60,7 +43,6 @@ pub struct Parfait {
     pub tip_name: String,
     pub hide_panels: bool,
     pub pressure: f32,
-    pub saving_failed: bool,
     close_pending: bool,
     _lock: File,
 }
@@ -89,7 +71,11 @@ impl Parfait {
         };
         autosave.submit(doc.clone());
         let submitted = doc.revision;
+        let mut documents = DocumentManager::new(doc)?;
+        documents.session.recovery.submitted = submitted;
         let mut app = Self {
+            documents,
+            render_cache: WindowRenderCache::default(),
             calibration: Default::default(),
             calibration_dialog: None,
             workspace: Default::default(),
@@ -103,37 +89,14 @@ impl Parfait {
             brush_details: Default::default(),
             capture: None,
             navigation_tool: 0,
-            layer_previews: Vec::new(),
-            mask_previews: Vec::new(),
-            mask_target: None,
-            mask_overlay: None,
-            rendered_overlay: None,
-            preview_revision: u64::MAX,
-            doc,
             brush: Brush::default(),
-            history: History::default(),
-            stroke: None,
-            layer_edit: None,
-            cancelled_layer_drag: false,
-            layer_list: Default::default(),
-            rename_layer: None,
-            layer_details: None,
-            pixel_selection_view: Default::default(),
-            view: View::default(),
             display: Default::default(),
             show_display_settings: false,
             keymap: Default::default(),
             shortcut_editor: None,
-            texture: None,
-            rendered: 0,
-            saved: 0,
-            submitted,
             autosave,
-            last_submit: Instant::now(),
             error: None,
             notice,
-            project: None,
-            project_saved_state: None,
             recovery_path: path,
             show_help: false,
             show_licenses: false,
@@ -141,7 +104,6 @@ impl Parfait {
             tip_name: "Round pen".into(),
             hide_panels: false,
             pressure: 1.,
-            saving_failed: false,
             close_pending: false,
             _lock: lock,
         };
@@ -149,8 +111,8 @@ impl Parfait {
         Ok(app)
     }
     pub fn dialog_open(&self) -> bool {
-        self.rename_layer.is_some()
-            || self.layer_details.is_some()
+        self.documents.session.layer_ui.rename.is_some()
+            || self.documents.session.layer_ui.details.is_some()
             || self.calibration_dialog.is_some()
             || self.brush_details.dialog_open()
             || self.shortcut_editor.is_some()
@@ -171,41 +133,72 @@ impl Parfait {
     ) {
         self.finish_stroke();
         self.finish_layer_edit();
-        self.history.begin(&self.doc, label);
-        let revision = self.doc.revision;
-        action(&mut self.doc);
-        if self.history.commit(&self.doc) && self.doc.revision == revision {
-            self.doc.touch();
+        if !self.begin_history(label) {
+            return;
+        }
+        let revision = self.documents.session.document.revision;
+        action(&mut self.documents.session.document);
+        if self
+            .documents
+            .session
+            .history
+            .commit(&self.documents.session.document)
+            && self.documents.session.document.revision == revision
+        {
+            self.documents.session.document.touch();
+        }
+    }
+    pub(crate) fn begin_history(&mut self, label: &str) -> bool {
+        let session = &mut self.documents.session;
+        match session.history.try_begin(&session.document, label) {
+            Ok(()) => true,
+            Err(error) => {
+                self.error = Some(format!("Could not start edit: {error}"));
+                false
+            }
         }
     }
     pub fn undo(&mut self) {
-        if self.stroke.is_none() {
+        if self.documents.session.editing.stroke.is_none() {
             self.reset_layer_selection_view();
             self.finish_layer_edit();
-            if self.history.undo(&mut self.doc) {
-                self.reveal_layer(self.doc.active);
+            if self
+                .documents
+                .session
+                .history
+                .undo(&mut self.documents.session.document)
+            {
+                self.reveal_layer(self.documents.session.document.active);
             }
         }
     }
     pub fn redo(&mut self) {
-        if self.stroke.is_none() {
+        if self.documents.session.editing.stroke.is_none() {
             self.reset_layer_selection_view();
             self.finish_layer_edit();
-            if self.history.redo(&mut self.doc) {
-                self.reveal_layer(self.doc.active);
+            if self
+                .documents
+                .session
+                .history
+                .redo(&mut self.documents.session.document)
+            {
+                self.reveal_layer(self.documents.session.document.active);
             }
         }
     }
     pub fn force_save(&mut self) {
-        self.autosave.submit(self.doc.clone());
-        self.submitted = self.doc.revision;
-        self.last_submit = Instant::now();
+        self.autosave.submit(self.documents.session.document.clone());
+        self.documents.session.recovery.submitted =
+            self.documents.session.document.revision;
+        self.documents.session.recovery.last_submit = Instant::now();
     }
     fn maintenance_interval(&self) -> Duration {
-        if self.stroke.is_some()
+        if self.documents.session.editing.stroke.is_some()
             || self.close_pending
-            || self.saved < self.submitted
-            || self.saved < self.doc.revision
+            || self.documents.session.recovery.saved
+                < self.documents.session.recovery.submitted
+            || self.documents.session.recovery.saved
+                < self.documents.session.document.revision
         {
             Duration::from_millis(100)
         } else {
@@ -213,7 +206,10 @@ impl Parfait {
         }
     }
     pub fn request_close(&mut self, ctx: &egui::Context) {
-        if self.saved < self.doc.revision || self.saving_failed {
+        if self.documents.session.recovery.saved
+            < self.documents.session.document.revision
+            || self.documents.session.recovery.failed
+        {
             self.finish_stroke();
             self.finish_layer_edit();
             self.close_pending = true;
@@ -224,13 +220,20 @@ impl Parfait {
     }
     pub fn save_project(&mut self, save_as: bool) {
         self.finish_layer_edit();
-        let path =
-            if !save_as { self.project.clone() } else { None }.or_else(|| {
-                rfd::FileDialog::new()
-                    .add_filter("Parfait project", &["parfait"])
-                    .set_file_name(format!("{}.parfait", self.doc.name))
-                    .save_file()
-            });
+        let path = if !save_as {
+            self.documents.session.project.clone()
+        } else {
+            None
+        }
+        .or_else(|| {
+            rfd::FileDialog::new()
+                .add_filter("Parfait project", &["parfait"])
+                .set_file_name(format!(
+                    "{}.parfait",
+                    self.documents.session.document.name
+                ))
+                .save_file()
+        });
         if let Some(path) = path {
             match self.save_project_to(path) {
                 Ok(()) => self.notice = Some("Project saved.".into()),
@@ -239,7 +242,7 @@ impl Parfait {
         }
     }
     fn write_project(&self, path: &Path) -> anyhow::Result<()> {
-        Self::write_project_document(&self.doc, path)
+        Self::write_project_document(&self.documents.session.document, path)
     }
     pub fn open_project(&mut self) {
         self.finish_layer_edit();
@@ -259,16 +262,18 @@ impl Parfait {
             &self.recovery_path.with_file_name("before-new.parfait"),
         ) {
             Ok(()) => {
-                let rev = self.doc.revision + 1;
-                self.doc = Document::new(1024, 768);
-                self.mask_target = None;
-                self.mask_overlay = None;
-                self.doc.revision = rev;
-                self.history = History::default();
-                self.layer_list = Default::default();
-                self.project = None;
-                self.project_saved_state = None;
-                self.view = View::default();
+                let mut document = Document::new(1024, 768);
+                document.revision =
+                    self.documents.session.document.revision + 1;
+                match crate::document_session::DocumentSession::new(document) {
+                    Ok(session) => self.documents.session = session,
+                    Err(error) => {
+                        self.error = Some(format!(
+                            "Could not create drawing: {error:#}"
+                        ));
+                        return;
+                    }
+                }
                 self.force_save();
             }
             Err(e) => {
@@ -281,14 +286,17 @@ impl Parfait {
     pub fn export(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter("PNG image", &["png"])
-            .set_file_name(format!("{}.png", self.doc.name))
+            .set_file_name(format!(
+                "{}.png",
+                self.documents.session.document.name
+            ))
             .save_file()
         {
             match image::save_buffer_with_format(
                 path,
-                &self.doc.composite_for_export(),
-                self.doc.width,
-                self.doc.height,
+                &self.documents.session.document.composite_for_export(),
+                self.documents.session.document.width,
+                self.documents.session.document.height,
                 image::ColorType::Rgba8,
                 image::ImageFormat::Png,
             ) {
@@ -301,27 +309,30 @@ impl Parfait {
         while let Some(event) = self.autosave.poll() {
             match event {
                 SaveEvent::Saved(rev) => {
-                    self.saved = self.saved.max(rev);
-                    self.saving_failed = false;
+                    self.documents.session.recovery.saved =
+                        self.documents.session.recovery.saved.max(rev);
+                    self.documents.session.recovery.failed = false;
                 }
                 SaveEvent::Failed(e) => {
                     self.error = Some(format!(
                         "Automatic save failed. Your drawing is still in memory. {e}"
                     ));
-                    self.saving_failed = true;
+                    self.documents.session.recovery.failed = true;
                     self.close_pending = false;
-                    self.submitted = 0;
-                    self.last_submit = Instant::now();
+                    self.documents.session.recovery.submitted = 0;
+                    self.documents.session.recovery.last_submit =
+                        Instant::now();
                 }
             }
         }
-        let interval = if self.saving_failed {
+        let interval = if self.documents.session.recovery.failed {
             Duration::from_secs(3)
         } else {
             Duration::from_millis(400)
         };
-        if self.doc.revision != self.submitted
-            && self.last_submit.elapsed() > interval
+        if self.documents.session.document.revision
+            != self.documents.session.recovery.submitted
+            && self.documents.session.recovery.last_submit.elapsed() > interval
         {
             self.force_save();
         }
@@ -480,7 +491,8 @@ impl eframe::App for Parfait {
             self.error = Some(format!("Screenshot failed: {error}"));
         }
         if ctx.input(|i| i.viewport().close_requested())
-            && self.saved < self.doc.revision
+            && self.documents.session.recovery.saved
+                < self.documents.session.document.revision
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.finish_stroke();
@@ -489,8 +501,9 @@ impl eframe::App for Parfait {
             self.force_save();
         }
         if self.close_pending
-            && self.saved >= self.doc.revision
-            && !self.saving_failed
+            && self.documents.session.recovery.saved
+                >= self.documents.session.document.revision
+            && !self.documents.session.recovery.failed
         {
             self.close_pending = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -498,7 +511,7 @@ impl eframe::App for Parfait {
     }
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.persist_preferences(true);
-        self.autosave.finish(self.doc.clone());
+        self.autosave.finish(self.documents.session.document.clone());
     }
 }
 
@@ -510,43 +523,49 @@ mod tests {
     fn layer_limit_commands_do_not_edit_revision_or_consume_undo() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.doc = Document::new(4, 4);
-        while app.doc.layers.len() < 64 {
-            app.doc.add_layer();
+        app.documents.session.document = Document::new(4, 4);
+        while app.documents.session.document.layers.len() < 64 {
+            app.documents.session.document.add_layer();
         }
         app.edit(|document| document.layers[1].opacity = 0.5);
-        let before = app.doc.clone();
+        let before = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         app.execute_command(crate::shortcuts::Command::NewLayer, &ctx);
         app.duplicate_layer();
-        assert_eq!(app.doc, before);
+        assert_eq!(app.documents.session.document, before);
         app.undo();
-        assert_eq!(app.doc.layers[1].opacity, 1.);
+        assert_eq!(app.documents.session.document.layers[1].opacity, 1.);
     }
 
     #[test]
     fn idle_maintenance_slows_down_without_delaying_pending_saves_or_strokes() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = Document::new(16, 16);
-        app.saved = app.doc.revision;
-        app.submitted = app.saved;
+        app.documents.session.document = Document::new(16, 16);
+        app.documents.session.recovery.saved =
+            app.documents.session.document.revision;
+        app.documents.session.recovery.submitted =
+            app.documents.session.recovery.saved;
         assert_eq!(app.maintenance_interval(), Duration::from_secs(1));
-        app.doc.touch();
+        app.documents.session.document.touch();
         assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
-        app.saved = app.doc.revision;
-        app.submitted = app.saved + 1;
+        app.documents.session.recovery.saved =
+            app.documents.session.document.revision;
+        app.documents.session.recovery.submitted =
+            app.documents.session.recovery.saved + 1;
         assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
-        app.submitted = app.saved;
+        app.documents.session.recovery.submitted =
+            app.documents.session.recovery.saved;
         app.close_pending = true;
         assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
         app.close_pending = false;
-        app.stroke = Some(Stroke::begin(
-            &mut app.doc,
+        app.documents.session.editing.stroke = Some(Stroke::begin(
+            &mut app.documents.session.document,
             Brush::default(),
             parfait_core::Point { x: 4., y: 4., pressure: 1. },
         ));
-        app.saved = app.doc.revision;
+        app.documents.session.recovery.saved =
+            app.documents.session.document.revision;
         assert_eq!(app.maintenance_interval(), Duration::from_millis(100));
     }
 }

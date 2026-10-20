@@ -1,19 +1,18 @@
-use crate::{app::Parfait, canvas::View};
-use parfait_core::{Document, History};
+use crate::app::Parfait;
+use parfait_core::Document;
 use parfait_storage::Store;
 use std::path::{Path, PathBuf};
 
 impl Parfait {
     pub(crate) fn project_is_modified(&self) -> bool {
-        self.project.is_none()
-            || self
-                .project_saved_state
-                .as_ref()
-                .is_none_or(|saved| !self.doc.same_edit_state(saved))
+        self.documents.session.project.is_none()
+            || self.documents.session.project_saved_state.as_ref().is_none_or(
+                |saved| !self.documents.session.document.same_edit_state(saved),
+            )
     }
 
     pub(crate) fn project_status(&self) -> &'static str {
-        if self.project.is_none() {
+        if self.documents.session.project.is_none() {
             "파일 저장 필요"
         } else if self.project_is_modified() {
             "파일 수정됨"
@@ -23,9 +22,11 @@ impl Parfait {
     }
 
     pub(crate) fn recovery_status(&self) -> &'static str {
-        if self.saving_failed {
+        if self.documents.session.recovery.failed {
             "복구 저장 실패"
-        } else if self.saved >= self.doc.revision {
+        } else if self.documents.session.recovery.saved
+            >= self.documents.session.document.revision
+        {
             "복구 저장됨"
         } else {
             "복구 저장 중"
@@ -97,12 +98,12 @@ impl Parfait {
         path: PathBuf,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            self.stroke.is_none(),
+            self.documents.session.editing.stroke.is_none(),
             "Finish the current stroke before saving"
         );
         self.project_path_allowed(&path)?;
         self.finish_layer_edit();
-        let mut candidate = self.doc.clone();
+        let mut candidate = self.documents.session.document.clone();
         if let Some(name) = path.file_stem().and_then(|name| name.to_str())
             && candidate.name != name
         {
@@ -110,9 +111,10 @@ impl Parfait {
             candidate.touch();
         }
         Self::write_project_document(&candidate, &path)?;
-        self.doc = candidate;
-        self.project = Some(path);
-        self.project_saved_state = Some(self.doc.clone());
+        self.documents.session.document = candidate;
+        self.documents.session.project = Some(path);
+        self.documents.session.project_saved_state =
+            Some(self.documents.session.document.clone());
         self.force_save();
         Ok(())
     }
@@ -122,31 +124,31 @@ impl Parfait {
         path: PathBuf,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            self.stroke.is_none(),
+            self.documents.session.editing.stroke.is_none(),
             "Finish the current stroke before opening a project"
         );
         self.project_path_allowed(&path)?;
         self.finish_layer_edit();
         Self::write_project_document(
-            &self.doc,
+            &self.documents.session.document,
             &self.recovery_path.with_file_name("before-open.parfait"),
         )?;
         let mut document = Store::open(&path)?
             .load()?
             .map(|loaded| loaded.document)
             .ok_or_else(|| anyhow::anyhow!("Project contains no snapshots"))?;
-        document.revision =
-            self.doc.revision.checked_add(1).ok_or_else(|| {
-                anyhow::anyhow!("Project revision limit reached")
-            })?;
-        self.doc = document;
-        self.project = Some(path);
-        self.project_saved_state = Some(self.doc.clone());
-        self.mask_target = None;
-        self.mask_overlay = None;
-        self.history = History::default();
-        self.layer_list = Default::default();
-        self.view = View::default();
+        document.revision = self
+            .documents
+            .session
+            .document
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("Project revision limit reached"))?;
+        let mut session =
+            crate::document_session::DocumentSession::new(document)?;
+        session.project = Some(path);
+        session.project_saved_state = Some(session.document.clone());
+        self.documents.session = session;
         self.force_save();
         Ok(())
     }

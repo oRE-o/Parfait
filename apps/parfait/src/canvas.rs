@@ -113,6 +113,22 @@ fn rotate(v: Vec2, a: f32) -> Vec2 {
 }
 impl Parfait {
     pub fn canvas(&mut self, ui: &mut egui::Ui) {
+        let key = self.documents.session.key;
+        self.render_cache.ensure_session(key);
+        if self
+            .documents
+            .session
+            .editing
+            .stroke_owner
+            .is_some_and(|owner| owner != key)
+        {
+            self.documents.session.editing.stroke = None;
+            self.documents.session.editing.stroke_owner = None;
+        }
+        ui.push_id(("document_canvas", key), |ui| self.canvas_contents(ui));
+    }
+
+    fn canvas_contents(&mut self, ui: &mut egui::Ui) {
         let (outer, response) = ui.allocate_exact_size(
             ui.available_size(),
             egui::Sense::click_and_drag(),
@@ -124,8 +140,11 @@ impl Parfait {
         ui.data_mut(|data| {
             data.insert_temp(egui::Id::new("canvas_rect"), rect)
         });
-        let size = egui::vec2(self.doc.width as f32, self.doc.height as f32);
-        self.view.update_zoom(rect, size);
+        let size = egui::vec2(
+            self.documents.session.document.width as f32,
+            self.documents.session.document.height as f32,
+        );
+        self.documents.session.view.update_zoom(rect, size);
         let ctx = ui.ctx().clone();
         let events = ctx.input(|i| i.events.clone());
         let space =
@@ -134,7 +153,7 @@ impl Parfait {
         let blocked = self.dialog_open()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
-            || self.layer_list.owns_pointer();
+            || self.documents.session.layer_ui.list.owns_pointer();
         // Space takes ownership until pointer-up; painting never resumes mid-gesture.
         let interrupted = (space || blocked) && self.finish_stroke();
         if interrupted
@@ -142,19 +161,22 @@ impl Parfait {
             && !blocked
             && ctx.input(|i| i.pointer.primary_down())
         {
-            self.view.gesture = Some(Gesture::Pan);
+            self.documents.session.view.gesture = Some(Gesture::Pan);
             if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                self.view.last = pos;
+                self.documents.session.view.last = pos;
             }
         }
         if !blocked
-            && self.stroke.is_some()
+            && self.documents.session.editing.stroke.is_some()
             && ctx.input(|input| input.key_pressed(Key::Escape))
         {
             self.cancel_edit();
-            self.view.gesture = None;
+            self.documents.session.view.gesture = None;
         }
-        if !blocked && self.stroke.is_none() && response.hovered() {
+        if !blocked
+            && self.documents.session.editing.stroke.is_none()
+            && response.hovered()
+        {
             // Ctrl/Cmd-wheel and pinch arrive through zoom_delta, not scroll_delta.
             let factor = ctx.input(|i| {
                 (i.smooth_scroll_delta.y * 0.003).exp() * i.zoom_delta()
@@ -162,12 +184,13 @@ impl Parfait {
             if factor != 1.
                 && let Some(pos) = ctx.input(|i| i.pointer.hover_pos())
             {
-                self.view.zoom_at(factor, pos, rect, size);
+                self.documents.session.view.zoom_at(factor, pos, rect, size);
             }
         }
         // Changes made outside this input batch (undo, layer edits, open) invalidate all pixels.
-        let full_refresh =
-            self.rendered != self.doc.revision || self.texture.is_none();
+        let full_refresh = self.render_cache.rendered
+            != self.documents.session.document.revision
+            || self.render_cache.texture.is_none();
         let mut damage: Option<PixelRect> = None;
         let mut stroke_started = false;
         for event in events {
@@ -176,7 +199,7 @@ impl Parfait {
                 | Event::PointerGone
                 | Event::WindowFocused(false) => {
                     self.finish_stroke();
-                    self.view.gesture = None;
+                    self.documents.session.view.gesture = None;
                     self.pressure = 1.;
                 }
                 Event::Touch { force: Some(force), .. } => {
@@ -194,7 +217,7 @@ impl Parfait {
                         if button == PointerButton::Middle
                             || (button == PointerButton::Primary && space)
                         {
-                            self.view.gesture =
+                            self.documents.session.view.gesture =
                                 Some(if button == PointerButton::Middle {
                                     Gesture::Pan
                                 } else if modifiers.shift {
@@ -204,9 +227,13 @@ impl Parfait {
                                 } else {
                                     Gesture::Pan
                                 });
-                            self.view.last = pos;
+                            self.documents.session.view.last = pos;
                         } else if button == PointerButton::Primary {
-                            let p = self.view.document(pos, rect, size);
+                            let p = self
+                                .documents
+                                .session
+                                .view
+                                .document(pos, rect, size);
                             if p.x >= 0.
                                 && p.y >= 0.
                                 && p.x < size.x
@@ -216,11 +243,13 @@ impl Parfait {
                                     && modifiers.shift
                                     && !modifiers.alt
                                 {
-                                    self.view.gesture =
+                                    self.documents.session.view.gesture =
                                         Some(Gesture::LayerPick);
-                                    self.view.last = pos;
+                                    self.documents.session.view.last = pos;
                                     if let Some(layer) = self
-                                        .doc
+                                        .documents
+                                        .session
+                                        .document
                                         .layer_at(p.x as u32, p.y as u32)
                                     {
                                         self.select_layer(layer);
@@ -228,8 +257,11 @@ impl Parfait {
                                 } else if modifiers.alt
                                     || self.navigation_tool == 2
                                 {
-                                    let pixels =
-                                        self.doc.composite_region(PixelRect {
+                                    let pixels = self
+                                        .documents
+                                        .session
+                                        .document
+                                        .composite_region(PixelRect {
                                             x0: p.x as u32,
                                             y0: p.y as u32,
                                             x1: p.x as u32 + 1,
@@ -238,9 +270,16 @@ impl Parfait {
                                     self.brush
                                         .color
                                         .copy_from_slice(&pixels[..3]);
-                                } else if !self.doc.layers[self.doc.active]
+                                } else if !self
+                                    .documents
+                                    .session
+                                    .document
+                                    .layers
+                                    [self.documents.session.document.active]
                                     .locked
-                                    && self.doc.layers[self.doc.active].visible
+                                    && self.documents.session.document.layers
+                                        [self.documents.session.document.active]
+                                        .visible
                                 {
                                     stroke_started =
                                         self.begin_canvas_stroke(Point {
@@ -259,34 +298,44 @@ impl Parfait {
                             || button == PointerButton::Middle)
                     {
                         self.finish_stroke();
-                        self.view.gesture = None;
+                        self.documents.session.view.gesture = None;
                         self.pressure = 1.;
                     }
                 }
                 Event::PointerMoved(pos) => {
-                    if let Some(gesture) = self.view.gesture {
-                        let delta = pos - self.view.last;
+                    if let Some(gesture) = self.documents.session.view.gesture {
+                        let delta = pos - self.documents.session.view.last;
                         match gesture {
-                            Gesture::Pan => self.view.pan += delta,
-                            Gesture::Rotate => {
-                                self.view.angle += delta.x * 0.008
+                            Gesture::Pan => {
+                                self.documents.session.view.pan += delta
                             }
-                            Gesture::Zoom => self.view.zoom_at(
-                                (delta.x * 0.01).exp(),
-                                self.view.last,
-                                rect,
-                                size,
-                            ),
+                            Gesture::Rotate => {
+                                self.documents.session.view.angle +=
+                                    delta.x * 0.008
+                            }
+                            Gesture::Zoom => {
+                                self.documents.session.view.zoom_at(
+                                    (delta.x * 0.01).exp(),
+                                    self.documents.session.view.last,
+                                    rect,
+                                    size,
+                                )
+                            }
                             Gesture::LayerPick => {}
                         }
-                        self.view.last = pos;
+                        self.documents.session.view.last = pos;
                     } else if !space
                         && !blocked
-                        && let Some(stroke) = &mut self.stroke
+                        && let Some(stroke) =
+                            &mut self.documents.session.editing.stroke
                     {
-                        let p = self.view.document(pos, rect, size);
+                        let p = self
+                            .documents
+                            .session
+                            .view
+                            .document(pos, rect, size);
                         stroke.extend(
-                            &mut self.doc,
+                            &mut self.documents.session.document,
                             Point {
                                 x: p.x,
                                 y: p.y,
@@ -297,7 +346,7 @@ impl Parfait {
                 }
                 _ => {}
             }
-            if let Some(stroke) = &mut self.stroke
+            if let Some(stroke) = &mut self.documents.session.editing.stroke
                 && let Some(r) = stroke.take_damage()
             {
                 damage = Some(damage.map_or(r, |old| old.union(r)));
@@ -309,11 +358,11 @@ impl Parfait {
         if !stroke_started
             && !blocked
             && !space
-            && let Some(stroke) = &mut self.stroke
+            && let Some(stroke) = &mut self.documents.session.editing.stroke
             && let Some(interval) = stroke.spray_interval()
         {
             stroke.spray(
-                &mut self.doc,
+                &mut self.documents.session.document,
                 ctx.input(|input| input.unstable_dt),
                 self.calibration.map(self.pressure),
             );
@@ -324,17 +373,23 @@ impl Parfait {
                 interval,
             ));
         } else if stroke_started
-            && let Some(interval) =
-                self.stroke.as_ref().and_then(Stroke::spray_interval)
+            && let Some(interval) = self
+                .documents
+                .session
+                .editing
+                .stroke
+                .as_ref()
+                .and_then(Stroke::spray_interval)
         {
             ctx.request_repaint_after(std::time::Duration::from_secs_f32(
                 interval,
             ));
         }
         let overlay = self.active_mask_overlay();
-        let overlay_changed = self.rendered_overlay != overlay;
-        if self.rendered != self.doc.revision
-            || self.texture.is_none()
+        let overlay_changed = self.render_cache.rendered_overlay != overlay;
+        if self.render_cache.rendered
+            != self.documents.session.document.revision
+            || self.render_cache.texture.is_none()
             || overlay_changed
         {
             let region = if let Some(r) =
@@ -345,13 +400,14 @@ impl Parfait {
                 PixelRect {
                     x0: 0,
                     y0: 0,
-                    x1: self.doc.width,
-                    y1: self.doc.height,
+                    x1: self.documents.session.document.width,
+                    y1: self.documents.session.document.height,
                 }
             };
             let width = (region.x1 - region.x0) as usize;
             let height = (region.y1 - region.y0) as usize;
-            let mut pixels = self.doc.composite_region(region);
+            let mut pixels =
+                self.documents.session.document.composite_region(region);
             for (y, row) in pixels.chunks_exact_mut(width * 4).enumerate() {
                 for (x, p) in row.as_chunks_mut::<4>().0.iter_mut().enumerate()
                 {
@@ -374,11 +430,17 @@ impl Parfait {
                 }
             }
             if overlay.is_some() {
-                let mask =
-                    self.doc.layers[self.doc.active].mask.as_ref().unwrap();
+                let mask = self.documents.session.document.layers
+                    [self.documents.session.document.active]
+                    .mask
+                    .as_ref()
+                    .unwrap();
                 crate::mask_area::tint_mask_area(
                     &mut pixels,
-                    [self.doc.width, self.doc.height],
+                    [
+                        self.documents.session.document.width,
+                        self.documents.session.document.height,
+                    ],
                     &mask.coverage,
                     region,
                 );
@@ -387,7 +449,7 @@ impl Parfait {
                 [width, height],
                 &pixels,
             );
-            if let Some(tex) = &mut self.texture {
+            if let Some(tex) = &mut self.render_cache.texture {
                 if full_refresh || overlay_changed || damage.is_none() {
                     tex.set(image, egui::TextureOptions::LINEAR);
                 } else {
@@ -398,23 +460,24 @@ impl Parfait {
                     );
                 }
             } else {
-                self.texture = Some(ctx.load_texture(
+                self.render_cache.texture = Some(ctx.load_texture(
                     "drawing",
                     image,
                     egui::TextureOptions::LINEAR,
                 ));
             }
-            self.rendered = self.doc.revision;
-            self.rendered_overlay = overlay;
+            self.render_cache.rendered =
+                self.documents.session.document.revision;
+            self.render_cache.rendered_overlay = overlay;
         }
-        if let Some(texture) = &self.texture {
+        if let Some(texture) = &self.render_cache.texture {
             let corners = [
                 Vec2::ZERO,
                 egui::vec2(size.x, 0.),
                 size,
                 egui::vec2(0., size.y),
             ]
-            .map(|p| self.view.screen(p, rect, size));
+            .map(|p| self.documents.session.view.screen(p, rect, size));
             let uvs = [
                 egui::pos2(0., 0.),
                 egui::pos2(1., 0.),
@@ -433,17 +496,27 @@ impl Parfait {
             ui.painter().with_clip_rect(rect).add(egui::Shape::mesh(mesh));
         }
         if self.display.pixel_grid {
-            self.view.paint_pixel_grid(ui, rect, size);
+            self.documents.session.view.paint_pixel_grid(ui, rect, size);
         }
-        self.pixel_selection_view.paint(ui, &self.doc, &self.view, rect);
+        self.render_cache.selection_boundary.paint(
+            ui,
+            &self.documents.session.document,
+            &self.documents.session.view,
+            rect,
+        );
         if self.display.rulers {
             crate::rulers::paint(
                 ui,
                 outer,
                 rect,
-                self.view.document(rect.left_top(), rect, size),
-                self.view.flip_sign()
-                    * (self.view.angle.cos() / self.view.zoom),
+                self.documents.session.view.document(
+                    rect.left_top(),
+                    rect,
+                    size,
+                ),
+                self.documents.session.view.flip_sign()
+                    * (self.documents.session.view.angle.cos()
+                        / self.documents.session.view.zoom),
             );
         }
         if response.hovered() {
@@ -455,7 +528,9 @@ impl Parfait {
                 && let Some(pos) = ctx.input(|i| i.pointer.hover_pos())
             {
                 ctx.set_cursor_icon(egui::CursorIcon::None);
-                let radius = (self.brush.size * self.view.zoom / 2.).max(2.);
+                let radius =
+                    (self.brush.size * self.documents.session.view.zoom / 2.)
+                        .max(2.);
                 ui.painter().circle_stroke(
                     pos,
                     radius,
@@ -568,31 +643,45 @@ mod tests {
                 for vertical in [false, true] {
                     let dir = tempfile::tempdir().unwrap();
                     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-                    app.doc = parfait_core::Document::new(32, 32);
+                    app.documents.session.document =
+                        parfait_core::Document::new(32, 32);
                     for row in 0..32 {
                         for column in 0..16 {
-                            Arc::make_mut(&mut app.doc.layers[1].pixels)
-                                [(row * 32 + column) * 4 + 3] = 255;
+                            Arc::make_mut(
+                                &mut app.documents.session.document.layers[1]
+                                    .pixels,
+                            )[(row * 32 + column) * 4 + 3] = 255;
                         }
                     }
-                    app.doc.add_layer();
+                    app.documents.session.document.add_layer();
                     for row in 0..32 {
                         for column in 8..24 {
-                            Arc::make_mut(&mut app.doc.layers[2].pixels)
-                                [(row * 32 + column) * 4 + 3] = 255;
+                            Arc::make_mut(
+                                &mut app.documents.session.document.layers[2]
+                                    .pixels,
+                            )[(row * 32 + column) * 4 + 3] = 255;
                         }
                     }
-                    app.doc.layers[2].locked = true;
-                    app.doc.add_layer();
-                    app.doc.layers[3].visible = false;
-                    Arc::make_mut(&mut app.doc.layers[3].pixels).fill(255);
+                    app.documents.session.document.layers[2].locked = true;
+                    app.documents.session.document.add_layer();
+                    app.documents.session.document.layers[3].visible = false;
+                    Arc::make_mut(
+                        &mut app.documents.session.document.layers[3].pixels,
+                    )
+                    .fill(255);
                     app.edit_named("Fixture opacity", |document| {
                         document.layers[1].opacity = 0.75
                     });
-                    let original = app.doc.layers.clone();
-                    let history: Vec<_> =
-                        app.history.rows().map(|row| row.id).collect();
-                    app.view = View {
+                    let original =
+                        app.documents.session.document.layers.clone();
+                    let history: Vec<_> = app
+                        .documents
+                        .session
+                        .history
+                        .rows()
+                        .map(|row| row.id)
+                        .collect();
+                    app.documents.session.view = View {
                         zoom: 3.,
                         angle,
                         pan: egui::vec2(12., -8.),
@@ -609,7 +698,7 @@ mod tests {
                         })
                         .unwrap();
                     for (column, expected) in [(4.5, 1), (12.5, 2), (28.5, 0)] {
-                        let pos = app.view.screen(
+                        let pos = app.documents.session.view.screen(
                             egui::vec2(column, 8.5),
                             rect,
                             egui::vec2(32., 32.),
@@ -630,8 +719,11 @@ mod tests {
                             &ctx,
                             vec![Event::PointerMoved(pos), button(true)],
                         );
-                        assert_eq!(app.doc.active, expected);
-                        assert!(app.stroke.is_none());
+                        assert_eq!(
+                            app.documents.session.document.active,
+                            expected
+                        );
+                        assert!(app.documents.session.editing.stroke.is_none());
                         pointer_frame(
                             &mut app,
                             &ctx,
@@ -641,9 +733,14 @@ mod tests {
                                 button(false),
                             ],
                         );
-                        assert_eq!(app.doc.layers, original);
                         assert_eq!(
-                            app.history
+                            app.documents.session.document.layers,
+                            original
+                        );
+                        assert_eq!(
+                            app.documents
+                                .session
+                                .history
                                 .rows()
                                 .map(|row| row.id)
                                 .collect::<Vec<_>>(),
@@ -660,10 +757,10 @@ mod tests {
         use super::*;
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(32, 32);
+        app.documents.session.document = parfait_core::Document::new(32, 32);
         app.new_layer();
         app.undo();
-        let original = app.doc.layers.clone();
+        let original = app.documents.session.document.layers.clone();
         let ctx = egui::Context::default();
         pointer_frame(&mut app, &ctx, vec![]);
         let pos = egui::pos2(210., 210.);
@@ -680,8 +777,8 @@ mod tests {
                 },
             ],
         );
-        assert!(app.stroke.is_some());
-        assert_ne!(app.doc.layers, original);
+        assert!(app.documents.session.editing.stroke.is_some());
+        assert_ne!(app.documents.session.document.layers, original);
         pointer_frame(
             &mut app,
             &ctx,
@@ -693,10 +790,10 @@ mod tests {
                 modifiers: Default::default(),
             }],
         );
-        assert!(app.stroke.is_none());
-        assert_eq!(app.doc.layers, original);
+        assert!(app.documents.session.editing.stroke.is_none());
+        assert_eq!(app.documents.session.document.layers, original);
         app.redo();
-        assert_eq!(app.doc.layers.len(), 3);
+        assert_eq!(app.documents.session.document.layers.len(), 3);
     }
 
     #[test]
@@ -704,10 +801,10 @@ mod tests {
         use super::*;
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(32, 32);
+        app.documents.session.document = parfait_core::Document::new(32, 32);
         app.edit(|document| document.add_layer());
         app.undo();
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         app.brush.opacity = 0.;
         let ctx = egui::Context::default();
         let frame = |app: &mut Parfait, events| {
@@ -734,9 +831,9 @@ mod tests {
         };
         frame(&mut app, vec![Event::PointerMoved(pos), button(true)]);
         frame(&mut app, vec![button(false)]);
-        assert_eq!(app.doc, original);
+        assert_eq!(app.documents.session.document, original);
         app.redo();
-        assert_eq!(app.doc.layers.len(), 3);
+        assert_eq!(app.documents.session.document.layers.len(), 3);
     }
 
     #[test]
@@ -746,7 +843,8 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let mut app =
                 crate::app::Parfait::open(dir.path().to_path_buf()).unwrap();
-            app.doc = parfait_core::Document::new(64, 64);
+            app.documents.session.document =
+                parfait_core::Document::new(64, 64);
             app.brush = parfait_core::Brush {
                 continuous_spray: true,
                 pressure: false,
@@ -783,8 +881,8 @@ mod tests {
                 0.01,
                 vec![eframe::egui::Event::PointerMoved(position), button(true)],
             );
-            let started = app.doc.revision;
-            let starting_alpha: u64 = app.doc.layers[1]
+            let started = app.documents.session.document.revision;
+            let starting_alpha: u64 = app.documents.session.document.layers[1]
                 .pixels
                 .as_chunks::<4>()
                 .0
@@ -794,9 +892,9 @@ mod tests {
             app.brush.continuous_spray = false;
             app.brush.operation = parfait_core::BrushOperation::Blend;
             frame(&mut app, 0.11, vec![]);
-            assert!(app.doc.revision > started);
+            assert!(app.documents.session.document.revision > started);
             assert!(
-                app.doc.layers[1]
+                app.documents.session.document.layers[1]
                     .pixels
                     .as_chunks::<4>()
                     .0
@@ -805,7 +903,7 @@ mod tests {
                     .sum::<u64>()
                     > starting_alpha
             );
-            let painted = app.doc.composite();
+            let painted = app.documents.session.document.composite();
             let event = match stop {
                 0 => button(false),
                 1 => eframe::egui::Event::WindowFocused(false),
@@ -821,8 +919,8 @@ mod tests {
             };
             frame(&mut app, 0.21, vec![event]);
             frame(&mut app, 0.31, vec![]);
-            assert!(app.stroke.is_none());
-            assert_eq!(app.doc.composite(), painted);
+            assert!(app.documents.session.editing.stroke.is_none());
+            assert_eq!(app.documents.session.document.composite(), painted);
         }
     }
     use super::*;
@@ -830,10 +928,10 @@ mod tests {
     fn pan_moves_painted_ruler_labels_without_editing_or_uploading_artwork() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = parfait_core::Document::new(512, 512);
-        app.view.initialized = true;
+        app.documents.session.document = parfait_core::Document::new(512, 512);
+        app.documents.session.view.initialized = true;
         app.navigation_tool = 1;
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         let frame = |app: &mut Parfait, events| {
             let mut output = ctx.run_ui(
@@ -865,7 +963,7 @@ mod tests {
             let uploaded = output
                 .textures_delta
                 .set
-                .contains_key(&app.texture.as_ref().unwrap().id());
+                .contains_key(&app.render_cache.texture.as_ref().unwrap().id());
             output.textures_delta.clear();
             (labels, uploaded)
         };
@@ -883,8 +981,8 @@ mod tests {
         frame(&mut app, vec![button(start, true)]);
         frame(&mut app, vec![Event::PointerMoved(end)]);
         let (after, uploaded) = frame(&mut app, vec![button(end, false)]);
-        assert_eq!(app.view.pan, delta);
-        assert_eq!(app.doc, original);
+        assert_eq!(app.documents.session.view.pan, delta);
+        assert_eq!(app.documents.session.document, original);
         assert!(!uploaded);
         for angle in [0., -std::f32::consts::FRAC_PI_2] {
             let before = before
@@ -909,8 +1007,8 @@ mod tests {
             let expected = if angle == 0. { delta.x } else { delta.y };
             assert!((moved - expected).abs() < 0.001);
         }
-        app.history.undo(&mut app.doc);
-        assert_eq!(app.doc, original);
+        app.documents.session.history.undo(&mut app.documents.session.document);
+        assert_eq!(app.documents.session.document, original);
     }
 
     fn zoom_frame(
@@ -952,14 +1050,16 @@ mod tests {
         ] {
             let dir = tempfile::tempdir().unwrap();
             let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-            app.doc = parfait_core::Document::new(64, 64);
+            app.documents.session.document =
+                parfait_core::Document::new(64, 64);
             let ctx = egui::Context::default();
             crate::theme::apply(&ctx);
             let rect = zoom_frame(&mut app, &ctx, vec![]);
-            app.view.pan = egui::vec2(35., -18.);
+            app.documents.session.view.pan = egui::vec2(35., -18.);
             let size = egui::vec2(64., 64.);
-            let center = app.view.document(rect.center(), rect, size);
-            let zoom = app.view.zoom;
+            let center =
+                app.documents.session.view.document(rect.center(), rect, size);
+            let zoom = app.documents.session.view.zoom;
             let modifiers = egui::Modifiers {
                 ctrl: true,
                 command: true,
@@ -983,18 +1083,24 @@ mod tests {
                     Event::ModifiersChanged(Default::default()),
                 ],
             );
-            assert!((app.view.zoom - zoom * factor).abs() < 1e-6);
             assert!(
-                (app.view.document(rect.center(), rect, size) - center)
+                (app.documents.session.view.zoom - zoom * factor).abs() < 1e-6
+            );
+            assert!(
+                (app.documents.session.view.document(
+                    rect.center(),
+                    rect,
+                    size
+                ) - center)
                     .length()
                     < 1e-4
             );
             assert_eq!(ctx.zoom_factor(), 1.);
             zoom_frame(&mut app, &ctx, vec![key_event(false)]);
             app.brush_details.open = true;
-            let zoom = app.view.zoom;
+            let zoom = app.documents.session.view.zoom;
             zoom_frame(&mut app, &ctx, vec![key_event(true)]);
-            assert_eq!(app.view.zoom, zoom);
+            assert_eq!(app.documents.session.view.zoom, zoom);
         }
     }
     #[test]
@@ -1003,7 +1109,8 @@ mod tests {
             for delta in [-30., 30.] {
                 let dir = tempfile::tempdir().unwrap();
                 let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-                app.doc = parfait_core::Document::new(64, 64);
+                app.documents.session.document =
+                    parfait_core::Document::new(64, 64);
                 let ctx = egui::Context::default();
                 crate::theme::apply(&ctx);
                 let pointer = egui::pos2(170., 240.);
@@ -1013,8 +1120,9 @@ mod tests {
                     vec![Event::PointerMoved(pointer)],
                 );
                 let size = egui::vec2(64., 64.);
-                let anchor = app.view.document(pointer, rect, size);
-                let before = app.view.zoom;
+                let anchor =
+                    app.documents.session.view.document(pointer, rect, size);
+                let before = app.documents.session.view.zoom;
                 let modifiers = egui::Modifiers {
                     ctrl,
                     command: ctrl,
@@ -1034,15 +1142,17 @@ mod tests {
                     ],
                 );
                 assert!(
-                    (app.view.zoom - before) * delta > 0.,
+                    (app.documents.session.view.zoom - before) * delta > 0.,
                     "ctrl={ctrl}, delta={delta}"
                 );
                 assert!(
-                    (app.view.document(pointer, rect, size) - anchor).length()
+                    (app.documents.session.view.document(pointer, rect, size)
+                        - anchor)
+                        .length()
                         < 1e-4
                 );
                 assert_eq!(ctx.zoom_factor(), 1.);
-                let before = app.view.zoom;
+                let before = app.documents.session.view.zoom;
                 zoom_frame(
                     &mut app,
                     &ctx,
@@ -1051,27 +1161,27 @@ mod tests {
                         Event::Zoom(1.5),
                     ],
                 );
-                assert_eq!(app.view.zoom, before);
+                assert_eq!(app.documents.session.view.zoom, before);
             }
         }
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = parfait_core::Document::new(64, 64);
+        app.documents.session.document = parfait_core::Document::new(64, 64);
         let ctx = egui::Context::default();
         zoom_frame(
             &mut app,
             &ctx,
             vec![Event::PointerMoved(egui::pos2(150., 160.))],
         );
-        let before = app.view.zoom;
+        let before = app.documents.session.view.zoom;
         zoom_frame(&mut app, &ctx, vec![Event::Zoom(1.1)]);
-        assert!((app.view.zoom - before * 1.1).abs() < 1e-6);
+        assert!((app.documents.session.view.zoom - before * 1.1).abs() < 1e-6);
     }
     #[test]
     fn unused_control_pointer_combinations_keep_panning_and_drawing() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = parfait_core::Document::new(64, 64);
+        app.documents.session.document = parfait_core::Document::new(64, 64);
         let ctx = egui::Context::default();
         let modifiers =
             egui::Modifiers { ctrl: true, command: true, ..Default::default() };
@@ -1091,8 +1201,8 @@ mod tests {
                 Event::PointerMoved(start),
             ],
         );
-        let before = app.doc.composite();
-        let zoom = app.view.zoom;
+        let before = app.documents.session.document.composite();
+        let zoom = app.documents.session.view.zoom;
         zoom_frame(
             &mut app,
             &ctx,
@@ -1104,9 +1214,9 @@ mod tests {
             &ctx,
             vec![button(end, PointerButton::Middle, false)],
         );
-        assert_eq!(app.view.pan, egui::vec2(12., 8.));
-        assert_eq!(app.view.zoom, zoom);
-        assert_eq!(app.doc.composite(), before);
+        assert_eq!(app.documents.session.view.pan, egui::vec2(12., 8.));
+        assert_eq!(app.documents.session.view.zoom, zoom);
+        assert_eq!(app.documents.session.document.composite(), before);
         zoom_frame(
             &mut app,
             &ctx,
@@ -1115,13 +1225,13 @@ mod tests {
                 button(end, PointerButton::Primary, false),
             ],
         );
-        assert_ne!(app.doc.composite(), before);
+        assert_ne!(app.documents.session.document.composite(), before);
     }
     #[test]
     fn hand_drag_moves_view_without_painting_then_pen_draws() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = parfait_core::Document::new(64, 64);
+        app.documents.session.document = parfait_core::Document::new(64, 64);
         let ctx = egui::Context::default();
         let frame = |app: &mut Parfait, events| {
             let mut output = ctx.run_ui(
@@ -1148,22 +1258,22 @@ mod tests {
         frame(&mut app, vec![]);
         let start = egui::pos2(210., 210.);
         let end = start + egui::vec2(15., 10.);
-        let before = app.doc.composite();
+        let before = app.documents.session.document.composite();
         app.navigation_tool = 1;
         frame(&mut app, vec![Event::PointerMoved(start)]);
         frame(&mut app, vec![button(start, true)]);
         frame(&mut app, vec![Event::PointerMoved(end)]);
         frame(&mut app, vec![button(end, false)]);
-        assert_eq!(app.view.pan, egui::vec2(15., 10.));
-        assert_eq!(app.doc.composite(), before);
+        assert_eq!(app.documents.session.view.pan, egui::vec2(15., 10.));
+        assert_eq!(app.documents.session.document.composite(), before);
         app.navigation_tool = 0;
         frame(&mut app, vec![button(end, true)]);
         frame(&mut app, vec![button(end, false)]);
-        assert_ne!(app.doc.composite(), before);
+        assert_ne!(app.documents.session.document.composite(), before);
         // Press Space after starting a pen stroke: subsequent moves must only pan,
         // even if Space is released before the mouse button.
         frame(&mut app, vec![button(end, true)]);
-        let painted = app.doc.composite();
+        let painted = app.documents.session.document.composite();
         let space = |pressed| Event::Key {
             key: Key::Space,
             physical_key: None,
@@ -1175,8 +1285,8 @@ mod tests {
         frame(&mut app, vec![Event::PointerMoved(end + egui::vec2(12., 0.))]);
         frame(&mut app, vec![space(false)]);
         frame(&mut app, vec![Event::PointerMoved(end + egui::vec2(24., 0.))]);
-        assert_eq!(app.doc.composite(), painted);
-        assert!(app.stroke.is_none());
+        assert_eq!(app.documents.session.document.composite(), painted);
+        assert!(app.documents.session.editing.stroke.is_none());
         frame(&mut app, vec![button(end + egui::vec2(24., 0.), false)]);
     }
     #[test]
@@ -1193,14 +1303,18 @@ mod tests {
     fn verify_texture_updates(folder_mode: Option<parfait_core::BlendMode>) {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = parfait_core::Document::new(128, 128);
-        app.doc.layers[0].visible = false; // exercise checkerboard origin in partial updates
+        app.documents.session.document = parfait_core::Document::new(128, 128);
+        app.documents.session.document.layers[0].visible = false; // exercise checkerboard origin in partial updates
         if let Some(mode) = folder_mode {
-            app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
-            app.doc.layers[2].opacity = 0.63;
-            app.doc.layers[2].blend_mode = mode;
-            assert!(app.doc.create_layer_mask(2, 193));
-            app.doc.active = 1;
+            app.documents
+                .session
+                .document
+                .group_layers_in_folder(2, "Folder".into())
+                .unwrap();
+            app.documents.session.document.layers[2].opacity = 0.63;
+            app.documents.session.document.layers[2].blend_mode = mode;
+            assert!(app.documents.session.document.create_layer_mask(2, 193));
+            app.documents.session.document.active = 1;
         }
         let ctx = egui::Context::default();
         let mut cache = vec![Color32::TRANSPARENT; 128 * 128];
@@ -1220,7 +1334,7 @@ mod tests {
                     egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
                 },
             );
-            let id = app.texture.as_ref().unwrap().id();
+            let id = app.render_cache.texture.as_ref().unwrap().id();
             let updates =
                 out.textures_delta.set.get(&id).expect("canvas upload");
             assert_eq!(updates.len(), 1);
@@ -1238,8 +1352,15 @@ mod tests {
                         [row * image.size[0]..(row + 1) * image.size[0]],
                 );
             }
-            for (i, p) in
-                app.doc.composite().as_chunks::<4>().0.iter().enumerate()
+            for (i, p) in app
+                .documents
+                .session
+                .document
+                .composite()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .enumerate()
             {
                 let bg = if (i % 128 / 16 + i / 128 / 16).is_multiple_of(2) {
                     235.
@@ -1267,14 +1388,14 @@ mod tests {
             vec![Event::PointerMoved(p), button(true), button(false)],
             true,
         );
-        app.doc.layers[1].opacity = 0.2;
-        app.doc.touch();
+        app.documents.session.document.layers[1].opacity = 0.2;
+        app.documents.session.document.touch();
         frame(&mut app, vec![], false);
         app.edit(|d| {
             d.layers[1].blend_mode = parfait_core::BlendMode::Multiply
         });
         frame(&mut app, vec![], false);
-        app.history.undo(&mut app.doc);
+        app.documents.session.history.undo(&mut app.documents.session.document);
         frame(&mut app, vec![], false);
     }
 
@@ -1381,10 +1502,10 @@ mod tests {
         use crate::display::ViewCommand;
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        app.doc = parfait_core::Document::new(64, 64);
+        app.documents.session.document = parfait_core::Document::new(64, 64);
         let ctx = egui::Context::default();
         zoom_frame(&mut app, &ctx, vec![]);
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         for command in [
             ViewCommand::FlipHorizontal,
             ViewCommand::FlipVertical,
@@ -1404,24 +1525,21 @@ mod tests {
             app.display.brush_cursor = false;
             let mut output =
                 ctx.run_ui(Default::default(), |ui| app.canvas(ui));
-            assert!(
-                !output
-                    .textures_delta
-                    .set
-                    .contains_key(&app.texture.as_ref().unwrap().id())
-            );
+            assert!(!output.textures_delta.set.contains_key(
+                &app.render_cache.texture.as_ref().unwrap().id()
+            ));
             output.textures_delta.clear();
-            assert_eq!(app.doc, original);
+            assert_eq!(app.documents.session.document, original);
         }
         app.undo();
-        assert_eq!(app.doc, original);
-        app.view.zoom = 8.;
+        assert_eq!(app.documents.session.document, original);
+        app.documents.session.view.zoom = 8.;
         let mut output = ctx.run_ui(Default::default(), |ui| app.canvas(ui));
         assert!(
             !output
                 .textures_delta
                 .set
-                .contains_key(&app.texture.as_ref().unwrap().id())
+                .contains_key(&app.render_cache.texture.as_ref().unwrap().id())
         );
         assert!(output.shapes.iter().any(|shape| matches!(
             shape.shape,
@@ -1429,16 +1547,20 @@ mod tests {
         )));
         output.textures_delta.clear();
         app.display.rulers = true;
-        app.view.flip_horizontal = true;
-        app.view.flip_vertical = true;
-        app.view.angle = 0.4;
-        app.view.pan = Vec2::ZERO;
-        app.view.zoom = 4.;
+        app.documents.session.view.flip_horizontal = true;
+        app.documents.session.view.flip_vertical = true;
+        app.documents.session.view.angle = 0.4;
+        app.documents.session.view.pan = Vec2::ZERO;
+        app.documents.session.view.zoom = 4.;
         app.brush.size = 4.;
         app.brush.pressure = false;
         let rect = zoom_frame(&mut app, &ctx, vec![]);
         let point = egui::vec2(12.5, 45.5);
-        let position = app.view.screen(point, rect, egui::vec2(64., 64.));
+        let position = app.documents.session.view.screen(
+            point,
+            rect,
+            egui::vec2(64., 64.),
+        );
         zoom_frame(&mut app, &ctx, vec![Event::PointerMoved(position)]);
         zoom_frame(
             &mut app,
@@ -1453,10 +1575,13 @@ mod tests {
                 })
                 .collect(),
         );
-        let pixels = &app.doc.layers[1].pixels;
+        let pixels = &app.documents.session.document.layers[1].pixels;
         assert!(pixels[(45 * 64 + 12) * 4 + 3] > 0);
         assert_eq!(pixels[(18 * 64 + 51) * 4 + 3], 0);
         app.undo();
-        assert_eq!(app.doc.composite(), original.composite());
+        assert_eq!(
+            app.documents.session.document.composite(),
+            original.composite()
+        );
     }
 }

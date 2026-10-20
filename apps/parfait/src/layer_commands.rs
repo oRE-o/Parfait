@@ -23,7 +23,7 @@ impl Parfait {
         if command.is_pixel_selection() {
             return self.pixel_selection_reason(command);
         }
-        if self.stroke.is_some() {
+        if self.documents.session.editing.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
         if let Some(reason) = self.tree_command_disabled_reason(command) {
@@ -43,17 +43,27 @@ impl Parfait {
         }
         if command.category() == Category::Layer {
             let mask = self.selected_layer_mask();
-            if !self.doc.has_non_raster_layers()
+            if !self.documents.session.document.has_non_raster_layers()
                 && command == Command::LayerClipping
-                && !self.doc.layers[self.doc.active].clipped
-                && self.doc.layers.iter().enumerate().any(|(index, _)| {
-                    mask & (1 << index) != 0
-                        && !self.doc.layers[..index].iter().enumerate().any(
-                            |(below, layer)| {
-                                mask & (1 << below) == 0 && !layer.clipped
-                            },
-                        )
-                })
+                && !self.documents.session.document.layers
+                    [self.documents.session.document.active]
+                    .clipped
+                && self
+                    .documents
+                    .session
+                    .document
+                    .layers
+                    .iter()
+                    .enumerate()
+                    .any(|(index, _)| {
+                        mask & (1 << index) != 0
+                            && !self.documents.session.document.layers[..index]
+                                .iter()
+                                .enumerate()
+                                .any(|(below, layer)| {
+                                    mask & (1 << below) == 0 && !layer.clipped
+                                })
+                    })
             {
                 return Some(
                     "Keep an unclipped base layer below every selected clipping layer.",
@@ -65,47 +75,59 @@ impl Parfait {
                     Command::MoveLayerUp | Command::MoveLayerDown
                 )
             {
-                if self.stroke.is_some()
+                if self.documents.session.editing.stroke.is_some()
                     || self.dialog_open()
-                    || self.layer_list.owns_pointer()
+                    || self.documents.session.layer_ui.list.owns_pointer()
                     || self.workspace.dragging.is_some()
                     || self.workspace.resizing
                 {
                     return Some("Finish the current gesture or dialog first.");
                 }
-                let can_move = (0..self.doc.layers.len()).any(|index| {
-                    if mask & (1 << index) == 0 {
-                        return false;
-                    }
-                    let next = if command == Command::MoveLayerUp {
-                        index
-                            .checked_add(1)
-                            .filter(|index| *index < self.doc.layers.len())
-                    } else {
-                        index.checked_sub(1)
-                    };
-                    next.is_some_and(|index| mask & (1 << index) == 0)
-                });
+                let can_move =
+                    (0..self.documents.session.document.layers.len()).any(
+                        |index| {
+                            if mask & (1 << index) == 0 {
+                                return false;
+                            }
+                            let next = if command == Command::MoveLayerUp {
+                                index.checked_add(1).filter(|index| {
+                                    *index
+                                        < self
+                                            .documents
+                                            .session
+                                            .document
+                                            .layers
+                                            .len()
+                                })
+                            } else {
+                                index.checked_sub(1)
+                            };
+                            next.is_some_and(|index| mask & (1 << index) == 0)
+                        },
+                    );
                 return if can_move {
                     None
                 } else {
                     Some("The selected layers are already at this boundary.")
                 };
             }
-            if let Some(reason) =
-                self.layer_command_disabled_reason(command, self.doc.active)
-            {
+            if let Some(reason) = self.layer_command_disabled_reason(
+                command,
+                self.documents.session.document.active,
+            ) {
                 return Some(reason);
             }
             match command {
                 Command::DeleteLayer
-                    if mask.count_ones() as usize >= self.doc.layers.len() =>
+                    if mask.count_ones() as usize
+                        >= self.documents.session.document.layers.len() =>
                 {
                     return Some("Keep at least one layer in the drawing.");
                 }
                 Command::DuplicateLayer => {
                     return parfait_storage::layer_duplication_error(
-                        &self.doc, mask,
+                        &self.documents.session.document,
+                        mask,
                     );
                 }
                 _ => {}
@@ -113,10 +135,10 @@ impl Parfait {
             return None;
         }
         match command {
-            Command::Undo if !self.history.can_undo() => {
+            Command::Undo if !self.documents.session.history.can_undo() => {
                 Some("There is no earlier edit to undo.")
             }
-            Command::Redo if !self.history.can_redo() => {
+            Command::Redo if !self.documents.session.history.can_redo() => {
                 Some("There is no later edit to redo.")
             }
             _ => None,
@@ -128,10 +150,10 @@ impl Parfait {
         command: Command,
         layer: usize,
     ) -> Option<&'static str> {
-        if self.stroke.is_some() {
+        if self.documents.session.editing.stroke.is_some() {
             return Some("Finish the current stroke first.");
         }
-        if self.layer_list.owns_pointer() {
+        if self.documents.session.layer_ui.list.owns_pointer() {
             return Some("Finish the layer drag first.");
         }
         if self.dialog_open() {
@@ -153,17 +175,20 @@ impl Parfait {
             }
             if action == parfait_core::LayerCombine::CopyVisible
                 && let Some(reason) = parfait_storage::layer_growth_error(
-                    &self.doc,
+                    &self.documents.session.document,
                     "Visible copy".len(),
                 )
             {
                 return Some(reason);
             }
             return self
-                .doc
+                .documents
+                .session
+                .document
                 .layer_combine_reason(action, self.selected_layer_mask());
         }
-        let Some(target) = self.doc.layers.get(layer) else {
+        let Some(target) = self.documents.session.document.layers.get(layer)
+        else {
             return Some("The target layer no longer exists.");
         };
         if target.kind.is_paper()
@@ -185,7 +210,7 @@ impl Parfait {
                 "투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.",
             );
         }
-        if self.doc.has_non_raster_layers() {
+        if self.documents.session.document.has_non_raster_layers() {
             if matches!(
                 command,
                 Command::DeleteLayer
@@ -207,7 +232,12 @@ impl Parfait {
             }
             if command == Command::LayerClipping
                 && !target.clipped
-                && self.doc.layer_clipping_base_below(layer, 0).is_none()
+                && self
+                    .documents
+                    .session
+                    .document
+                    .layer_clipping_base_below(layer, 0)
+                    .is_none()
             {
                 return Some(
                     "같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요.",
@@ -227,32 +257,45 @@ impl Parfait {
                 let parent = if target.kind == parfait_core::LayerKind::Folder {
                     Some(layer)
                 } else {
-                    target.parent.and_then(|id| self.doc.layer_index(id))
+                    target.parent.and_then(|id| {
+                        self.documents.session.document.layer_index(id)
+                    })
                 };
                 if parent.is_some_and(|index| {
-                    !self.doc.layer_ancestors_unlocked(index)
+                    !self
+                        .documents
+                        .session
+                        .document
+                        .layer_ancestors_unlocked(index)
                 }) {
                     return Some(
                         "Unlock the parent folder before inserting a layer.",
                     );
                 }
                 parfait_storage::layer_growth_error(
-                    &self.doc,
+                    &self.documents.session.document,
                     "Layer ".len()
-                        + self.doc.layers.len().ilog10() as usize
+                        + self.documents.session.document.layers.len().ilog10()
+                            as usize
                         + 1,
                 )
             }
             Command::DuplicateLayer => {
-                parfait_storage::layer_duplication_error(&self.doc, 1 << layer)
+                parfait_storage::layer_duplication_error(
+                    &self.documents.session.document,
+                    1 << layer,
+                )
             }
-            Command::DeleteLayer if self.doc.layers.len() == 1 => {
+            Command::DeleteLayer
+                if self.documents.session.document.layers.len() == 1 =>
+            {
                 Some("Keep at least one layer in the drawing.")
             }
             Command::MoveLayerUp
             | Command::MoveActiveLayerUp
             | Command::MoveActiveLayerToTop
-                if layer + 1 == self.doc.layers.len() =>
+                if layer + 1
+                    == self.documents.session.document.layers.len() =>
             {
                 Some("This layer is already at the top.")
             }
@@ -264,13 +307,13 @@ impl Parfait {
                 Some("This layer is already at the bottom.")
             }
             Command::SelectLayerAbove | Command::SelectLayerBelow
-                if self.doc.layers.len() == 1 =>
+                if self.documents.session.document.layers.len() == 1 =>
             {
                 Some("There is only one layer in the drawing.")
             }
             Command::LayerClipping
                 if !target.clipped
-                    && !self.doc.layers[..layer]
+                    && !self.documents.session.document.layers[..layer]
                         .iter()
                         .any(|layer| !layer.clipped) =>
             {
@@ -285,7 +328,7 @@ impl Parfait {
         command: Command,
         layer: usize,
     ) {
-        if self.doc.has_non_raster_layers()
+        if self.documents.session.document.has_non_raster_layers()
             && matches!(
                 command,
                 Command::DeleteLayer
@@ -315,8 +358,8 @@ impl Parfait {
         ) {
             return;
         }
-        let active_before = self.doc.active;
-        let revision = self.doc.revision;
+        let active_before = self.documents.session.document.active;
+        let revision = self.documents.session.document.revision;
         self.edit_named(command.label(), |document| match command {
             Command::DeleteLayer => {
                 document.layers.remove(layer);
@@ -361,8 +404,10 @@ impl Parfait {
             }
             _ => unreachable!(),
         });
-        if self.doc.active != active_before && self.doc.revision == revision {
-            self.doc.touch();
+        if self.documents.session.document.active != active_before
+            && self.documents.session.document.revision == revision
+        {
+            self.documents.session.document.touch();
         }
     }
 
@@ -375,12 +420,12 @@ impl Parfait {
             return;
         };
         let mask = self.selected_layer_mask();
-        let revision = self.doc.revision;
+        let revision = self.documents.session.document.revision;
         self.edit_named(command.label(), |document| {
             document.combine_layers(action, mask);
         });
-        if self.doc.revision != revision {
-            self.layer_list = Default::default();
+        if self.documents.session.document.revision != revision {
+            self.documents.session.layer_ui.list = Default::default();
         }
     }
 

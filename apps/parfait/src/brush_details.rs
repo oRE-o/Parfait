@@ -467,7 +467,7 @@ impl Parfait {
             .preview
             .as_ref()
             .is_none_or(|(brush, _)| brush != &self.brush);
-        if changed && self.stroke.is_none() {
+        if changed && self.documents.session.editing.stroke.is_none() {
             let image = crate::brushes::preview_image(&self.brush);
             if let Some((cached, texture)) = &mut self.brush_details.preview {
                 texture.set(image, egui::TextureOptions::LINEAR);
@@ -959,7 +959,7 @@ mod tests {
         for size in [egui::vec2(960., 640.), egui::vec2(1440., 920.)] {
             let dir = tempfile::tempdir().unwrap();
             let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-            let artwork = app.doc.clone();
+            let artwork = app.documents.session.document.clone();
             app.brush_details.open = true;
             let ctx = egui::Context::default();
             crate::theme::apply(&ctx);
@@ -1024,7 +1024,7 @@ mod tests {
             );
             frame(&mut app, vec![event(false)]);
             assert!(!app.brush_details.open);
-            assert_eq!(app.doc, artwork);
+            assert_eq!(app.documents.session.document, artwork);
         }
     }
 
@@ -1033,7 +1033,7 @@ mod tests {
      {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1078,7 +1078,7 @@ mod tests {
         click(&mut app, egui::Id::new("opacity_mode_combo"));
         assert_eq!(app.brush.opacity_mode, OpacityMode::PerStroke);
         assert!(!ctx.any_popup_open());
-        assert_eq!(app.doc, original);
+        assert_eq!(app.documents.session.document, original);
         assert_eq!(Property::Flow.label(), "브러시 농도");
         assert!(Category::Tip.properties().contains(&Property::Flow));
         assert!(!Category::Ink.properties().contains(&Property::Flow));
@@ -1092,7 +1092,7 @@ mod tests {
         app.brush.pressure_spacing = true;
         app.brush.spacing_curve = [1., 0.8, 0.5, 0.2, 0.].into();
         let original = app.brush.clone();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let screen =
@@ -1161,7 +1161,7 @@ mod tests {
         assert!(screen.contains_rect(plot));
         assert!(screen.contains_rect(close));
         assert!(app.brush == original);
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
@@ -1184,7 +1184,7 @@ mod tests {
     fn ink_operation_controls_and_pins_survive_preset_save_and_restart() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         app.brush_details.open = true;
         app.brush_details.category = Category::Ink;
         let ctx = egui::Context::default();
@@ -1285,7 +1285,7 @@ mod tests {
         assert_eq!(app.brush.blur_radius, 17.);
         assert!(app.brush_details.properties.visibility(Property::Stretch));
         assert!(app.brush_details.properties.visibility(Property::BlurRadius));
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
         app.persist_preferences(true);
         drop(app);
         let restored = Parfait::open(dir.path().to_owned()).unwrap();
@@ -1301,7 +1301,7 @@ mod tests {
     {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let mut output = ctx.run_ui(
@@ -1382,7 +1382,7 @@ mod tests {
         assert!(
             buttons.windows(2).all(|pair| pair[1].right() <= pair[0].left())
         );
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
     }
 
     #[test]
@@ -1390,7 +1390,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         app.brush_details.open_stroke_settings();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let screen =
@@ -1436,7 +1436,7 @@ mod tests {
         );
         frame(&mut app, vec![event(false)]);
         assert!(!app.brush_details.dialog_open());
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
     }
 
     #[test]
@@ -1499,7 +1499,7 @@ mod tests {
      {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         app.brush_details.open = true;
@@ -1534,7 +1534,7 @@ mod tests {
         frame(&mut app, vec![]);
         frame(&mut app, vec![escape()]);
         assert!(!app.brush_details.dialog_open());
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
         app.brush.pressure_curve = Default::default();
         app.restore_current_preset();
         assert_eq!(
@@ -1555,7 +1555,7 @@ mod tests {
      {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let brush = app.brush.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
@@ -1600,7 +1600,7 @@ mod tests {
             app.brush_details.properties.visible[Property::Spacing as usize]
         );
         assert!(app.brush == brush);
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
         assert!(app.preset_modified());
         app.save_current_preset();
         app.brush_details.properties = Default::default();
@@ -1649,8 +1649,8 @@ mod tests {
     fn categories_preview_cache_and_escape_preserve_artwork_and_edits() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        app.doc = Document::new(16, 16);
-        let before = app.doc.clone();
+        app.documents.session.document = Document::new(16, 16);
+        let before = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
@@ -1672,7 +1672,7 @@ mod tests {
             app.brush_details.category = category;
             frame(&mut app, vec![]);
             assert!(app.brush.validate());
-            assert_eq!(app.doc, before);
+            assert_eq!(app.documents.session.document, before);
             assert_eq!(app.brush_details.category_targets.len(), 6);
             assert!(
                 app.brush_details
@@ -1716,6 +1716,6 @@ mod tests {
         );
         assert!(!app.brush_details.open);
         assert_eq!(app.brush.size, 42.);
-        assert_eq!(app.doc, before);
+        assert_eq!(app.documents.session.document, before);
     }
 }

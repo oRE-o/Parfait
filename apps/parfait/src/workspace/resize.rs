@@ -421,7 +421,8 @@ mod tests {
         fn new() -> Self {
             let directory = tempfile::tempdir().unwrap();
             let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-            app.doc = parfait_core::Document::new(32, 24);
+            app.documents.session.document =
+                parfait_core::Document::new(32, 24);
             let ctx = egui::Context::default();
             crate::theme::apply(&ctx);
             Self { app, ctx, directory }
@@ -500,7 +501,7 @@ mod tests {
      {
         for batched in [false, true] {
             let mut fixture = Fixture::new();
-            let artwork = fixture.app.doc.clone();
+            let artwork = fixture.app.documents.session.document.clone();
             let collapsed = fixture.placement(Palette::Sizes).height;
             fixture.drag(
                 "Resize row below 보조 도구",
@@ -518,7 +519,7 @@ mod tests {
             assert_eq!(fixture.placement(Palette::Color).height, 230.);
             assert_eq!(fixture.placement(Palette::Sizes).height, collapsed);
             assert!(fixture.placement(Palette::Sizes).collapsed);
-            assert_eq!(fixture.app.doc, artwork);
+            assert_eq!(fixture.app.documents.session.document, artwork);
             assert!(fixture.app.workspace.dragging.is_none());
         }
     }
@@ -544,7 +545,7 @@ mod tests {
             .find(|(palette, _)| *palette == Palette::Brushes)
             .unwrap()
             .1;
-        let artwork = fixture.app.doc.clone();
+        let artwork = fixture.app.documents.session.document.clone();
         fixture.drag(
             "Resize between 보조 도구 and 도구 속성",
             egui::vec2(40., 0.),
@@ -567,7 +568,7 @@ mod tests {
         assert!((first.width() - before.width() - 40.).abs() < 1.);
         assert!((first.width() + second.width() - 572.).abs() < 0.1);
         assert_eq!(first.height(), second.height());
-        assert_eq!(fixture.app.doc, artwork);
+        assert_eq!(fixture.app.documents.session.document, artwork);
         fixture.drag(
             "Resize between 보조 도구 and 도구 속성",
             egui::vec2(1000., 0.),
@@ -619,7 +620,7 @@ mod tests {
     fn dock_edges_and_floating_axes_resize_without_paint_or_unwanted_axis_changes()
      {
         let mut fixture = Fixture::new();
-        let artwork = fixture.app.doc.clone();
+        let artwork = fixture.app.documents.session.document.clone();
         fixture.drag("Resize left dock", egui::vec2(65., 0.), true);
         assert_eq!(fixture.app.workspace.left_width, 325.);
         fixture.drag("Resize right dock", egui::vec2(-50., 0.), false);
@@ -651,7 +652,7 @@ mod tests {
         );
         assert_eq!(fixture.placement(Palette::Navigator).rect[2], 180.);
         assert_eq!(fixture.placement(Palette::Navigator).height, 60.);
-        assert_eq!(fixture.app.doc, artwork);
+        assert_eq!(fixture.app.documents.session.document, artwork);
         assert!(fixture.app.workspace.dragging.is_none());
     }
 

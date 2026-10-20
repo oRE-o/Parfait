@@ -1,11 +1,14 @@
-use crate::Document;
+use crate::{Document, EditStateId};
 
 struct Entry {
+    edit_state: EditStateId,
     id: u64,
     label: String,
     document: Document,
 }
 struct Pending {
+    before_id: EditStateId,
+    reserved_id: EditStateId,
     label: String,
     before: Document,
 }
@@ -16,6 +19,7 @@ pub struct HistoryRow<'a> {
     pub future: bool,
 }
 pub struct History {
+    current_state: EditStateId,
     entries: Vec<Entry>,
     cursor: usize,
     next_id: u64,
@@ -23,19 +27,67 @@ pub struct History {
 }
 impl Default for History {
     fn default() -> Self {
-        Self { entries: Vec::new(), cursor: 0, next_id: 1, pending: None }
+        Self::try_new().expect("OS entropy unavailable for history")
     }
 }
 impl History {
+    pub fn try_new() -> Result<Self, getrandom::Error> {
+        Ok(Self {
+            current_state: EditStateId::try_new()?,
+            entries: Vec::new(),
+            cursor: 0,
+            next_id: 1,
+            pending: None,
+        })
+    }
+    pub fn state_id(&self) -> EditStateId {
+        self.current_state
+    }
     pub fn checkpoint(&mut self, document: &Document) {
         self.begin(document, "Edit");
     }
     pub fn begin(&mut self, document: &Document, label: &str) {
+        self.try_begin(document, label)
+            .expect("OS entropy unavailable for edit");
+    }
+    pub fn try_begin(
+        &mut self,
+        document: &Document,
+        label: &str,
+    ) -> Result<(), getrandom::Error> {
+        let reserved = loop {
+            let candidate = EditStateId::try_new()?;
+            if candidate != self.current_state
+                && self
+                    .entries
+                    .iter()
+                    .all(|entry| entry.edit_state != candidate)
+                && self
+                    .pending
+                    .as_ref()
+                    .is_none_or(|pending| pending.reserved_id != candidate)
+            {
+                break candidate;
+            }
+        };
+        self.try_begin_with(document, label, || Ok(reserved))
+    }
+    fn try_begin_with(
+        &mut self,
+        document: &Document,
+        label: &str,
+        create: impl FnOnce() -> Result<EditStateId, getrandom::Error>,
+    ) -> Result<(), getrandom::Error> {
+        // Reserve before mutation; publish only when a real edit commits.
+        let reserved_id = create()?;
         self.commit(document);
         self.pending = Some(Pending {
+            before_id: self.current_state,
+            reserved_id,
             label: label.chars().take(160).collect(),
             before: document.clone(),
         });
+        Ok(())
     }
     pub fn commit(&mut self, document: &Document) -> bool {
         let Some(pending) = self.pending.take() else {
@@ -46,6 +98,7 @@ impl History {
         }
         if self.entries.is_empty() {
             self.entries.push(Entry {
+                edit_state: pending.before_id,
                 id: 0,
                 label: "Initial state".into(),
                 document: pending.before,
@@ -54,7 +107,9 @@ impl History {
             self.entries[self.cursor].document = pending.before;
         }
         self.entries.truncate(self.cursor + 1);
+        self.current_state = pending.reserved_id;
         self.entries.push(Entry {
+            edit_state: self.current_state,
             id: self.next_id,
             label: pending.label,
             document: document.clone(),
@@ -80,7 +135,10 @@ impl History {
         let revision = document.revision + 1;
         let next_layer_id =
             document.next_layer_id.max(pending.before.next_layer_id);
+        let name = std::mem::take(&mut document.name);
+        self.current_state = pending.before_id;
         *document = pending.before;
+        document.name = name;
         document.revision = revision;
         document.next_layer_id = next_layer_id;
         true
@@ -115,7 +173,10 @@ impl History {
         let next_layer_id = document
             .next_layer_id
             .max(self.entries[index].document.next_layer_id);
+        let name = std::mem::take(&mut document.name);
         *document = self.entries[index].document.clone();
+        document.name = name;
+        self.current_state = self.entries[index].edit_state;
         document.revision = revision;
         document.next_layer_id = next_layer_id;
         self.cursor = index;
@@ -233,5 +294,85 @@ mod tests {
         let count = d.layers.len();
         h.redo(&mut d);
         assert_eq!(d.layers.len(), count);
+    }
+}
+
+#[cfg(test)]
+mod multi_document_tests {
+    use super::*;
+    #[test]
+    fn multi_document_edit_ids_follow_history_without_reverting_file_names() {
+        let mut d = Document::new(4, 4);
+        let mut h = History::try_new().unwrap();
+        let initial = h.state_id();
+        h.try_begin(&d, "Layer name").unwrap();
+        d.layers[1].name = "Edited".into();
+        assert!(h.commit(&d));
+        let saved = h.state_id();
+        assert_ne!(initial, saved);
+        h.try_begin(&d, "Opacity").unwrap();
+        d.layers[1].opacity = 0.5;
+        h.commit(&d);
+        let edited = h.state_id();
+        d.name = "Saved under new filename".into();
+        h.undo(&mut d);
+        assert_eq!(h.state_id(), saved);
+        assert!(h.can_redo());
+        h.try_begin(&d, "File metadata only").unwrap();
+        d.name = "Newest filename".into();
+        assert!(!h.commit(&d));
+        assert_eq!(h.state_id(), saved);
+        assert!(h.can_redo());
+        h.redo(&mut d);
+        assert_eq!(h.state_id(), edited);
+        assert_eq!(d.name, "Newest filename");
+        h.undo(&mut d);
+        h.undo(&mut d);
+        assert_eq!(h.state_id(), initial);
+        assert_eq!(d.name, "Newest filename");
+        h.try_begin(&d, "Cancelled").unwrap();
+        d.layers[1].opacity = 0.2;
+        h.cancel(&mut d);
+        assert_eq!(h.state_id(), initial);
+        assert!(h.can_redo());
+    }
+    #[test]
+    fn multi_document_entropy_failure_keeps_pending_state_and_redo() {
+        let mut d = Document::new(2, 2);
+        let mut h = History::default();
+        h.begin(&d, "Layer");
+        d.add_layer();
+        h.commit(&d);
+        h.undo(&mut d);
+        let id = h.state_id();
+        let before = d.clone();
+        assert!(
+            h.try_begin_with(&d, "Cannot allocate", || Err(
+                getrandom::Error::UNSUPPORTED
+            ))
+            .is_err()
+        );
+        assert_eq!(h.state_id(), id);
+        assert_eq!(d, before);
+        assert!(h.can_redo());
+
+        h.try_begin(&d, "Pending opacity").unwrap();
+        d.layers[1].opacity = 0.25;
+        let pending_document = d.clone();
+        assert!(
+            h.try_begin_with(&d, "Cannot replace pending", || {
+                Err(getrandom::Error::UNSUPPORTED)
+            })
+            .is_err()
+        );
+        assert_eq!(h.state_id(), id);
+        assert_eq!(d, pending_document);
+        assert!(h.can_redo());
+        assert!(h.commit(&d));
+        assert_ne!(h.state_id(), id);
+        assert!(!h.can_redo());
+        assert!(h.undo(&mut d));
+        assert_eq!(h.state_id(), id);
+        assert_eq!(d.layers[1].opacity, before.layers[1].opacity);
     }
 }

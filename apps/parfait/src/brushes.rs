@@ -589,7 +589,9 @@ impl Parfait {
                     egui::vec2(ui.available_width(), 40.),
                     egui::Sense::hover(),
                 );
-                if ui.is_rect_visible(rect) && self.stroke.is_none() {
+                if ui.is_rect_visible(rect)
+                    && self.documents.session.editing.stroke.is_none()
+                {
                     let changed =
                         self.brush_library.previews[index].as_ref().is_none_or(
                             |(cached, _)| cached != &self.presets[index].brush,
@@ -934,7 +936,7 @@ mod tests {
     fn smudge_preset_drafts_portable_v6_and_restart_keep_spatial_operation() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         app.select_brush_group(BrushGroup::Blend);
@@ -974,7 +976,7 @@ mod tests {
             preview_image(&app.brush).pixels,
             preview_image(&changed).pixels
         );
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
         app.persist_preferences(true);
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(
@@ -1140,7 +1142,7 @@ mod tests {
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         for width in [190., 210., 246., 360.] {
             library_frame(&mut app, &ctx, width, vec![]);
             let header: Vec<_> = [
@@ -1178,7 +1180,7 @@ mod tests {
                     .any(|(name, _)| name == "Search input")
             );
         }
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
     }
 
     #[test]
@@ -1188,7 +1190,7 @@ mod tests {
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let original = app.brush.clone();
         library_frame(&mut app, &ctx, 210., vec![]);
         library_click(&mut app, &ctx, "Favorite Dotted pen");
@@ -1243,7 +1245,7 @@ mod tests {
                 .any(|(name, _)| name == "Search input")
         );
         assert!(app.brush == dotted);
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
     }
 
     #[test]
@@ -1253,7 +1255,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let brush = app.brush.clone();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         library_frame(&mut app, &ctx, 210., vec![]);
         library_click(&mut app, &ctx, "Family filter");
         library_click(&mut app, &ctx, "Filter Eraser");
@@ -1285,7 +1287,7 @@ mod tests {
                 "{label}"
             );
         }
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
     }
 
     #[test]
@@ -1332,8 +1334,8 @@ mod tests {
             app.brush_library.previews[0].as_ref().unwrap().1.id(),
             original_texture
         );
-        app.stroke = Some(Stroke::begin(
-            &mut app.doc,
+        app.documents.session.editing.stroke = Some(Stroke::begin(
+            &mut app.documents.session.document,
             app.brush.clone(),
             Point { x: 20., y: 20., pressure: 1. },
         ));
@@ -1341,7 +1343,7 @@ mod tests {
             library_frame(&mut app, &ctx, 210., vec![]);
             assert_eq!(app.brush_library.previews.iter().flatten().count(), 1);
         }
-        app.stroke = None;
+        app.documents.session.editing.stroke = None;
         library_frame(&mut app, &ctx, 210., vec![]);
         assert_eq!(app.brush_library.previews.iter().flatten().count(), 2);
     }
@@ -1371,7 +1373,7 @@ mod tests {
             app.brush.pressure_curve.points,
             vec![[0., 0.], [0.25, 0.1], [0.5, 0.4], [0.75, 0.8], [1., 1.]]
         );
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         let curve = parfait_core::ResponseCurve {
             points: vec![
                 [0., 0.15],
@@ -1401,7 +1403,7 @@ mod tests {
         app.brush.continuous_spray = false;
         app.restore_current_preset();
         assert_eq!(app.brush.pressure_curve, curve);
-        assert_eq!(app.doc, original);
+        assert_eq!(app.documents.session.document, original);
         let portable = BrushFile { version: 4, preset: app.presets[0].clone() };
         let encoded = serde_json::to_vec(&portable).unwrap();
         let decoded: BrushFile = serde_json::from_slice(&encoded).unwrap();
@@ -1485,7 +1487,7 @@ mod tests {
     fn tool_switch_restores_unsaved_settings_and_preserves_color_and_artwork() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         app.brush.size = 23.;
         app.brush.color = [12, 80, 165];
         app.select_brush_group(BrushGroup::Eraser);
@@ -1509,7 +1511,7 @@ mod tests {
         app.select_preset(pencil);
         assert!(!app.brush.erase);
         assert_eq!(BrushGroup::of(&app.brush), BrushGroup::Sketch);
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
     }
 
     #[test]

@@ -6,6 +6,18 @@
 
 The application owns UI state. The core owns image state. Storage receives immutable document snapshots and never reaches into the GUI.
 
+## Document Session and State Identity (1A–1B)
+
+`Parfait` owns one `DocumentManager` with one concrete `DocumentSession`; multiple tabs are not implemented. The session owns document, History, view, project path/shared saved baseline, recovery counters, stroke/layer transactions, mask targets and layer-list/dialog state. Brushes, color, calibration, keymap, workspace and display settings remain application-wide. There is no mirrored document payload or app-wide Deref compatibility layer.
+
+`SessionKey` combines an OS-random 128-bit `DocumentId` with an independent ephemeral `SessionEpoch`, used by commands, input/dialog owners and egui scopes. Successful New/Open constructs a candidate before replacing the complete session; Save As retains its key. Restart identity reuse remains future recovery work. Application session/history initialization and transaction start return entropy failures before mutation, without a fixed-ID fallback. The legacy infallible History wrappers remain for existing core callers; production app edits use the fallible APIs.
+
+`EditStateId` belongs to History: transaction start reserves a random ID, changed commit publishes it and stores the previous ID, Undo/Redo restore IDs, and no-op/cancel preserve state and redo. Collisions against retained history/current/pending IDs are retried. `Document.name` is filename-management metadata, excluded from artwork equality and preserved across History restore/cancel; layer names remain artwork. Original-save status still uses the shared document baseline; the ID-based baseline migration is 4A work.
+
+`ArtDigestV1` streams validated artwork into SHA-256 using explicit domain/version, little-endian fields, length/presence markers, stable kind/blend tags, normalized float zero and logical mask/selection coverage. Dense and Uniform coverage hash identically; absent selection differs from explicit zero coverage. It includes hidden/locked/draft data, layer IDs/names/order/parents and solid-layer colors, but excludes document name, revision, active index and the next-layer allocator. It is not the SQLite payload checksum. No app pointer/status path invokes it, and no full canonical image is allocated. Artwork v10 and preferences serialization are unchanged.
+
+`WindowRenderCache` owns the sole canvas texture, active layer/mask thumbnails, selection boundary cache and render tags. Every document entry checks both identity and epoch; a changed key drops the old cache, even at identical revision/LayerId. Widgets and commands are session-scoped and stale keys are rejected. Autosave still uses one fixed recovery path/worker, original saves are synchronous and New/Open still replace one document. Multiple tabs, per-document recovery, asynchronous I/O, global memory budgets and durable closing remain later increments; save/discard/cancel confirmation UI remains deferred.
+
 ## Folder Engine Foundation
 
 Layers can now represent raster content or a pixel-free folder. The bottom-to-top list is a postorder tree: a child's stable parent ID refers to a later folder, and every subtree is a contiguous interval. A bounded 64-node layout pass rejects missing/non-folder parents, cycles and interleaving subtrees. Folder creation, sibling grouping and ungrouping retain child IDs and shared pixel/mask buffers. Names and tree fields participate in edit-state History. New raster content selected on a folder is inserted as its top child; locked ancestors protect insertion and pixel writers.

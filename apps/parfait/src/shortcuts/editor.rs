@@ -303,7 +303,7 @@ mod tests {
         app.persist_preferences(true);
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let old = app.keymap.clone();
         let chord = Chord::new(Key::F8, false, false, false);
         let draft = |app: &mut Parfait| {
@@ -334,7 +334,7 @@ mod tests {
         assert!(app.error.is_none());
         assert!(app.shortcut_editor.is_none());
         assert_eq!(app.keymap.resolve(chord, None), Some(Command::Undo));
-        assert_eq!(app.doc, artwork);
+        assert_eq!(app.documents.session.document, artwork);
         drop(app);
         let app = Parfait::open(dir.path().to_owned()).unwrap();
         assert_eq!(app.keymap.resolve(chord, None), Some(Command::Undo));

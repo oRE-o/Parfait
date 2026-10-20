@@ -7,54 +7,63 @@ fn delete_and_backspace_clear_mask_target_while_content_clear_remains_explicit()
     for clear_key in [egui::Key::Delete, egui::Key::Backspace] {
         let directory = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-        app.doc = Document::new(32, 32);
-        app.doc.layers[1].pixels = Arc::new([200, 80, 30, 255].repeat(1024));
-        app.doc.create_layer_mask(1, 0);
+        app.documents.session.document = Document::new(32, 32);
+        app.documents.session.document.layers[1].pixels =
+            Arc::new([200, 80, 30, 255].repeat(1024));
+        app.documents.session.document.create_layer_mask(1, 0);
         app.select_layer_target(1, true);
         app.set_layer_selection(3, 1);
-        app.doc.layers[1].alpha_locked = true;
-        let before = app.doc.clone();
+        app.documents.session.document.layers[1].alpha_locked = true;
+        let before = app.documents.session.document.clone();
         let context = egui::Context::default();
         crate::theme::apply(&context);
         frame(&mut app, &context, vec![]);
         frame(&mut app, &context, vec![key(clear_key)]);
         assert_eq!(
-            app.doc.layers[1].mask.as_ref().unwrap().coverage,
+            app.documents.session.document.layers[1]
+                .mask
+                .as_ref()
+                .unwrap()
+                .coverage,
             MaskCoverage::Uniform(255)
         );
         assert!(app.editing_layer_mask());
         assert_eq!(app.selected_layer_mask(), 3);
         assert!(Arc::ptr_eq(
-            &app.doc.layers[1].pixels,
+            &app.documents.session.document.layers[1].pixels,
             &before.layers[1].pixels
         ));
-        assert_eq!(app.doc.layers[0], before.layers[0]);
-        assert_eq!(app.history.rows().count(), 2);
+        assert_eq!(app.documents.session.document.layers[0], before.layers[0]);
+        assert_eq!(app.documents.session.history.rows().count(), 2);
         let mut release = key(clear_key);
         if let egui::Event::Key { pressed, .. } = &mut release {
             *pressed = false;
         }
         frame(&mut app, &context, vec![release]);
         app.undo();
-        assert!(app.doc.same_edit_state(&before));
+        assert!(app.documents.session.document.same_edit_state(&before));
         app.redo();
         app.undo();
-        app.doc.layers[1].alpha_locked = false;
+        app.documents.session.document.layers[1].alpha_locked = false;
         app.select_layer_target(1, false);
         frame(&mut app, &context, vec![key(clear_key)]);
         assert_eq!(
-            app.doc.layers[1].mask.as_ref().unwrap().coverage,
+            app.documents.session.document.layers[1]
+                .mask
+                .as_ref()
+                .unwrap()
+                .coverage,
             MaskCoverage::Uniform(0)
         );
         assert!(
-            app.doc.layers[1]
+            app.documents.session.document.layers[1]
                 .pixels
                 .as_chunks::<4>()
                 .0
                 .iter()
                 .all(|pixel| pixel[3] == 0)
         );
-        assert_eq!(app.doc.layers[0], before.layers[0]);
+        assert_eq!(app.documents.session.document.layers[0], before.layers[0]);
     }
 }
 
@@ -62,23 +71,23 @@ fn delete_and_backspace_clear_mask_target_while_content_clear_remains_explicit()
 fn clear_guards_and_focused_text_do_not_change_the_drawing() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(32, 32);
-    app.doc.create_layer_mask(1, 0);
+    app.documents.session.document = Document::new(32, 32);
+    app.documents.session.document.create_layer_mask(1, 0);
     app.select_layer_target(1, true);
     let context = egui::Context::default();
     for blocker in 0..4 {
         app.confirm_new = blocker == 0;
         app.workspace.resizing = blocker == 1;
-        app.doc.layers[1].locked = blocker == 2;
+        app.documents.session.document.layers[1].locked = blocker == 2;
         if blocker == 3 {
             app.begin_canvas_stroke(Point { x: 8., y: 8., pressure: 1. });
         }
-        let before = app.doc.clone();
+        let before = app.documents.session.document.clone();
         app.execute_command(Command::ClearEditingTarget, &context);
-        assert_eq!(app.doc, before);
+        assert_eq!(app.documents.session.document, before);
         app.finish_stroke();
     }
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     let mut text = String::from("sample");
     for events in [vec![], vec![key(egui::Key::Backspace)]] {
         let mut output = context.run_ui(
@@ -90,7 +99,7 @@ fn clear_guards_and_focused_text_do_not_change_the_drawing() {
         );
         output.textures_delta.clear();
     }
-    assert_eq!(app.doc, before);
+    assert_eq!(app.documents.session.document, before);
     assert_ne!(text, "sample");
 }
 
@@ -112,7 +121,7 @@ fn canvas_frame(
             egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
         },
     );
-    let drawing = app.texture.as_ref().unwrap().id();
+    let drawing = app.render_cache.texture.as_ref().unwrap().id();
     let delta = output.textures_delta.set.get(&drawing).map(|deltas| {
         assert_eq!(deltas.len(), 1);
         deltas[0].clone()
@@ -132,29 +141,39 @@ fn update_cache(
     let egui::ImageData::Color(image) = &delta.image;
     let [left, top] = delta.pos.unwrap_or([0, 0]);
     for row in 0..image.size[1] {
-        let at = (top + row) * app.doc.width as usize + left;
+        let at =
+            (top + row) * app.documents.session.document.width as usize + left;
         cache[at..at + image.size[0]].copy_from_slice(
             &image.pixels[row * image.size[0]..(row + 1) * image.size[0]],
         );
     }
-    for (index, pixel) in
-        app.doc.composite().as_chunks::<4>().0.iter().enumerate()
+    for (index, pixel) in app
+        .documents
+        .session
+        .document
+        .composite()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .enumerate()
     {
-        let background = if (index % app.doc.width as usize / 16
-            + index / app.doc.width as usize / 16)
-            .is_multiple_of(2)
-        {
-            235.
-        } else {
-            218.
-        };
+        let background =
+            if (index % app.documents.session.document.width as usize / 16
+                + index / app.documents.session.document.width as usize / 16)
+                .is_multiple_of(2)
+            {
+                235.
+            } else {
+                218.
+            };
         let alpha = f32::from(pixel[3]) / 255.;
         let mut expected: [u8; 3] = std::array::from_fn(|channel| {
             (f32::from(pixel[channel]) * alpha + background * (1. - alpha))
                 .round() as u8
         });
         if app.active_mask_overlay().is_some() {
-            let coverage = app.doc.layers[app.doc.active]
+            let coverage = app.documents.session.document.layers
+                [app.documents.session.document.active]
                 .mask
                 .as_ref()
                 .unwrap()
@@ -180,24 +199,36 @@ fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal()
 {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(128, 128);
-    app.doc.layers[0].visible = false;
-    app.doc.layers[1].pixels = Arc::new([160, 80, 30, 180].repeat(128 * 128));
-    app.doc.create_layer_mask(1, 127);
+    app.documents.session.document = Document::new(128, 128);
+    app.documents.session.document.layers[0].visible = false;
+    app.documents.session.document.layers[1].pixels =
+        Arc::new([160, 80, 30, 180].repeat(128 * 128));
+    app.documents.session.document.create_layer_mask(1, 127);
     app.select_layer_target(1, true);
     app.brush = Brush { size: 12., pressure: false, ..Default::default() };
     let context = egui::Context::default();
     let mut cache = vec![egui::Color32::TRANSPARENT; 128 * 128];
     let output = canvas_frame(&mut app, &context, vec![]);
     update_cache(&app, &output, &mut cache, false);
-    let before = app.doc.clone();
-    let saved = (app.saved, app.submitted, app.history.rows().count());
+    let before = app.documents.session.document.clone();
+    let saved = (
+        app.documents.session.recovery.saved,
+        app.documents.session.recovery.submitted,
+        app.documents.session.history.rows().count(),
+    );
     app.execute_command(Command::ShowMaskArea, &context);
     let output = canvas_frame(&mut app, &context, vec![]);
     update_cache(&app, &output, &mut cache, false);
-    assert_eq!(app.doc, before);
-    assert_eq!((app.saved, app.submitted, app.history.rows().count()), saved);
-    app.view.pan += egui::vec2(8., 4.);
+    assert_eq!(app.documents.session.document, before);
+    assert_eq!(
+        (
+            app.documents.session.recovery.saved,
+            app.documents.session.recovery.submitted,
+            app.documents.session.history.rows().count()
+        ),
+        saved
+    );
+    app.documents.session.view.pan += egui::vec2(8., 4.);
     let output = canvas_frame(&mut app, &context, vec![]);
     assert!(output.is_none());
     let canvas: egui::Rect = context
@@ -217,46 +248,52 @@ fn overlay_toggles_and_mask_strokes_keep_full_and_partial_texture_output_equal()
     );
     update_cache(&app, &output, &mut cache, true);
     canvas_frame(&mut app, &context, vec![pointer(false)]);
-    assert!(Arc::ptr_eq(&app.doc.layers[1].pixels, &before.layers[1].pixels));
+    assert!(Arc::ptr_eq(
+        &app.documents.session.document.layers[1].pixels,
+        &before.layers[1].pixels
+    ));
     app.undo();
     let output = canvas_frame(&mut app, &context, vec![]);
     update_cache(&app, &output, &mut cache, false);
     app.execute_command(Command::ShowMaskArea, &context);
     let output = canvas_frame(&mut app, &context, vec![]);
     update_cache(&app, &output, &mut cache, false);
-    assert_eq!(app.doc.composite(), before.composite());
+    assert_eq!(app.documents.session.document.composite(), before.composite());
 }
 
 #[test]
 fn overlay_follows_stable_active_id_and_does_not_survive_delete_or_reopen() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.create_layer_mask(1, 0);
-    app.doc.layers[1].locked = true;
-    app.doc.set_layer_mask_enabled(1, false);
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.create_layer_mask(1, 0);
+    app.documents.session.document.layers[1].locked = true;
+    app.documents.session.document.set_layer_mask_enabled(1, false);
     let context = egui::Context::default();
     app.execute_command(Command::ShowMaskArea, &context);
-    assert_eq!(app.active_mask_overlay(), Some(app.doc.layers[1].id));
+    assert_eq!(
+        app.active_mask_overlay(),
+        Some(app.documents.session.document.layers[1].id)
+    );
     app.select_layer(0);
     assert!(app.active_mask_overlay().is_none());
     app.select_layer(1);
     assert!(app.active_mask_overlay().is_some());
-    app.doc.layers[1].locked = false;
+    app.documents.session.document.layers[1].locked = false;
     app.execute_command(Command::DeleteLayerMask, &context);
-    assert!(app.mask_overlay.is_none());
+    assert!(app.documents.session.editing.mask_overlay.is_none());
     app.undo();
-    assert!(app.mask_overlay.is_none());
+    assert!(app.documents.session.editing.mask_overlay.is_none());
     app.execute_command(Command::ShowMaskArea, &context);
     app.force_save();
-    let expected = app.doc.clone();
+    let expected = app.documents.session.document.clone();
     drop(app);
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    assert_eq!(app.doc, expected);
-    assert!(app.mask_overlay.is_none());
+    assert_eq!(app.documents.session.document, expected);
+    assert!(app.documents.session.editing.mask_overlay.is_none());
     app.execute_command(Command::ShowMaskArea, &context);
     app.new_document();
-    assert!(app.mask_overlay.is_none());
+    assert!(app.documents.session.editing.mask_overlay.is_none());
 }
 
 #[test]
@@ -315,21 +352,21 @@ fn old_keymaps_keep_delete_owner_and_new_mask_commands_persist_assignments() {
 fn clear_dense_white_mask_does_not_discard_the_redo_branch() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.create_layer_mask(1, 255);
-    app.doc.layers[1].mask.as_mut().unwrap().coverage =
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.create_layer_mask(1, 255);
+    app.documents.session.document.layers[1].mask.as_mut().unwrap().coverage =
         MaskCoverage::Dense(Arc::new(vec![255; 64]));
     app.select_layer_target(1, true);
     app.edit_named("Opacity", |document| document.layers[1].opacity = 0.6);
     app.undo();
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     app.execute_command(Command::ClearLayerMask, &egui::Context::default());
-    assert!(app.doc.same_edit_state(&before));
-    assert_eq!(app.doc.revision, before.revision);
-    assert!(app.history.can_redo());
+    assert!(app.documents.session.document.same_edit_state(&before));
+    assert_eq!(app.documents.session.document.revision, before.revision);
+    assert!(app.documents.session.history.can_redo());
     let region = PixelRect { x0: 0, y0: 0, x1: 8, y1: 8 };
     assert_eq!(
-        app.doc.composite_region(region),
+        app.documents.session.document.composite_region(region),
         before.composite_region(region)
     );
 }
@@ -338,14 +375,15 @@ fn clear_dense_white_mask_does_not_discard_the_redo_branch() {
 fn layer_pick_recomputes_overlay_after_input_before_uploading_a_first_frame() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(128, 128);
-    app.doc.create_layer_mask(1, 127);
-    app.mask_overlay = Some(app.doc.layers[1].id);
+    app.documents.session.document = Document::new(128, 128);
+    app.documents.session.document.create_layer_mask(1, 127);
+    app.documents.session.editing.mask_overlay =
+        Some(app.documents.session.document.layers[1].id);
     let context = egui::Context::default();
     let position = egui::pos2(200., 200.);
     canvas_frame(&mut app, &context, vec![]);
     canvas_frame(&mut app, &context, vec![]);
-    app.texture = None;
+    app.render_cache.texture = None;
     let output = canvas_frame(
         &mut app,
         &context,
@@ -363,9 +401,9 @@ fn layer_pick_recomputes_overlay_after_input_before_uploading_a_first_frame() {
             },
         ],
     );
-    assert_eq!(app.doc.active, 0);
+    assert_eq!(app.documents.session.document.active, 0);
     assert!(app.active_mask_overlay().is_none());
-    assert!(app.rendered_overlay.is_none());
+    assert!(app.render_cache.rendered_overlay.is_none());
     let mut cache = vec![egui::Color32::TRANSPARENT; 128 * 128];
     update_cache(&app, &output, &mut cache, false);
 }

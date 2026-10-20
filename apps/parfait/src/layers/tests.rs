@@ -9,18 +9,31 @@ fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth()
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
     for depth in [1, 8, 61] {
         for masked in [false, true] {
-            app.doc = Document::new(8, 8);
-            app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+            app.documents.session.document = Document::new(8, 8);
+            app.documents
+                .session
+                .document
+                .group_layers_in_folder(2, "Folder".into())
+                .unwrap();
             for _ in 1..depth {
-                app.doc.create_layer_folder("Nested".into()).unwrap();
+                app.documents
+                    .session
+                    .document
+                    .create_layer_folder("Nested".into())
+                    .unwrap();
             }
-            app.doc.add_layer();
-            let active = app.doc.active;
+            app.documents.session.document.add_layer();
+            let active = app.documents.session.document.active;
             assert_eq!(app.layer_depth_and_hidden(active), (depth, false));
             if masked {
-                assert!(app.doc.create_layer_mask(active, 255));
+                assert!(
+                    app.documents
+                        .session
+                        .document
+                        .create_layer_mask(active, 255)
+                );
             }
-            let before = app.doc.clone();
+            let before = app.documents.session.document.clone();
             for width in [180., 240., 400.] {
                 let context = egui::Context::default();
                 crate::theme::apply(&context);
@@ -61,7 +74,9 @@ fn nested_layer_text_stays_after_thumbnails_at_narrow_widths_and_maximum_depth()
                 assert!(label.right() < width);
                 assert!(label.width() > 0.);
                 assert!(!label.intersects(thumbnail));
-                assert!(app.doc.same_edit_state(&before));
+                assert!(
+                    app.documents.session.document.same_edit_state(&before)
+                );
             }
         }
     }
@@ -72,10 +87,15 @@ fn folder_disclosure_click_selects_parent_without_editing_and_navigation_reveals
  {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    let folder = app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
+    app.documents.session.document = Document::new(8, 8);
+    let folder = app
+        .documents
+        .session
+        .document
+        .group_layers_in_folder(2, "Folder".into())
+        .unwrap();
     app.select_layer(1);
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     let context = egui::Context::default();
     crate::theme::apply(&context);
     let mut time = 0.;
@@ -99,24 +119,29 @@ fn folder_disclosure_click_selects_parent_without_editing_and_navigation_reveals
             &mut time,
         );
     }
-    assert_eq!(app.doc.active, 2);
+    assert_eq!(app.documents.session.document.active, 2);
     assert_eq!(app.layer_depth_and_hidden(1), (1, true));
-    assert_eq!(app.history.rows().count(), 0);
+    assert_eq!(app.documents.session.history.rows().count(), 0);
     app.select_layer(1);
     assert_eq!(app.layer_depth_and_hidden(1), (1, false));
-    assert!(app.doc.same_edit_state(&before));
-    assert!(app.layer_list.collapsed.is_empty());
+    assert!(app.documents.session.document.same_edit_state(&before));
+    assert!(app.documents.session.layer_ui.list.collapsed.is_empty());
 }
 
 #[test]
 fn tree_drag_moves_into_folder_on_release_and_preserves_pixels_and_undo() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.add_layer();
-    let folder = app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
-    let before = app.doc.clone();
-    let moved = app.doc.layers[3].id;
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.add_layer();
+    let folder = app
+        .documents
+        .session
+        .document
+        .group_layers_in_folder(2, "Folder".into())
+        .unwrap();
+    let before = app.documents.session.document.clone();
+    let moved = app.documents.session.document.layers[3].id;
     let context = egui::Context::default();
     crate::theme::apply(&context);
     let mut time = 0.;
@@ -135,41 +160,54 @@ fn tree_drag_moves_into_folder_on_release_and_preserves_pixels_and_undo() {
         ],
         &mut time,
     );
-    assert_eq!(app.doc.layers, before.layers);
+    assert_eq!(app.documents.session.document.layers, before.layers);
     frame(
         &mut app,
         &context,
         vec![pointer(target, false, Default::default())],
         &mut time,
     );
-    assert_eq!(app.doc.layers[2].id, moved);
-    assert_eq!(app.doc.layers[2].parent, Some(folder));
-    assert_eq!(app.doc.active, 2);
-    assert!(Arc::ptr_eq(&app.doc.layers[2].pixels, &before.layers[3].pixels));
-    assert!(app.doc.validate());
-    assert_eq!(app.history.rows().count(), 2);
+    assert_eq!(app.documents.session.document.layers[2].id, moved);
+    assert_eq!(app.documents.session.document.layers[2].parent, Some(folder));
+    assert_eq!(app.documents.session.document.active, 2);
+    assert!(Arc::ptr_eq(
+        &app.documents.session.document.layers[2].pixels,
+        &before.layers[3].pixels
+    ));
+    assert!(app.documents.session.document.validate());
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.undo();
-    assert_eq!(app.doc.layers, before.layers);
+    assert_eq!(app.documents.session.document.layers, before.layers);
     app.redo();
-    assert_eq!(app.doc.layers[2].parent, Some(folder));
+    assert_eq!(app.documents.session.document.layers[2].parent, Some(folder));
 }
 
 #[test]
 fn solo_child_keeps_ancestors_visible_and_restores_original_flags() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(directory.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.add_layer();
-    app.doc.group_layers_in_folder(2, "Folder".into()).unwrap();
-    app.doc.layers[2].visible = false;
-    let before = app.doc.clone();
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.add_layer();
+    app.documents
+        .session
+        .document
+        .group_layers_in_folder(2, "Folder".into())
+        .unwrap();
+    app.documents.session.document.layers[2].visible = false;
+    let before = app.documents.session.document.clone();
     app.solo_layer(1);
     assert_eq!(
-        app.doc.layers.iter().map(|layer| layer.visible).collect::<Vec<_>>(),
+        app.documents
+            .session
+            .document
+            .layers
+            .iter()
+            .map(|layer| layer.visible)
+            .collect::<Vec<_>>(),
         [false, true, true, false]
     );
     app.solo_layer(1);
-    assert!(app.doc.same_edit_state(&before));
+    assert!(app.documents.session.document.same_edit_state(&before));
 }
 
 fn frame(
@@ -217,14 +255,16 @@ fn pointer(
     }
 }
 fn setup(app: &mut Parfait, ctx: &egui::Context, time: &mut f64) {
-    app.doc = Document::new(16, 16);
-    while app.doc.layers.len() < 4 {
-        app.doc.add_layer();
+    app.documents.session.document = Document::new(16, 16);
+    while app.documents.session.document.layers.len() < 4 {
+        app.documents.session.document.add_layer();
     }
-    for (index, layer) in app.doc.layers.iter_mut().enumerate() {
+    for (index, layer) in
+        app.documents.session.document.layers.iter_mut().enumerate()
+    {
         layer.name = format!("Layer {index}");
     }
-    app.doc.active = 2;
+    app.documents.session.document.active = 2;
     crate::theme::apply(ctx);
     frame(app, ctx, vec![], time);
     frame(app, ctx, vec![], time);
@@ -237,7 +277,7 @@ fn batched_drag_inserts_without_copying_pixels_and_undo_restores_order() {
     let ctx = egui::Context::default();
     let mut time = 0.;
     setup(&mut app, &ctx, &mut time);
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     let start = row(&ctx, "layer_row", 2).center();
     let target = row(&ctx, "layer_row", 0).center_bottom() - egui::vec2(0., 2.);
     frame(
@@ -252,20 +292,25 @@ fn batched_drag_inserts_without_copying_pixels_and_undo_restores_order() {
         &mut time,
     );
     assert_eq!(
-        app.doc
+        app.documents
+            .session
+            .document
             .layers
             .iter()
             .map(|layer| layer.name.as_str())
             .collect::<Vec<_>>(),
         ["Layer 2", "Layer 0", "Layer 1", "Layer 3"]
     );
-    assert_eq!(app.doc.active, 0);
-    assert!(Arc::ptr_eq(&app.doc.layers[0].pixels, &before.layers[2].pixels));
-    assert_eq!(app.history.rows().count(), 2);
+    assert_eq!(app.documents.session.document.active, 0);
+    assert!(Arc::ptr_eq(
+        &app.documents.session.document.layers[0].pixels,
+        &before.layers[2].pixels
+    ));
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.undo();
-    assert_eq!(app.doc.layers, before.layers);
+    assert_eq!(app.documents.session.document.layers, before.layers);
     app.redo();
-    assert_eq!(app.doc.layers[0].name, "Layer 2");
+    assert_eq!(app.documents.session.document.layers[0].name, "Layer 2");
 }
 
 #[test]
@@ -279,7 +324,7 @@ fn drag_preview_cancel_outside_and_stale_state_preserve_document_and_redo() {
         app.execute_command(Command::LayerLock, &ctx);
         app.undo();
         frame(&mut app, &ctx, vec![], &mut time);
-        let before = app.doc.clone();
+        let before = app.documents.session.document.clone();
         let start = row(&ctx, "layer_row", 2).center();
         let target = row(&ctx, "layer_row", 0).center();
         frame(
@@ -297,7 +342,7 @@ fn drag_preview_cancel_outside_and_stale_state_preserve_document_and_redo() {
             vec![egui::Event::PointerMoved(target)],
             &mut time,
         );
-        assert_eq!(app.doc, before);
+        assert_eq!(app.documents.session.document, before);
         let events = match cancel {
             0 => vec![egui::Event::Key {
                 key: egui::Key::Escape,
@@ -311,7 +356,7 @@ fn drag_preview_cancel_outside_and_stale_state_preserve_document_and_redo() {
             }
             2 => vec![egui::Event::WindowFocused(false)],
             _ => {
-                app.doc.touch();
+                app.documents.session.document.touch();
                 vec![]
             }
         };
@@ -322,11 +367,11 @@ fn drag_preview_cancel_outside_and_stale_state_preserve_document_and_redo() {
             vec![pointer(target, false, Default::default())],
             &mut time,
         );
-        assert_eq!(app.doc.layers, before.layers);
-        assert_eq!(app.doc.active, before.active);
-        assert!(app.history.can_redo());
-        assert!(app.layer_list.drag.is_none());
-        assert!(app.stroke.is_none());
+        assert_eq!(app.documents.session.document.layers, before.layers);
+        assert_eq!(app.documents.session.document.active, before.active);
+        assert!(app.documents.session.history.can_redo());
+        assert!(app.documents.session.layer_ui.list.drag.is_none());
+        assert!(app.documents.session.editing.stroke.is_none());
     }
 }
 
@@ -349,19 +394,22 @@ fn check_shift_and_group_actions_keep_active_and_have_one_history_entry() {
         &mut time,
     );
     assert_eq!(app.selected_layer_mask(), 0b0101);
-    assert_eq!(app.doc.active, 2);
-    assert_eq!(app.history.rows().count(), 0);
+    assert_eq!(app.documents.session.document.active, 2);
+    assert_eq!(app.documents.session.history.rows().count(), 0);
     app.execute_command(Command::LayerLock, &ctx);
-    assert!(app.doc.layers[0].locked && app.doc.layers[2].locked);
-    assert!(!app.doc.layers[1].locked);
-    assert_eq!(app.history.rows().count(), 2);
+    assert!(
+        app.documents.session.document.layers[0].locked
+            && app.documents.session.document.layers[2].locked
+    );
+    assert!(!app.documents.session.document.layers[1].locked);
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.execute_command(Command::DuplicateLayer, &ctx);
-    assert_eq!(app.doc.layers.len(), 6);
+    assert_eq!(app.documents.session.document.layers.len(), 6);
     assert_eq!(app.selected_layer_mask().count_ones(), 2);
-    assert_eq!(app.history.rows().count(), 3);
+    assert_eq!(app.documents.session.history.rows().count(), 3);
     app.execute_command(Command::DeleteLayer, &ctx);
-    assert_eq!(app.doc.layers.len(), 4);
-    assert_eq!(app.history.rows().count(), 4);
+    assert_eq!(app.documents.session.document.layers.len(), 4);
+    assert_eq!(app.documents.session.history.rows().count(), 4);
     app.layer_click(1, Default::default(), false);
     app.layer_click(
         3,
@@ -369,12 +417,15 @@ fn check_shift_and_group_actions_keep_active_and_have_one_history_entry() {
         false,
     );
     assert_eq!(app.selected_layer_mask(), 0b1110);
-    assert_eq!(app.doc.active, 3);
+    assert_eq!(app.documents.session.document.active, 3);
     app.execute_command(Command::MoveLayerDown, &ctx);
     assert_eq!(app.selected_layer_mask(), 0b0111);
-    assert_eq!(app.doc.active, 2);
+    assert_eq!(app.documents.session.document.active, 2);
     app.undo();
-    assert_eq!(app.selected_layer_mask(), 1 << app.doc.active);
+    assert_eq!(
+        app.selected_layer_mask(),
+        1 << app.documents.session.document.active
+    );
 }
 
 #[test]
@@ -402,7 +453,10 @@ fn double_click_renames_inline_enter_commits_and_escape_restores() {
             &mut time,
         );
     }
-    assert_eq!(app.layer_list.rename, Some(app.doc.layers[2].id));
+    assert_eq!(
+        app.documents.session.layer_ui.list.rename,
+        Some(app.documents.session.document.layers[2].id)
+    );
     frame(&mut app, &ctx, vec![], &mut time);
     frame(
         &mut app,
@@ -422,9 +476,9 @@ fn double_click_renames_inline_enter_commits_and_escape_restores() {
         }],
         &mut time,
     );
-    assert_eq!(app.doc.layers[2].name, "Linework");
-    assert!(app.layer_list.rename.is_none());
-    assert_eq!(app.history.rows().count(), 2);
+    assert_eq!(app.documents.session.document.layers[2].name, "Linework");
+    assert!(app.documents.session.layer_ui.list.rename.is_none());
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.begin_layer_rename(2);
     frame(&mut app, &ctx, vec![], &mut time);
     frame(&mut app, &ctx, vec![egui::Event::Text("Discard".into())], &mut time);
@@ -440,43 +494,47 @@ fn double_click_renames_inline_enter_commits_and_escape_restores() {
         }],
         &mut time,
     );
-    assert_eq!(app.doc.layers[2].name, "Linework");
-    assert_eq!(app.history.rows().count(), 2);
+    assert_eq!(app.documents.session.document.layers[2].name, "Linework");
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.undo();
-    assert_eq!(app.doc.layers[2].name, "Layer 2");
+    assert_eq!(app.documents.session.document.layers[2].name, "Layer 2");
 }
 
 #[test]
 fn multi_drag_keeps_relative_order_and_refuses_delete_all_atomically() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(4, 4);
-    while app.doc.layers.len() < 6 {
-        app.doc.add_layer();
+    app.documents.session.document = Document::new(4, 4);
+    while app.documents.session.document.layers.len() < 6 {
+        app.documents.session.document.add_layer();
     }
-    for (index, layer) in app.doc.layers.iter_mut().enumerate() {
+    for (index, layer) in
+        app.documents.session.document.layers.iter_mut().enumerate()
+    {
         layer.name = index.to_string();
     }
-    app.doc.active = 1;
+    app.documents.session.document.active = 1;
     app.set_layer_selection(0b001010, 1);
     app.reorder_layer_mask(0b001010, 6);
     assert_eq!(
-        app.doc
+        app.documents
+            .session
+            .document
             .layers
             .iter()
             .map(|layer| layer.name.as_str())
             .collect::<Vec<_>>(),
         ["0", "2", "4", "5", "1", "3"]
     );
-    assert_eq!(app.doc.active, 4);
+    assert_eq!(app.documents.session.document.active, 4);
     assert_eq!(app.selected_layer_mask(), 0b110000);
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     app.reorder_layer_mask(app.selected_layer_mask(), 6);
-    assert_eq!(app.doc, before);
+    assert_eq!(app.documents.session.document, before);
     app.set_layer_selection(0b111111, 4);
     let ctx = egui::Context::default();
     app.execute_command(Command::DeleteLayer, &ctx);
-    assert_eq!(app.doc, before);
+    assert_eq!(app.documents.session.document, before);
 }
 
 #[test]
@@ -507,7 +565,7 @@ fn modifier_row_clicks_toggle_and_range_select_without_emptying_the_target() {
                 &mut time,
             );
             assert_eq!(app.selected_layer_mask(), mask);
-            assert_eq!(app.doc.active, active);
+            assert_eq!(app.documents.session.document.active, active);
         }
         let position = row(&ctx, "layer_row", 3).center();
         let shift = egui::Modifiers { shift: true, ..Default::default() };
@@ -522,9 +580,9 @@ fn modifier_row_clicks_toggle_and_range_select_without_emptying_the_target() {
             &mut time,
         );
         assert_eq!(app.selected_layer_mask(), 0b1110);
-        assert_eq!(app.doc.active, 3);
-        assert_eq!(app.history.rows().count(), 0);
-        assert!(app.layer_list.rename.is_none());
+        assert_eq!(app.documents.session.document.active, 3);
+        assert_eq!(app.documents.session.history.rows().count(), 0);
+        assert!(app.documents.session.layer_ui.list.rename.is_none());
     }
 }
 
@@ -533,24 +591,45 @@ fn grouped_duplicate_is_preflighted_before_partial_growth_and_solo_restores_flag
  {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(2, 2);
-    while app.doc.layers.len() < 63 {
-        app.doc.add_layer();
+    app.documents.session.document = Document::new(2, 2);
+    while app.documents.session.document.layers.len() < 63 {
+        app.documents.session.document.add_layer();
     }
-    let active = app.doc.active;
+    let active = app.documents.session.document.active;
     app.set_layer_selection((1 << active) | 1, active);
-    let before = app.doc.clone();
+    let before = app.documents.session.document.clone();
     app.execute_command(Command::DuplicateLayer, &egui::Context::default());
-    assert_eq!(app.doc, before);
-    assert_eq!(app.history.rows().count(), 0);
-    app.doc.layers[3].visible = false;
-    let visibility: Vec<_> =
-        app.doc.layers.iter().map(|layer| layer.visible).collect();
-    app.solo_layer(1);
-    assert_eq!(app.doc.layers.iter().filter(|layer| layer.visible).count(), 1);
+    assert_eq!(app.documents.session.document, before);
+    assert_eq!(app.documents.session.history.rows().count(), 0);
+    app.documents.session.document.layers[3].visible = false;
+    let visibility: Vec<_> = app
+        .documents
+        .session
+        .document
+        .layers
+        .iter()
+        .map(|layer| layer.visible)
+        .collect();
     app.solo_layer(1);
     assert_eq!(
-        app.doc.layers.iter().map(|layer| layer.visible).collect::<Vec<_>>(),
+        app.documents
+            .session
+            .document
+            .layers
+            .iter()
+            .filter(|layer| layer.visible)
+            .count(),
+        1
+    );
+    app.solo_layer(1);
+    assert_eq!(
+        app.documents
+            .session
+            .document
+            .layers
+            .iter()
+            .map(|layer| layer.visible)
+            .collect::<Vec<_>>(),
         visibility
     );
 }
@@ -563,8 +642,8 @@ fn dragging_at_viewport_edge_scrolls_and_narrow_rows_do_not_escape_the_palette()
     let ctx = egui::Context::default();
     let mut time = 0.;
     setup(&mut app, &ctx, &mut time);
-    while app.doc.layers.len() < 24 {
-        app.doc.add_layer();
+    while app.documents.session.document.layers.len() < 24 {
+        app.documents.session.document.add_layer();
     }
     frame(&mut app, &ctx, vec![], &mut time);
     let start = row(&ctx, "layer_row", 23).center();
@@ -609,9 +688,9 @@ fn dragging_at_viewport_edge_scrolls_and_narrow_rows_do_not_escape_the_palette()
 fn group_drag_in_docked_workspace_uses_release_position_without_a_move_event() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = Parfait::open(dir.path().to_owned()).unwrap();
-    app.doc = Document::new(8, 8);
-    app.doc.add_layer();
-    app.doc.add_layer();
+    app.documents.session.document = Document::new(8, 8);
+    app.documents.session.document.add_layer();
+    app.documents.session.document.add_layer();
     let ctx = egui::Context::default();
     crate::theme::apply(&ctx);
     let mut time = 0.;
@@ -648,7 +727,7 @@ fn group_drag_in_docked_workspace_uses_release_position_without_a_move_event() {
     assert_eq!(app.selected_layer_mask(), 0b1100);
     let start = row(&ctx, "layer_row", 3).center();
     let end = row(&ctx, "layer_row", 1).center_bottom() - egui::vec2(0., 1.);
-    let original = app.doc.clone();
+    let original = app.documents.session.document.clone();
     run(
         &mut app,
         vec![
@@ -656,20 +735,22 @@ fn group_drag_in_docked_workspace_uses_release_position_without_a_move_event() {
             pointer(start, true, Default::default()),
         ],
     );
-    assert!(app.layer_list.drag.is_some());
+    assert!(app.documents.session.layer_ui.list.drag.is_some());
     run(&mut app, vec![pointer(end, false, Default::default())]);
     assert_eq!(app.selected_layer_mask(), 0b0110);
     assert_eq!(
-        app.doc
+        app.documents
+            .session
+            .document
             .layers
             .iter()
             .map(|layer| layer.name.as_str())
             .collect::<Vec<_>>(),
         ["Paper", "Layer 2", "Layer 3", "Layer 1"]
     );
-    assert_eq!(app.history.rows().count(), 2);
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.undo();
-    assert_eq!(app.doc.layers, original.layers);
+    assert_eq!(app.documents.session.document.layers, original.layers);
 }
 
 #[test]
@@ -685,10 +766,10 @@ fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags()
     frame(&mut app, &ctx, vec![egui::Event::Text("Renamed".into())], &mut time);
     app.hide_panels = true;
     app.prepare_layer_list(&ctx);
-    assert!(app.layer_list.rename.is_none());
-    assert_eq!(app.history.rows().count(), 2);
+    assert!(app.documents.session.layer_ui.list.rename.is_none());
+    assert_eq!(app.documents.session.history.rows().count(), 2);
     app.undo();
-    assert_eq!(app.doc.layers[2].name, "Layer 2");
+    assert_eq!(app.documents.session.document.layers[2].name, "Layer 2");
     app.hide_panels = false;
     frame(&mut app, &ctx, vec![], &mut time);
     let target = row(&ctx, "layer_row", 2).center();
@@ -725,5 +806,5 @@ fn hiding_a_rename_editor_commits_once_and_popup_clicks_do_not_start_row_drags()
         egui::Event::PointerMoved(target),
         pointer(target, true, Default::default()),
     ]);
-    assert!(app.layer_list.drag.is_none());
+    assert!(app.documents.session.layer_ui.list.drag.is_none());
 }

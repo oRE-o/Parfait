@@ -1,4 +1,8 @@
 //! UI-independent raster document, brush engine and bounded undo history.
+mod art_digest;
+mod edit_state;
+pub use art_digest::ArtDigestV1;
+pub use edit_state::EditStateId;
 mod brush;
 mod document;
 mod history;

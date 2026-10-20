@@ -327,7 +327,7 @@ mod tests {
     fn cancel_preserves_settings_and_apply_survives_restart() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        let original = app.doc.clone();
+        let original = app.documents.session.document.clone();
         let curve =
             PressureCalibration { points: vec![[0., 0.], [0.6, 1.], [1., 1.]] };
         app.calibration_dialog = Some(CalibrationDialog::new(curve.clone()));
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(app.calibration, PressureCalibration::default());
         app.calibration_dialog = Some(CalibrationDialog::new(curve.clone()));
         app.finish_calibration(true);
-        assert_eq!(app.doc, original);
+        assert_eq!(app.documents.session.document, original);
         drop(app);
         let restored = Parfait::open(dir.path().to_path_buf()).unwrap();
         assert_eq!(restored.calibration, curve);

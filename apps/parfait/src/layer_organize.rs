@@ -7,6 +7,7 @@ use std::sync::Arc;
 mod tests;
 
 pub(crate) struct RenameLayer {
+    owner: crate::document_session::SessionKey,
     target: LayerId,
     revision: u64,
     pixels: Arc<Vec<u8>>,
@@ -40,10 +41,12 @@ impl Parfait {
         }
         if command == Command::RenameLayer {
             self.finish_layer_edit();
-            let target = &self.doc.layers[self.doc.active];
-            self.rename_layer = Some(RenameLayer {
+            let target = &self.documents.session.document.layers
+                [self.documents.session.document.active];
+            self.documents.session.layer_ui.rename = Some(RenameLayer {
+                owner: self.documents.session.key,
                 target: target.id,
-                revision: self.doc.revision,
+                revision: self.documents.session.document.revision,
                 pixels: target.pixels.clone(),
                 draft: target.name.chars().take(128).collect(),
                 needs_edit: target.name.chars().nth(128).is_some(),
@@ -52,8 +55,8 @@ impl Parfait {
             });
             return;
         }
-        let count = self.doc.layers.len();
-        let active = self.doc.active;
+        let count = self.documents.session.document.layers.len();
+        let active = self.documents.session.document.active;
         if matches!(
             command,
             Command::SelectLayerAbove | Command::SelectLayerBelow
@@ -66,7 +69,7 @@ impl Parfait {
             self.select_layer(destination);
             return;
         }
-        if self.doc.has_non_raster_layers() {
+        if self.documents.session.document.has_non_raster_layers() {
             self.execute_tree_collection(command, 1 << active);
             return;
         }
@@ -85,24 +88,28 @@ impl Parfait {
     }
 
     pub(crate) fn layer_rename_ui(&mut self, ctx: &egui::Context) {
-        let Some(dialog) = &self.rename_layer else {
+        let Some(dialog) = &self.documents.session.layer_ui.rename else {
             return;
         };
         if self.error.is_some() {
             return;
         }
-        let target = self.doc.layer_index(dialog.target);
-        if self.doc.revision != dialog.revision
+        let target = self.documents.session.document.layer_index(dialog.target);
+        if self.documents.session.key != dialog.owner
+            || self.documents.session.document.revision != dialog.revision
             || target.is_none_or(|index| {
-                !Arc::ptr_eq(&dialog.pixels, &self.doc.layers[index].pixels)
+                !Arc::ptr_eq(
+                    &dialog.pixels,
+                    &self.documents.session.document.layers[index].pixels,
+                )
             })
         {
-            self.rename_layer = None;
+            self.documents.session.layer_ui.rename = None;
             self.notice =
                 Some("대상 레이어가 변경되어 이름 변경을 취소했습니다.".into());
             return;
         }
-        let dialog = self.rename_layer.as_mut().unwrap();
+        let dialog = self.documents.session.layer_ui.rename.as_mut().unwrap();
         let first_frame = dialog.focus;
         let was_composing = dialog.composing;
         let mut ime_event = false;
@@ -125,104 +132,114 @@ impl Parfait {
         });
         let mut confirm = false;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::new("rename_layer_dialog"))
-            .show(ctx, |ui| {
-                ui.set_width(362.);
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("레이어 이름 변경").strong());
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            let close = widgets::flat_icon(
-                                ui,
-                                widgets::Icon::Close,
-                                false,
-                                "이름 변경 취소",
-                                18.,
-                            );
-                            #[cfg(test)]
-                            ui.data_mut(|data| {
-                                data.insert_temp(
-                                    egui::Id::new("rename_close"),
-                                    close.rect,
-                                )
-                            });
-                            cancel |= close.clicked();
-                        },
-                    );
-                });
-                ui.separator();
-                ui.horizontal_top(|ui| {
-                    ui.vertical(|ui| {
-                        ui.set_width(270.);
-                        ui.horizontal(|ui| {
-                            ui.label("이름:");
-                            let field = ui.add(
-                                egui::TextEdit::singleline(&mut dialog.draft)
-                                    .id(egui::Id::new("rename_layer_name"))
-                                    .desired_width(220.)
-                                    .char_limit(128)
-                                    .return_key(None),
-                            );
-                            #[cfg(test)]
-                            ui.data_mut(|data| {
-                                data.insert_temp(
-                                    egui::Id::new("rename_field"),
-                                    field.rect,
-                                )
-                            });
-                            if dialog.focus {
-                                field.request_focus();
-                                if let Some(mut state) =
-                                    egui::TextEdit::load_state(ctx, field.id)
-                                {
-                                    state.cursor.set_char_range(Some(
-                                        egui::text::CCursorRange::two(
-                                            egui::text::CCursor::new(0),
-                                            egui::text::CCursor::new(
-                                                dialog.draft.chars().count(),
-                                            ),
-                                        ),
-                                    ));
-                                    state.store(ctx, field.id);
-                                }
-                                dialog.focus = false;
-                            }
-                            if field.changed() {
-                                dialog.needs_edit = false;
-                            }
-                        });
-                        if let Some(error) = dialog.error() {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(235, 160, 151),
-                                error,
-                            );
-                        }
-                    });
-                    ui.vertical(|ui| {
-                        let accept = ui
-                            .add_enabled_ui(
-                                dialog.error().is_none() && !dialog.composing,
-                                |ui| widgets::action_button(ui, "확인", 80.),
-                            )
-                            .inner;
-                        let decline = widgets::action_button(ui, "취소", 80.);
+        let modal = egui::Modal::new(egui::Id::new((
+            "rename_layer_dialog",
+            self.documents.session.key,
+        )))
+        .show(ctx, |ui| {
+            ui.set_width(362.);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("레이어 이름 변경").strong());
+                ui.with_layout(
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        let close = widgets::flat_icon(
+                            ui,
+                            widgets::Icon::Close,
+                            false,
+                            "이름 변경 취소",
+                            18.,
+                        );
                         #[cfg(test)]
                         ui.data_mut(|data| {
                             data.insert_temp(
-                                egui::Id::new("rename_accept"),
-                                accept.rect,
+                                egui::Id::new("rename_close"),
+                                close.rect,
+                            )
+                        });
+                        cancel |= close.clicked();
+                    },
+                );
+            });
+            ui.separator();
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(270.);
+                    ui.horizontal(|ui| {
+                        ui.label("이름:");
+                        let field = ui.add(
+                            egui::TextEdit::singleline(&mut dialog.draft)
+                                .id(egui::Id::new((
+                                    "rename_layer_name",
+                                    self.documents.session.key,
+                                )))
+                                .desired_width(220.)
+                                .char_limit(128)
+                                .return_key(None),
+                        );
+                        #[cfg(test)]
+                        ui.data_mut(|data| {
+                            data.insert_temp(
+                                egui::Id::new("rename_field_id"),
+                                field.id,
                             );
                             data.insert_temp(
-                                egui::Id::new("rename_cancel"),
-                                decline.rect,
-                            );
+                                egui::Id::new("rename_field"),
+                                field.rect,
+                            )
                         });
-                        confirm |= accept.clicked();
-                        cancel |= decline.clicked();
+                        if dialog.focus {
+                            field.request_focus();
+                            if let Some(mut state) =
+                                egui::TextEdit::load_state(ctx, field.id)
+                            {
+                                state.cursor.set_char_range(Some(
+                                    egui::text::CCursorRange::two(
+                                        egui::text::CCursor::new(0),
+                                        egui::text::CCursor::new(
+                                            dialog.draft.chars().count(),
+                                        ),
+                                    ),
+                                ));
+                                state.store(ctx, field.id);
+                            }
+                            dialog.focus = false;
+                        }
+                        if field.changed() {
+                            dialog.needs_edit = false;
+                        }
                     });
+                    if let Some(error) = dialog.error() {
+                        ui.colored_label(
+                            egui::Color32::from_rgb(235, 160, 151),
+                            error,
+                        );
+                    }
+                });
+                ui.vertical(|ui| {
+                    let accept = ui
+                        .add_enabled_ui(
+                            dialog.error().is_none() && !dialog.composing,
+                            |ui| widgets::action_button(ui, "확인", 80.),
+                        )
+                        .inner;
+                    let decline = widgets::action_button(ui, "취소", 80.);
+                    #[cfg(test)]
+                    ui.data_mut(|data| {
+                        data.insert_temp(
+                            egui::Id::new("rename_accept"),
+                            accept.rect,
+                        );
+                        data.insert_temp(
+                            egui::Id::new("rename_cancel"),
+                            decline.rect,
+                        );
+                    });
+                    confirm |= accept.clicked();
+                    cancel |= decline.clicked();
                 });
             });
+        });
         #[cfg(test)]
         ctx.data_mut(|data| {
             data.insert_temp(egui::Id::new("rename_modal"), modal.response.rect)
@@ -242,11 +259,13 @@ impl Parfait {
             }
         }
         if cancel {
-            self.rename_layer = None;
+            self.documents.session.layer_ui.rename = None;
         } else if confirm && dialog.error().is_none() {
-            let dialog = self.rename_layer.take().unwrap();
+            let dialog = self.documents.session.layer_ui.rename.take().unwrap();
             let target = target.unwrap();
-            if dialog.draft != self.doc.layers[target].name {
+            if dialog.draft
+                != self.documents.session.document.layers[target].name
+            {
                 self.edit_named("Rename layer", |document| {
                     document.layers[target].name = dialog.draft
                 });

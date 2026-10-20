@@ -1022,7 +1022,7 @@ mod tests {
     fn solid_dock_scrollbars_do_not_clip_single_column_palette_actions() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open(dir.path().to_path_buf()).unwrap();
-        let artwork = app.doc.clone();
+        let artwork = app.documents.session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         for width in [196., 210., 260., 360.] {
@@ -1062,7 +1062,7 @@ mod tests {
                 })
                 .unwrap();
             assert!(details.right() <= viewport.right());
-            assert_eq!(app.doc, artwork);
+            assert_eq!(app.documents.session.document, artwork);
         }
     }
 

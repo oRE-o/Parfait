@@ -41,10 +41,10 @@ impl Parfait {
                         egui::Align2::CENTER_CENTER,
                         format!(
                             "{}{}  —  {} × {} px",
-                            self.doc.name,
+                            self.documents.session.document.name,
                             if self.project_is_modified() { " *" } else { "" },
-                            self.doc.width,
-                            self.doc.height
+                            self.documents.session.document.width,
+                            self.documents.session.document.height
                         ),
                         egui::FontId::proportional(11.),
                         Color32::from_gray(170),

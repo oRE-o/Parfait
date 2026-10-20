@@ -12,21 +12,35 @@ impl Parfait {
         match command {
             Command::NewLayerFolder | Command::GroupLayersInFolder => {
                 parfait_storage::layer_folder_growth_error(
-                    &self.doc,
+                    &self.documents.session.document,
                     (command == Command::GroupLayersInFolder)
                         .then(|| self.selected_layer_mask()),
                     "폴더 ".len()
-                        + self.doc.next_layer_id.max(1).ilog10() as usize
+                        + self
+                            .documents
+                            .session
+                            .document
+                            .next_layer_id
+                            .max(1)
+                            .ilog10() as usize
                         + 1,
                 )
             }
             Command::UngroupLayerFolder => {
-                let target = &self.doc.layers[self.doc.active];
+                let target = &self.documents.session.document.layers
+                    [self.documents.session.document.active];
                 if target.kind != LayerKind::Folder {
                     Some("폴더를 선택해 주세요.")
-                } else if !self.doc.layer_ancestors_unlocked(self.doc.active) {
+                } else if !self
+                    .documents
+                    .session
+                    .document
+                    .layer_ancestors_unlocked(
+                        self.documents.session.document.active,
+                    )
+                {
                     Some("폴더와 부모의 잠금을 해제해 주세요.")
-                } else if self.doc.layers.len() == 1 {
+                } else if self.documents.session.document.layers.len() == 1 {
                     Some("레이어를 하나 이상 남겨 주세요.")
                 } else {
                     None
@@ -37,7 +51,7 @@ impl Parfait {
     }
 
     fn folder_name(&self) -> String {
-        format!("폴더 {}", self.doc.next_layer_id)
+        format!("폴더 {}", self.documents.session.document.next_layer_id)
     }
 
     pub(crate) fn execute_folder_command(&mut self, command: Command) {
@@ -59,8 +73,11 @@ impl Parfait {
             }
             _ => unreachable!(),
         });
-        self.set_layer_selection(1 << self.doc.active, self.doc.active);
-        self.reveal_layer(self.doc.active);
+        self.set_layer_selection(
+            1 << self.documents.session.document.active,
+            self.documents.session.document.active,
+        );
+        self.reveal_layer(self.documents.session.document.active);
     }
 
     pub(crate) fn tree_collection_reason(
@@ -69,11 +86,16 @@ impl Parfait {
         selection: u64,
     ) -> Option<&'static str> {
         match command {
-            Command::DeleteLayer => {
-                self.doc.layer_tree_delete_reason(selection)
-            }
+            Command::DeleteLayer => self
+                .documents
+                .session
+                .document
+                .layer_tree_delete_reason(selection),
             Command::DuplicateLayer => {
-                parfait_storage::layer_duplication_error(&self.doc, selection)
+                parfait_storage::layer_duplication_error(
+                    &self.documents.session.document,
+                    selection,
+                )
             }
             Command::MoveLayerUp
             | Command::MoveLayerDown
@@ -92,7 +114,9 @@ impl Parfait {
                     Command::MoveActiveLayerToTop
                         | Command::MoveActiveLayerToBottom
                 );
-                self.doc
+                self.documents
+                    .session
+                    .document
                     .layer_sibling_order(selection, upward, edge)
                     .is_none()
                     .then_some(
@@ -108,9 +132,9 @@ impl Parfait {
         command: Command,
         selection: u64,
     ) {
-        if self.stroke.is_some()
+        if self.documents.session.editing.stroke.is_some()
             || self.dialog_open()
-            || self.layer_list.owns_pointer()
+            || self.documents.session.layer_ui.list.owns_pointer()
             || self.workspace.dragging.is_some()
             || self.workspace.resizing
         {
@@ -140,8 +164,12 @@ impl Parfait {
                 Command::MoveActiveLayerToTop
                     | Command::MoveActiveLayerToBottom
             );
-            let order =
-                self.doc.layer_sibling_order(selection, upward, edge).unwrap();
+            let order = self
+                .documents
+                .session
+                .document
+                .layer_sibling_order(selection, upward, edge)
+                .unwrap();
             self.apply_layer_order_named(
                 order,
                 self.selected_layer_mask(),
@@ -157,18 +185,18 @@ impl Parfait {
                 }
             });
             self.set_layer_selection(
-                copied.unwrap_or(1 << self.doc.active),
-                self.doc.active,
+                copied.unwrap_or(1 << self.documents.session.document.active),
+                self.documents.session.document.active,
             );
         }
-        self.reveal_layer(self.doc.active);
+        self.reveal_layer(self.documents.session.document.active);
     }
 
     pub(crate) fn tree_flag_reason(
         &self,
         command: Command,
     ) -> Option<&'static str> {
-        if !self.doc.has_non_raster_layers() {
+        if !self.documents.session.document.has_non_raster_layers() {
             return None;
         }
         let selection = self.selected_layer_mask();
@@ -177,9 +205,11 @@ impl Parfait {
             Command::LayerClipping
                 | Command::LayerReference
                 | Command::LayerDraft
-        ) && self.doc.layers.iter().enumerate().any(|(index, layer)| {
-            selection & (1 << index) != 0 && layer.kind.is_paper()
-        }) {
+        ) && self.documents.session.document.layers.iter().enumerate().any(
+            |(index, layer)| {
+                selection & (1 << index) != 0 && layer.kind.is_paper()
+            },
+        ) {
             return Some(
                 "용지는 클리핑이나 참조, 밑그림으로 설정할 수 없습니다.",
             );
@@ -193,28 +223,37 @@ impl Parfait {
             | Command::MoveActiveLayerDown
             | Command::MoveActiveLayerToTop
             | Command::MoveActiveLayerToBottom => {
-                self.tree_collection_reason(command, 1 << self.doc.active)
+                self.tree_collection_reason(command, 1 << self.documents.session.document.active)
             }
             Command::LayerAlphaLock
-                if self.doc.layers.iter().enumerate().any(|(index, layer)| {
+                if self.documents.session.document.layers.iter().enumerate().any(|(index, layer)| {
                     selection & (1 << index) != 0 && layer.kind != LayerKind::Raster
                 }) =>
             {
                 Some("투명 픽셀 잠금은 픽셀 레이어에서 사용할 수 있습니다.")
             }
-            Command::LayerClipping if !self.doc.layers[self.doc.active].clipped => self
-                .doc
-                .layers
-                .iter()
-                .enumerate()
-                .any(|(index, _)| {
-                    selection & (1 << index) != 0
-                        && self
-                            .doc
-                            .layer_clipping_base_below(index, selection)
-                            .is_none()
-                })
-                .then_some("같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요."),
+            Command::LayerClipping
+                if !self.documents.session.document.layers
+                    [self.documents.session.document.active]
+                    .clipped =>
+            {
+                self.documents
+                    .session
+                    .document
+                    .layers
+                    .iter()
+                    .enumerate()
+                    .any(|(index, _)| {
+                        selection & (1 << index) != 0
+                            && self
+                                .documents
+                                .session
+                                .document
+                                .layer_clipping_base_below(index, selection)
+                                .is_none()
+                    })
+                    .then_some("같은 폴더 안에 통과 모드가 아닌 클리핑 기반을 남겨 주세요.")
+            }
             _ => None,
         }
     }
@@ -226,14 +265,19 @@ impl Parfait {
         parent: Option<LayerId>,
     ) {
         if let Some(reason) = parfait_storage::layer_reparent_error(
-            &self.doc, selection, boundary, parent,
+            &self.documents.session.document,
+            selection,
+            boundary,
+            parent,
         ) {
             self.notice = Some(reason.into());
             return;
         }
         let selected = self.selected_layer_mask();
         let identities: Vec<_> = self
-            .doc
+            .documents
+            .session
+            .document
             .layers
             .iter()
             .enumerate()
@@ -244,13 +288,18 @@ impl Parfait {
             document.move_layer_subtrees(selection, boundary, parent);
         });
         let selected = self
-            .doc
+            .documents
+            .session
+            .document
             .layers
             .iter()
             .enumerate()
             .filter(|(_, layer)| identities.contains(&layer.id))
             .fold(0, |mask, (index, _)| mask | (1 << index));
-        self.set_layer_selection(selected, self.doc.active);
-        self.reveal_layer(self.doc.active);
+        self.set_layer_selection(
+            selected,
+            self.documents.session.document.active,
+        );
+        self.reveal_layer(self.documents.session.document.active);
     }
 }
