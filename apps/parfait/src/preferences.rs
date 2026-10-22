@@ -155,7 +155,13 @@ impl Parfait {
     pub fn persist_preferences(&mut self, force: bool) {
         if (!force
             && (self.tools.drag.is_some()
-                || self.documents.active_session.editing.layer_edit.is_some()))
+                || (!self.documents.is_empty()
+                    && self
+                        .documents
+                        .active_session
+                        .editing
+                        .layer_edit
+                        .is_some())))
             || (!force
                 && !self.documents.is_empty()
                 && self.documents.active_session.editing.stroke.is_some())
@@ -593,5 +599,24 @@ mod tests {
         assert!(app.preferences_read_failed);
         app.persist_preferences(true);
         assert_eq!(app.saved_preferences_json(), invalid);
+    }
+}
+
+#[cfg(test)]
+mod empty_workspace_tests {
+    use super::*;
+    #[test]
+    fn periodic_preferences_persist_after_the_last_document_closes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        let id = app.documents.active_id().unwrap();
+        assert!(app.close_document_tab(id));
+        app.preferences_tick =
+            std::time::Instant::now() - std::time::Duration::from_secs(2);
+        app.persist_preferences(false);
+        assert!(app.error.is_none(), "{:?}", app.error);
+        assert!(app.preferences_saved.as_ref().unwrap().matches(&app));
+        app.request_close(&eframe::egui::Context::default());
+        assert!(app.recovery_runtime.as_ref().unwrap().shutdown_ready);
     }
 }
