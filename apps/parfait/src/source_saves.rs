@@ -195,6 +195,9 @@ impl Parfait {
         if action == 0 {
             return;
         }
+        self.resolve_source_prompt(action);
+    }
+    fn resolve_source_prompt(&mut self, action: u8) {
         let mut prompt = self.source_saves.prompts.remove(0);
         if action == 3 {
             return;
@@ -257,6 +260,52 @@ mod tests {
     fn drain(app: &mut Parfait) {
         app.recovery_runtime.as_ref().unwrap().worker.barrier();
         app.poll_source_saves();
+    }
+    #[test]
+    fn cancelled_overwrite_clears_progress_without_changing_saved_state() {
+        let (_dir, mut app) = app();
+        let out = tempfile::tempdir().unwrap();
+        let path = out.path().join("original.parfait");
+        app.edit_named("Initial", |d| *d = Document::new(8, 8));
+        app.save_project_to(path.clone()).unwrap();
+        app.edit_named("Unsaved", |d| d.layers[1].opacity = 0.5);
+        let before = app.documents.active_session.document.clone();
+        let baseline = app.documents.active_session.saved_edit_state;
+        Parfait::write_project_document(&Document::new(4, 4), &path).unwrap();
+        let external = std::fs::read(&path).unwrap();
+        let key = app.documents.active_key().unwrap();
+        app.save_project_to_for(key, path.clone()).unwrap();
+        assert_eq!(app.project_status(), "파일 저장 중");
+        drain(&mut app);
+        assert_eq!(app.project_status(), "덮어쓰기 확인 필요");
+        app.resolve_source_prompt(3);
+        assert_eq!(app.project_status(), "파일 수정됨");
+        assert_eq!(app.documents.active_session.document, before);
+        assert_eq!(app.documents.active_session.saved_edit_state, baseline);
+        assert_eq!(std::fs::read(&path).unwrap(), external);
+    }
+    #[test]
+    fn exit_rechecks_conflicts_returned_while_draining_source_save() {
+        let (_dir, mut app) = app();
+        let out = tempfile::tempdir().unwrap();
+        let path = out.path().join("original.parfait");
+        app.edit_named("Initial", |d| *d = Document::new(8, 8));
+        app.save_project_to(path.clone()).unwrap();
+        Parfait::write_project_document(&Document::new(4, 4), &path).unwrap();
+        let key = app.documents.active_key().unwrap();
+        app.save_project_to_for(key, path).unwrap();
+        assert!(app.flush_document_recovery(true).is_err());
+        assert!(!app.recovery_runtime.as_ref().unwrap().shutdown_ready);
+        assert!(
+            !app.recovery_runtime
+                .as_ref()
+                .unwrap()
+                .store
+                .clean_shutdown()
+                .unwrap()
+        );
+        app.resolve_source_prompt(3);
+        app.flush_document_recovery(true).unwrap();
     }
     #[test]
     fn stage4_async_save_keeps_new_edits_other_tab_and_saved_undo_identity() {

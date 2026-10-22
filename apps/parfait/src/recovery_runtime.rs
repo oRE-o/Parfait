@@ -381,6 +381,10 @@ impl Parfait {
         self.recovery_runtime.as_ref().unwrap().worker.barrier();
         self.poll_source_saves();
         anyhow::ensure!(
+            self.source_saves.prompts.is_empty(),
+            "Resolve or cancel the overwrite prompt first"
+        );
+        anyhow::ensure!(
             self.source_saves.pending.is_empty(),
             "An original save is incomplete"
         );

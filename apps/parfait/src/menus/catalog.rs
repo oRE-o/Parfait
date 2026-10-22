@@ -86,7 +86,7 @@ const FILE: &[MenuItem] = &[
     Planned("인쇄 설정…"),
     Planned("인쇄…"),
     Separator,
-    Planned("Parfait 종료"),
+    Action(Command::Quit),
 ];
 
 const CORRECTIONS: &[MenuItem] = &[

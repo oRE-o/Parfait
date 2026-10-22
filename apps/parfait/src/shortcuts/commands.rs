@@ -197,6 +197,7 @@ pub enum Command {
     NextCanvas,
     PreviousCanvas,
     CloseCanvas,
+    Quit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -426,6 +427,7 @@ impl Command {
         Self::NextCanvas,
         Self::PreviousCanvas,
         Self::CloseCanvas,
+        Self::Quit,
     ];
 
     pub fn label(self) -> &'static str {
@@ -433,6 +435,7 @@ impl Command {
             Self::NextCanvas => "다음 캔버스",
             Self::PreviousCanvas => "이전 캔버스",
             Self::CloseCanvas => "닫기",
+            Self::Quit => "Parfait 종료",
             Self::EditTextInkBounds => "텍스트 그리기 경계 정렬",
             Self::EditVectorCenters => "벡터 중심선 정렬",
             Self::NewTextLayer => "텍스트 레이어…",
@@ -638,7 +641,7 @@ impl Command {
             | Self::LayerSelectionIntersect
             | Self::LayerMaskOutsideSelection
             | Self::LayerMaskSelection => Category::Layer,
-            Self::CloseCanvas => Category::File,
+            Self::CloseCanvas | Self::Quit => Category::File,
             Self::NextCanvas | Self::PreviousCanvas => Category::Window,
             Self::NewDrawing
             | Self::OpenProject
@@ -931,6 +934,12 @@ impl Command {
 
 impl Parfait {
     pub fn execute_command(&mut self, command: Command, ctx: &egui::Context) {
+        if command == Command::Quit {
+            if !self.dialog_open() {
+                self.request_close(ctx);
+            }
+            return;
+        }
         if matches!(command, Command::NewDrawing | Command::OpenProject)
             && (self.documents.is_empty() || self.tabs.enabled)
         {
@@ -973,6 +982,7 @@ impl Parfait {
             command if command.is_pixel_selection() => {
                 self.execute_pixel_selection(command)
             }
+            Command::Quit => self.request_close(ctx),
             Command::NewDrawing => self.confirm_new = true,
             Command::OpenProject => self.open_project(),
             Command::SaveProject => self.save_project(false),

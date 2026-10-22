@@ -154,8 +154,8 @@ fn frame(
             ..Default::default()
         },
         |ui| {
+            app.menu_bar(ui);
             if app.documents.is_empty() {
-                app.menu_bar(ui);
                 return;
             }
             app.prepare_layer_list(ui.ctx());
@@ -350,7 +350,7 @@ fn eight_korean_menus_fit_minimum_width_with_separate_save_status_and_glyphs() {
     }
     assert_eq!(app.documents.active_session.document, before);
     assert_eq!(app.documents.active_session.history.rows().count(), 0);
-    assert_eq!(Command::ALL.len(), 187);
+    assert_eq!(Command::ALL.len(), 189);
 }
 
 #[test]
@@ -600,8 +600,8 @@ fn static_menu_catalog_is_bounded_unique_and_separates_actions_from_plans() {
         counts.1 += current.1;
         counts.2 += current.2;
     }
-    assert_eq!(counts, (176, 221, 41));
-    assert_eq!(Command::ALL.len(), 187);
+    assert_eq!(counts, (178, 219, 41));
+    assert_eq!(Command::ALL.len(), 189);
     eprintln!(
         "catalog: {} action routes, {} planned leaves, {} groups",
         counts.0, counts.1, counts.2
@@ -869,5 +869,46 @@ fn empty_workspace_keeps_all_eight_distinct_menus_safe_to_open() {
         open(&mut app, &ctx, menu);
         escape(&mut app, &ctx);
         assert!(app.documents.is_empty());
+    }
+}
+
+#[test]
+fn file_quit_uses_durable_shutdown_with_unsaved_and_empty_workspaces() {
+    for empty in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open(dir.path().to_owned()).unwrap();
+        app.documents.active_session.document = Document::new(4, 4);
+        if empty {
+            let id = app.documents.active_id().unwrap();
+            assert!(app.close_document_tab(id));
+        } else {
+            app.edit_named("Unsaved", |d| d.layers[1].opacity = 0.5);
+        }
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        frame(&mut app, &ctx, vec![], 960.);
+        open(&mut app, &ctx, TopMenu::File);
+        let target = reveal(&mut app, &ctx, root_path(TopMenu::File), |ctx| {
+            rect(ctx, ("menu_item", Command::Quit.label()))
+        });
+        click(&mut app, &ctx, target);
+        assert!(app.recovery_runtime.as_ref().unwrap().shutdown_ready);
+        assert!(
+            app.recovery_runtime
+                .as_ref()
+                .unwrap()
+                .store
+                .clean_shutdown()
+                .unwrap()
+        );
+        drop(app);
+        let reopened = Parfait::open(dir.path().to_owned()).unwrap();
+        if !empty {
+            assert_eq!(
+                reopened.documents.active_session.document.layers[1].opacity,
+                0.5
+            );
+            assert!(reopened.documents.active_session.modified());
+        }
     }
 }

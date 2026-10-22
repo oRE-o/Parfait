@@ -20,6 +20,9 @@ impl Parfait {
         &self,
         command: Command,
     ) -> Option<&'static str> {
+        if command == Command::Quit {
+            return self.dialog_open().then_some("현재 편집 창을 마쳐 주세요.");
+        }
         if self.documents.is_empty() {
             return if matches!(
                 command,

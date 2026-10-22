@@ -131,10 +131,7 @@ impl Parfait {
                 ui.separator();
                 self.top_menu_command(ui, Command::Notices);
                 ui.separator();
-                if ui.button("Parfait 종료").clicked() {
-                    self.request_close(ui.ctx());
-                    ui.close();
-                }
+                self.top_menu_command(ui, Command::Quit);
             });
         });
         let center = response.response.rect.center();

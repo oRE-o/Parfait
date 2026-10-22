@@ -16,6 +16,14 @@ impl Parfait {
             return "열린 그림 없음";
         }
         let session = &*self.documents.active_session;
+        if self.source_saves.pending.contains_key(&session.key.document_id) {
+            return "파일 저장 중";
+        }
+        if self.source_saves.prompts.iter().any(|p| {
+            p.request.key.document_id == session.key.document_id.bytes()
+        }) {
+            return "덮어쓰기 확인 필요";
+        }
         if session.project.is_none() {
             "파일 저장 필요"
         } else if session.modified() {

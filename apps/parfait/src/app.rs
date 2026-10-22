@@ -404,14 +404,11 @@ impl Parfait {
         if let Some(path) = path {
             match self.save_project_to_for(target, path) {
                 Ok(()) => {
-                    self.notice = Some(
-                        if self.recovery_runtime.is_some() {
-                            "Saving original file…"
-                        } else {
-                            "Project saved."
-                        }
-                        .into(),
-                    )
+                    self.notice = if self.recovery_runtime.is_some() {
+                        None
+                    } else {
+                        Some("Project saved.".into())
+                    };
                 }
                 Err(error) => {
                     self.error = Some(format!("Save failed: {error:#}"))
