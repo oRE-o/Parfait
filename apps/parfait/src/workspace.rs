@@ -8,6 +8,31 @@ fn default_width_weight() -> f32 {
     1.
 }
 
+fn detached_opacity(
+    ui: &egui::Ui,
+    bounds: Rect,
+    inactive: f32,
+    dragging: bool,
+) -> f32 {
+    if dragging {
+        0.5
+    } else if ui.input(|i| {
+        i.pointer.hover_pos().is_some_and(|pos| bounds.contains(pos))
+    }) {
+        1.
+    } else {
+        inactive
+    }
+}
+
+fn insertion_bar(from: Pos2, to: Pos2) -> Rect {
+    if (from.x - to.x).abs() < 0.5 {
+        Rect::from_min_max(from - egui::vec2(1.5, 0.), to + egui::vec2(1.5, 0.))
+    } else {
+        Rect::from_min_max(from - egui::vec2(0., 1.5), to + egui::vec2(0., 1.5))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Palette {
     Brushes,
@@ -64,10 +89,14 @@ enum DockDirection {
 }
 impl DockDirection {
     fn at(rect: Rect, pos: Pos2) -> Self {
-        let x = (pos.x - rect.left()) / rect.width();
-        if x < 0.25 {
+        let edge = (rect.width() * 0.12).clamp(10., 24.);
+        if pos.y < rect.top() {
+            Self::Top
+        } else if pos.y > rect.bottom() {
+            Self::Bottom
+        } else if pos.x < rect.left() + edge {
             Self::Left
-        } else if x > 0.75 {
+        } else if pos.x > rect.right() - edge {
             Self::Right
         } else if pos.y < rect.center().y {
             Self::Top
@@ -271,7 +300,48 @@ impl Workspace {
         }
         rows.into_iter().map(|(_, row)| row).collect()
     }
-    /// The same layout calculation drives both the rendered slots and drop preview.
+    fn insert_line(
+        &self,
+        target: (Palette, Location, Rect),
+        direction: DockDirection,
+    ) -> Rect {
+        let (palette, side, slot) = target;
+        let row_key = |palette| {
+            if side == Location::Top {
+                Palette::Brushes
+            } else {
+                self.panels
+                    .iter()
+                    .find(|p| p.palette == palette)
+                    .unwrap()
+                    .row
+                    .unwrap_or(palette)
+            }
+        };
+        let key = row_key(palette);
+        let row = self
+            .slots
+            .iter()
+            .filter(|(p, location, _)| *location == side && row_key(*p) == key)
+            .map(|(_, _, r)| *r)
+            .reduce(|a, b| a.union(b))
+            .unwrap_or(slot);
+        let (from, to) = match direction {
+            DockDirection::Left => (
+                egui::pos2(slot.left(), row.top()),
+                egui::pos2(slot.left(), row.bottom()),
+            ),
+            DockDirection::Right => (
+                egui::pos2(slot.right(), row.top()),
+                egui::pos2(slot.right(), row.bottom()),
+            ),
+            DockDirection::Top => (row.left_top(), row.right_top()),
+            DockDirection::Bottom => (row.left_bottom(), row.right_bottom()),
+        };
+        insertion_bar(from, to)
+    }
+
+    /// Rendered rows also supply the insertion-marker boundaries.
     fn dock_layout(
         &self,
         side: Location,
@@ -579,9 +649,9 @@ impl Workspace {
                     .step_by(0.01)
                     .show_value(false),
                 )
-                .on_hover_text("독립 창이 포커스를 잃었을 때의 불투명도");
+                .on_hover_text("마우스가 팔레트 밖에 있을 때의 불투명도 · 마우스를 올리면 100%");
             } else {
-                ui.menu_button("독립 창 비활성 투명도", |ui| {
+                ui.menu_button("마우스 밖 불투명도", |ui| {
                     ui.add(
                         egui::Slider::new(
                             &mut self.panels[i].inactive_opacity,
@@ -1000,6 +1070,7 @@ impl Workspace {
                     .order(egui::Order::Foreground)
                     .fixed_pos(pos)
                     .movable(false)
+                    .interactable(self.dragging != Some(p.palette))
                     // Only the header is constrained above. Constraining the
                     // entire Area makes tall palettes jump while dragging.
                     .constrain(false)
@@ -1009,6 +1080,19 @@ impl Workspace {
                         if p.collapsed { 23. } else { p.height + 29. },
                     ))
                     .show(&ctx, |ui| {
+                        let bounds = Rect::from_min_size(
+                            pos,
+                            egui::vec2(
+                                p.rect[2],
+                                if p.collapsed { 23. } else { p.height + 29. },
+                            ),
+                        );
+                        ui.multiply_opacity(detached_opacity(
+                            ui,
+                            bounds,
+                            p.inactive_opacity,
+                            self.dragging == Some(p.palette),
+                        ));
                         egui::Frame::NONE.fill(Color32::from_gray(57)).show(
                             ui,
                             |ui| {
@@ -1114,12 +1198,12 @@ impl Workspace {
                             item.height = (r.height() - 29.).clamp(60., 2000.);
                         }
                     }
-                    let opacity = if ui.input(|i| i.focused) {
-                        1.
-                    } else {
-                        p.inactive_opacity
-                    };
-                    ui.multiply_opacity(opacity);
+                    ui.multiply_opacity(detached_opacity(
+                        ui,
+                        ui.ctx().content_rect(),
+                        p.inactive_opacity,
+                        false,
+                    ));
                     egui::CentralPanel::default()
                         .frame(egui::Frame::NONE.fill(Color32::from_gray(57)))
                         .show(ui, |ui| {
@@ -1138,8 +1222,18 @@ impl Workspace {
                 let target = self
                     .slots
                     .iter()
+                    .copied()
                     .find(|(_, _, r)| r.contains(pos))
-                    .copied();
+                    .or_else(|| {
+                        self.slots
+                            .iter()
+                            .copied()
+                            .filter(|(_, _, r)| r.expand(6.).contains(pos))
+                            .min_by(|(_, _, a), (_, _, b)| {
+                                a.distance_sq_to_pos(pos)
+                                    .total_cmp(&b.distance_sq_to_pos(pos))
+                            })
+                    });
                 let screen = ctx.content_rect();
                 let edge = if pos.y < dock_area.top() + 45.
                     && pos.x > dock_area.left() + 100.
@@ -1153,166 +1247,49 @@ impl Workspace {
                 } else {
                     None
                 };
-                let paint = ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Tooltip,
-                    egui::Id::new("dock_feedback"),
-                ));
-                let direction = target.map(|(_, side, rect)| {
-                    let full = self
-                        .dock_bounds
-                        .iter()
-                        .find(|(s, _)| *s == side)
-                        .and_then(|(_, bounds)| {
-                            self.dock_layout(side, *bounds).into_iter().find(
-                                |(p, _)| Some(*p) == target.map(|(p, _, _)| p),
-                            )
+                let direction =
+                    target.map(|(_, _, rect)| DockDirection::at(rect, pos));
+                let marker = target
+                    .map(|target| self.insert_line(target, direction.unwrap()))
+                    .or_else(|| {
+                        edge.map(|side| match side {
+                            Location::Top => insertion_bar(
+                                dock_area.left_top(),
+                                dock_area.right_top(),
+                            ),
+                            Location::Left => insertion_bar(
+                                dock_area.left_top(),
+                                dock_area.left_bottom(),
+                            ),
+                            _ => insertion_bar(
+                                dock_area.right_top(),
+                                dock_area.right_bottom(),
+                            ),
                         })
-                        .map_or(rect, |(_, rect)| rect);
-                    DockDirection::at(full, pos)
-                });
-                let mut planned = self.clone();
-                let side = if let Some((other, side, _)) = target {
-                    planned.dock_to(palette, other, direction.unwrap());
-                    Some(side)
-                } else if let Some(side) = edge {
-                    planned.relocate(palette, side, None, pos);
-                    Some(side)
-                } else {
-                    None
-                };
-                if let Some(side) = side {
-                    if side == Location::Top {
-                        let h = planned
-                            .panels
-                            .iter()
-                            .filter(|p| {
-                                p.visible && p.location == Location::Top
-                            })
-                            .map(|p| p.height + 29.)
-                            .fold(140., f32::max)
-                            .min(dock_area.height() * 0.4);
-                        let bounds = self
-                            .dock_bounds
-                            .iter()
-                            .find(|(s, _)| *s == Location::Top)
-                            .map(|(_, r)| *r)
-                            .unwrap_or_else(|| {
-                                Rect::from_min_size(
-                                    dock_area.min + egui::vec2(8., 2.),
-                                    egui::vec2(dock_area.width() - 16., h - 4.),
-                                )
-                            });
-                        if let Some((_, preview)) = planned
-                            .dock_layout(side, bounds)
-                            .into_iter()
-                            .find(|(p, _)| *p == palette)
-                        {
-                            let paint = paint.with_clip_rect(dock_area);
-                            paint.rect_filled(
-                                preview,
-                                0.,
-                                Color32::from_rgba_unmultiplied(
-                                    100, 140, 200, 65,
-                                ),
-                            );
-                            paint.rect_stroke(
-                                preview,
-                                0.,
-                                egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
-                                egui::StrokeKind::Inside,
-                            );
-                            #[cfg(test)]
-                            ctx.data_mut(|d| {
-                                d.insert_temp(
-                                    egui::Id::new("dock_preview_rect"),
-                                    preview,
-                                )
-                            });
-                        }
-                    } else {
-                        let frame_margin =
-                            egui::Frame::side_top_panel(ui.style())
-                                .total_margin();
-                        let scroll_width =
-                            ui.spacing().scroll.allocated_width();
-                        let margin = frame_margin.sum().x + scroll_width + 1.;
-                        let width = planned.dock_width(side, margin);
-                        let content_width =
-                            width - frame_margin.sum().x - scroll_width;
-                        let mut bounds = self
-                            .dock_bounds
-                            .iter()
-                            .find(|(s, _)| *s == side)
-                            .map(|(_, r)| *r)
-                            .unwrap_or_else(|| {
-                                Rect::from_min_size(
-                                    egui::pos2(
-                                        if side == Location::Left {
-                                            dock_area.left() + frame_margin.left
-                                        } else {
-                                            dock_area.right() - width
-                                                + frame_margin.left
-                                        },
-                                        dock_area.top() + frame_margin.top,
-                                    ),
-                                    egui::vec2(
-                                        content_width,
-                                        dock_area.height()
-                                            - frame_margin.sum().y,
-                                    ),
-                                )
-                            });
-                        if side == Location::Right {
-                            bounds.min.x = bounds.right() - content_width;
-                        }
-                        bounds.max.x = bounds.left() + content_width;
-                        if let Some((_, preview)) = planned
-                            .dock_layout(side, bounds)
-                            .into_iter()
-                            .find(|(p, _)| *p == palette)
-                        {
-                            let clip = self
-                                .dock_clips
-                                .iter()
-                                .find(|(s, _)| *s == side)
-                                .map_or(dock_area, |(_, r)| *r);
-                            let left = if side == Location::Right {
-                                clip.right() - content_width
-                            } else {
-                                clip.left()
-                            };
-                            let clip = Rect::from_min_max(
-                                egui::pos2(left, clip.top()),
-                                egui::pos2(left + content_width, clip.bottom()),
-                            )
-                            .intersect(ctx.content_rect());
-                            let preview = preview.intersect(clip);
-                            if preview.is_positive() {
-                                // A quiet footprint leaves the target's contents readable.
-                                let paint = paint.with_clip_rect(clip);
-                                paint.rect_filled(
-                                    preview,
-                                    0.,
-                                    Color32::from_rgba_unmultiplied(
-                                        110, 170, 225, 18,
-                                    ),
-                                );
-                                paint.rect_stroke(
-                                    preview,
-                                    0.,
-                                    egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
-                                    egui::StrokeKind::Inside,
-                                );
-                                #[cfg(test)]
-                                ctx.data_mut(|data| {
-                                    data.insert_temp(
-                                        egui::Id::new("dock_preview_rect"),
-                                        preview,
-                                    )
-                                });
-                            }
-                        }
-                    }
+                    });
+                if let Some(marker) = marker {
+                    let marker = marker.intersect(screen);
+                    let paint = ctx.layer_painter(egui::LayerId::new(
+                        egui::Order::Tooltip,
+                        egui::Id::new("dock_feedback"),
+                    ));
+                    paint.rect_filled(
+                        marker.expand(1.5).intersect(screen),
+                        0.,
+                        Color32::from_black_alpha(180),
+                    );
+                    paint.rect_filled(
+                        marker,
+                        0.,
+                        Color32::from_rgb(230, 65, 75),
+                    );
+                    #[cfg(test)]
+                    ctx.data_mut(|data| {
+                        data.insert_temp(
+                            egui::Id::new("dock_insert_line"),
+                            marker,
+                        )
+                    });
                 }
                 if ctx.input(|i| i.pointer.any_released()) {
                     if let Some((other, _, _)) = target {
@@ -1343,6 +1320,91 @@ impl Parfait {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn detached_surface_alpha_follows_mouse_instead_of_keyboard_focus() {
+        for (focused, position, dragging, expected) in [
+            (true, Some(egui::pos2(20., 20.)), false, 0.35),
+            (false, Some(egui::pos2(100., 100.)), false, 1.),
+            (true, Some(egui::pos2(100., 100.)), false, 1.),
+            (true, None, false, 0.35),
+            (true, Some(egui::pos2(100., 100.)), true, 0.5),
+        ] {
+            let ctx = egui::Context::default();
+            let bounds = Rect::from_min_size(
+                egui::pos2(50., 50.),
+                egui::vec2(200., 200.),
+            );
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(800., 600.),
+                    )),
+                    focused,
+                    events: vec![position.map_or(
+                        egui::Event::PointerGone,
+                        egui::Event::PointerMoved,
+                    )],
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.multiply_opacity(detached_opacity(
+                        ui, bounds, 0.35, dragging,
+                    ));
+                    egui::Frame::NONE.fill(Color32::from_gray(57)).show(
+                        ui,
+                        |ui| {
+                            ui.set_min_size(egui::vec2(200., 200.));
+                        },
+                    );
+                },
+            );
+            let alpha = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Rect(r) if r.fill != Color32::TRANSPARENT => {
+                        Some(r.fill.a())
+                    }
+                    _ => None,
+                })
+                .expect("palette background is painted");
+            output.textures_delta.clear();
+            assert!(
+                (f32::from(alpha) - expected * 255.).abs() <= 1.,
+                "focus={focused} pos={position:?} alpha={alpha}"
+            );
+        }
+    }
+
+    #[test]
+    fn insertion_markers_span_the_correct_row_boundary() {
+        let mut workspace = Workspace::default();
+        workspace.dock_to(
+            Palette::Properties,
+            Palette::Brushes,
+            DockDirection::Right,
+        );
+        let a =
+            Rect::from_min_size(egui::pos2(40., 100.), egui::vec2(180., 200.));
+        let b = a.translate(egui::vec2(180., 0.));
+        workspace.slots = vec![
+            (Palette::Brushes, Location::Left, a),
+            (Palette::Properties, Location::Left, b),
+        ];
+        let target = workspace.slots[0];
+        let vertical = workspace.insert_line(target, DockDirection::Right);
+        assert_eq!(vertical.size(), egui::vec2(3., 200.));
+        assert_eq!(vertical.center().x, a.right());
+        let horizontal = workspace.insert_line(target, DockDirection::Bottom);
+        assert_eq!(horizontal.size(), egui::vec2(360., 3.));
+        assert_eq!(horizontal.center().y, a.bottom());
+        assert!(matches!(
+            DockDirection::at(a, egui::pos2(a.left() + 40., a.top() + 8.)),
+            DockDirection::Top
+        ));
+    }
+
     #[test]
     fn preference_comparison_covers_geometry_but_ignores_runtime_caches() {
         let original = super::Workspace::default();
@@ -2080,9 +2142,17 @@ mod tests {
                     .2;
                 let to = target.right_center() - egui::vec2(4., 0.);
                 run(&mut app, vec![egui::Event::PointerMoved(to)]);
+                let target = app
+                    .workspace
+                    .slots
+                    .iter()
+                    .find(|(p, _, _)| *p == Palette::Properties)
+                    .unwrap()
+                    .2
+                    .intersect(ctx.content_rect());
                 let preview = ctx
                     .data(|d| {
-                        d.get_temp::<Rect>(egui::Id::new("dock_preview_rect"))
+                        d.get_temp::<Rect>(egui::Id::new("dock_insert_line"))
                     })
                     .unwrap();
                 run(&mut app, vec![button(to, false)]);
@@ -2094,13 +2164,27 @@ mod tests {
                     .find(|(p, _, _)| *p == Palette::Brushes)
                     .unwrap()
                     .2;
-                assert!(
-                    (actual.min - preview.min).length() < 3.,
-                    "{side:?} scroll={scrolled}: {actual:?} != {preview:?}"
-                );
-                assert!(
-                    (actual.size() - preview.size()).length() < 3.,
-                    "{side:?} scroll={scrolled}: {actual:?} != {preview:?}"
+                assert!((preview.width() - 3.).abs() < 0.1);
+                assert!((preview.center().x - target.right()).abs() < 0.1);
+                assert!((preview.top() - target.top()).abs() < 0.1);
+                assert!((preview.bottom() - target.bottom()).abs() < 0.1);
+                assert!(actual.is_positive());
+                let inserted = app
+                    .workspace
+                    .panels
+                    .iter()
+                    .find(|p| p.palette == Palette::Brushes)
+                    .unwrap();
+                let neighbor = app
+                    .workspace
+                    .panels
+                    .iter()
+                    .find(|p| p.palette == Palette::Properties)
+                    .unwrap();
+                assert_eq!(inserted.location, side);
+                assert_eq!(
+                    inserted.row,
+                    Some(neighbor.row.unwrap_or(neighbor.palette))
                 );
             }
         }
