@@ -153,6 +153,14 @@ impl Document {
                 }
             }
         }
+        if !self.layer_colors.is_empty() {
+            hash.update(b"Parfait.LayerColors\0");
+            hash.update((self.layer_colors.len() as u64).to_le_bytes());
+            for (id, color) in &self.layer_colors {
+                hash.update(id.0.to_le_bytes());
+                hash.update(color);
+            }
+        }
         Some(ArtDigestV1(hash.finalize().into()))
     }
 }

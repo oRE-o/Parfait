@@ -5,6 +5,7 @@ mod source;
 pub use source::{SavedSource, SourceEvent, SourceFailure, SourceRequest};
 mod legacy;
 mod legacy_v10;
+mod legacy_v11;
 mod legacy_v2;
 mod legacy_v3;
 mod legacy_v4;
@@ -41,6 +42,7 @@ const SNAPSHOT_V6: &[u8] = b"PARFAIT\0SNAP6\0";
 const SNAPSHOT_V7: &[u8] = b"PARFAIT\0SNAP7\0";
 const SNAPSHOT_V8: &[u8] = b"PARFAIT\0SNAP8\0";
 const SNAPSHOT_V9: &[u8] = b"PARFAIT\0SNAP9\0";
+const SNAPSHOT_V12: &[u8] = b"PARFAIT\0SNAP12\0";
 const SNAPSHOT_V11: &[u8] = b"PARFAIT\0SNAP11\0";
 const SNAPSHOT_V10: &[u8] = b"PARFAIT\0SNAP10\0";
 use anyhow::{Context, Result, bail, ensure};
@@ -105,7 +107,7 @@ impl Store {
             connection
                 .pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(
-            (0..=11).contains(&version),
+            (0..=12).contains(&version),
             "This project uses an unsupported format ({version})"
         );
         Ok(Self { connection })
@@ -122,7 +124,7 @@ impl Store {
             connection
                 .pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(
-            (0..=11).contains(&version),
+            (0..=12).contains(&version),
             "This project uses an unsupported format ({version})"
         );
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
@@ -179,17 +181,25 @@ impl Store {
             snapshot_size(doc).unwrap(),
         )?;
         let mut raw = work_budget::WorkBuffer::new(reservation.raw)?;
-        let header =
-            if doc.contents.is_empty() { SNAPSHOT_V10 } else { SNAPSHOT_V11 };
+        let header = if !doc.layer_colors.is_empty() {
+            SNAPSHOT_V12
+        } else if doc.contents.is_empty() {
+            SNAPSHOT_V10
+        } else {
+            SNAPSHOT_V11
+        };
         raw.write_all(header)?;
         let options = bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .with_limit(MAX_BYTES - header.len() as u64);
-        if doc.contents.is_empty() {
+        if !doc.layer_colors.is_empty() {
+            options.serialize_into(&mut raw, doc)?;
+        } else if doc.contents.is_empty() {
             options
                 .serialize_into(&mut raw, &legacy_v10::Borrowed::from(doc))?;
         } else {
-            options.serialize_into(&mut raw, doc)?;
+            options
+                .serialize_into(&mut raw, &legacy_v11::Borrowed::from(doc))?;
         }
         let raw = raw.finish();
         ensure!(raw.len() as u64 <= MAX_BYTES, "Snapshot too large");
@@ -240,7 +250,13 @@ impl Store {
         tx.pragma_update(
             None,
             "user_version",
-            previous.max(if doc.contents.is_empty() { 10 } else { 11 }),
+            previous.max(if !doc.layer_colors.is_empty() {
+                12
+            } else if doc.contents.is_empty() {
+                10
+            } else {
+                11
+            }),
         )?;
         tx.commit()?;
         Ok(head)
@@ -281,9 +297,13 @@ impl Store {
                     .with_limit(MAX_BYTES)
                     .reject_trailing_bytes();
                 let doc: Document = if let Some(payload) =
-                    raw.strip_prefix(SNAPSHOT_V11)
+                    raw.strip_prefix(SNAPSHOT_V12)
                 {
                     options.deserialize(payload)?
+                } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V11) {
+                    let old: legacy_v11::LegacyDocument =
+                        options.deserialize(payload)?;
+                    old.into()
                 } else if let Some(payload) = raw.strip_prefix(SNAPSHOT_V10) {
                     let old: legacy_v10::LegacyDocument =
                         options.deserialize(payload)?;

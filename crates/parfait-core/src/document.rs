@@ -81,6 +81,12 @@ pub struct Document {
         deserialize_with = "crate::content::deserialize_contents"
     )]
     pub contents: Vec<crate::ContentNode>,
+    /// Palette labels, sorted by stable layer identity; they do not alter pixels.
+    #[serde(
+        default,
+        deserialize_with = "crate::content::deserialize_layer_colors"
+    )]
+    pub layer_colors: Vec<(LayerId, [u8; 3])>,
 }
 
 impl Document {
@@ -97,6 +103,7 @@ impl Document {
             name: "Untitled".into(),
             selection: None,
             contents: Vec::new(),
+            layer_colors: Vec::new(),
             layers: vec![
                 Layer {
                     id: LayerId(1),
@@ -145,7 +152,12 @@ impl Document {
         }
     }
     pub fn validate(&self) -> bool {
-        self.contents.len() <= 64
+        self.layer_colors.len() <= 64
+            && self.layer_colors.iter().enumerate().all(|(i, (id, _))| {
+                (i == 0 || self.layer_colors[i - 1].0.0 < id.0)
+                    && self.layers.iter().any(|layer| layer.id == *id)
+            })
+            && self.contents.len() <= 64
             && self.contents.iter().enumerate().all(|(i, n)| {
                 n.validate()
                     && (i == 0 || self.contents[i - 1].layer.0 < n.layer.0)
@@ -214,12 +226,42 @@ impl Document {
                     && (0.0..=1.0).contains(&l.opacity)
             })
     }
+    pub fn layer_color(&self, id: LayerId) -> Option<[u8; 3]> {
+        self.layer_colors
+            .iter()
+            .find(|(layer, _)| *layer == id)
+            .map(|(_, color)| *color)
+    }
+    pub fn set_layer_color(
+        &mut self,
+        id: LayerId,
+        color: Option<[u8; 3]>,
+    ) -> bool {
+        if !self.layers.iter().any(|layer| layer.id == id)
+            || self.layer_color(id) == color
+        {
+            return false;
+        }
+        self.layer_colors.retain(|(layer, _)| *layer != id);
+        if let Some(color) = color {
+            self.layer_colors.push((id, color));
+        }
+        self.layer_colors.sort_by_key(|(layer, _)| layer.0);
+        self.touch();
+        true
+    }
+    pub fn prune_layer_colors(&mut self) {
+        self.layer_colors
+            .retain(|(id, _)| self.layers.iter().any(|layer| layer.id == *id));
+    }
     pub fn touch(&mut self) {
+        self.prune_layer_colors();
         self.prune_contents();
         self.revision += 1;
     }
     pub fn same_edit_state(&self, other: &Self) -> bool {
-        self.contents.len() == other.contents.len()
+        self.layer_colors == other.layer_colors
+            && self.contents.len() == other.contents.len()
             && self
                 .contents
                 .iter()

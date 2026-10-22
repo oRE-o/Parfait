@@ -350,6 +350,9 @@ impl Parfait {
                 let copy = (mask & (1 << index) != 0).then(|| {
                     let mut copy = layer.clone();
                     copy.id = document.allocate_layer_id().unwrap();
+                    if let Some(color) = document.layer_color(layer.id) {
+                        document.layer_colors.push((copy.id, color));
+                    }
                     copy.name.push_str(" copy");
                     copy
                 });
@@ -363,6 +366,7 @@ impl Parfait {
                 }
             }
             document.layers = layers;
+            document.layer_colors.sort_by_key(|(id, _)| id.0);
         });
         self.set_layer_selection(
             selected,
@@ -1008,6 +1012,18 @@ impl Parfait {
                     );
                     let doc = &self.documents.active_session.document;
                     let row_label = doc.layers[layer].name.as_str();
+                    if let Some([r, g, b]) =
+                        doc.layer_color(doc.layers[layer].id)
+                    {
+                        ui.painter().rect_filled(
+                            Rect::from_min_size(
+                                rect.min,
+                                egui::vec2(3., rect.height()),
+                            ),
+                            0.,
+                            Color32::from_rgb(r, g, b),
+                        );
+                    }
                     if let Some(node) = doc.native_content(layer) {
                         let icon = match node.body().as_ref() {
                             parfait_core::LayerContent::Text(_) => Icon::Text,

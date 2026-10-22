@@ -24,6 +24,7 @@ impl From<LegacyDocument> for Document {
             next_layer_id: d.next_layer_id,
             selection: d.selection,
             contents: Vec::new(),
+            layer_colors: Vec::new(),
         }
     }
 }

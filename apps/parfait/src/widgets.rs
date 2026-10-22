@@ -584,7 +584,7 @@ pub fn brush_row(
     kind: Icon,
     preview: Option<egui::TextureId>,
 ) -> egui::Response {
-    let target = Rect::from_min_max(r.min, r.max - egui::vec2(24., 0.));
+    let target = r;
     let response = ui.interact(target, ui.id().with("preset"), Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(

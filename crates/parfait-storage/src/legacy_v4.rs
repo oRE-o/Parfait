@@ -31,6 +31,7 @@ impl From<LegacyDocument> for Document {
     fn from(old: LegacyDocument) -> Self {
         Self {
             contents: Vec::new(),
+            layer_colors: Vec::new(),
             width: old.width,
             height: old.height,
             name: old.name,

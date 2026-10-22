@@ -32,7 +32,7 @@ struct ParameterGeometry {
 impl ParameterLayout {
     fn height(self) -> f32 {
         match self {
-            Self::Palette => 38.,
+            Self::Palette => 29.,
             Self::Detail => 42.,
         }
     }
@@ -48,7 +48,7 @@ impl ParameterLayout {
             dynamics_top,
             dynamics_height,
         ) = match self {
-            Self::Palette => (49., 2., 25., 26., 3., 27.),
+            Self::Palette => (45., 2., 24., 19., 2., 23.),
             Self::Detail => (49., 2., 23., 31., 2., 24.),
         };
         let number = Rect::from_min_max(
@@ -61,7 +61,7 @@ impl ParameterLayout {
                 rect.min + egui::vec2(8., track_top),
                 egui::pos2(
                     if self == Self::Palette {
-                        number.left() - 14.
+                        (number.left() - 14.).min(rect.left() + 100.)
                     } else {
                         right - if has_dynamics { 26. } else { 0. }
                     },
@@ -152,7 +152,7 @@ pub fn parameter(
     let number_rect = geometry.number;
     let mut label = egui::text::LayoutJob::simple_singleline(
         options.label.to_owned(),
-        egui::FontId::proportional(if compact { 11.5 } else { 12. }),
+        egui::FontId::proportional(11.5),
         ui.visuals().strong_text_color(),
     );
     label.wrap = egui::text::TextWrapping::truncate_at_width(
@@ -259,7 +259,7 @@ pub fn parameter(
                 Some(egui::FontId::proportional(if compact {
                     12.5
                 } else {
-                    16.
+                    14.
                 }));
             ui.visuals_mut().button_frame = false;
             ui.add_sized(

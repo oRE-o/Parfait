@@ -80,6 +80,8 @@ pub struct Placement {
     pub row: Option<Palette>,
     #[serde(default)]
     pub window_rect: Option<[f32; 4]>,
+    #[serde(default = "default_width_weight")]
+    pub inactive_opacity: f32,
     #[serde(skip)]
     scroll_offset: f32,
     pub height: f32,
@@ -127,6 +129,7 @@ impl Default for Workspace {
                     collapsed: p == Palette::Sizes,
                     row: None,
                     window_rect: None,
+                    inactive_opacity: 1.,
                     scroll_offset: 0.,
                     height: [250., 265., 115., 190., 190., 400., 200.][i],
                     width_weight: 1.,
@@ -174,6 +177,7 @@ impl Workspace {
                     && current.collapsed == saved.collapsed
                     && current.row == saved.row
                     && current.window_rect == saved.window_rect
+                    && current.inactive_opacity == saved.inactive_opacity
                     && current.height == saved.height
                     && current.width_weight == saved.width_weight
                     && current.rect == saved.rect
@@ -192,7 +196,9 @@ impl Workspace {
                     r.iter().all(|v| v.is_finite())
                         && r[2] >= 180.
                         && r[3] >= 23.
-                }) && s.height.is_finite()
+                }) && s.inactive_opacity.is_finite()
+                    && (0.2..=1.).contains(&s.inactive_opacity)
+                    && s.height.is_finite()
                     && (60. ..=2000.).contains(&s.height)
                     && s.width_weight.is_finite()
                     && (0. ..=1000.).contains(&s.width_weight)
@@ -509,6 +515,25 @@ impl Workspace {
                 self.panels[i].location = Location::Window;
                 ui.close();
             }
+            ui.menu_button("독립 창 비활성 투명도", |ui| {
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.panels[i].inactive_opacity,
+                        0.2..=1.,
+                    )
+                    .step_by(0.01)
+                    .text("불투명도")
+                    .custom_formatter(|v, _| format!("{:.0}%", v * 100.))
+                    .custom_parser(|v| {
+                        v.trim()
+                            .trim_end_matches('%')
+                            .trim()
+                            .parse::<f64>()
+                            .ok()
+                            .map(|value| value / 100.)
+                    }),
+                );
+            });
             if ui.button("위에 도킹").clicked() {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Top;
@@ -759,8 +784,14 @@ impl Workspace {
             result.response.rect.left()
         };
         let target = Rect::from_min_max(
-            egui::pos2(boundary - 4., result.response.rect.top()),
-            egui::pos2(boundary + 4., result.response.rect.bottom()),
+            egui::pos2(
+                boundary - if left { 10. } else { 0. },
+                result.response.rect.top(),
+            ),
+            egui::pos2(
+                boundary + if left { 0. } else { 10. },
+                result.response.rect.bottom(),
+            ),
         );
         let label = if left { "Resize left dock" } else { "Resize right dock" };
         let next_width = resize::handle(
@@ -896,6 +927,7 @@ impl Workspace {
                     app.screen_picker.as_ref().is_none_or(|p| !p.hidden),
                 )
                 .with_title(format!("Parfait · {}", p.palette.title()))
+                .with_transparent(true)
                 .with_decorations(false)
                 .with_inner_size([
                     p.rect[2],
@@ -954,6 +986,12 @@ impl Workspace {
                             item.height = (r.height() - 29.).clamp(60., 2000.);
                         }
                     }
+                    let opacity = if ui.input(|i| i.focused) {
+                        1.
+                    } else {
+                        p.inactive_opacity
+                    };
+                    ui.multiply_opacity(opacity);
                     egui::CentralPanel::default()
                         .frame(egui::Frame::NONE.fill(Color32::from_gray(57)))
                         .show(ui, |ui| {

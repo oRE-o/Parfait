@@ -197,10 +197,13 @@ impl Parfait {
         }
         self.edit_named("Duplicate layer", |document| {
             let mut layer = document.layers[document.active].clone();
+            let color = document.layer_color(layer.id);
             layer.id = document.allocate_layer_id().unwrap();
             layer.name.push_str(" copy");
             document.active += 1;
+            let id = layer.id;
             document.layers.insert(document.active, layer);
+            document.set_layer_color(id, color);
         });
     }
     pub fn update_previews(&mut self, ctx: &egui::Context) {
@@ -405,11 +408,15 @@ impl Parfait {
                     widgets::color_wheel_sized(
                         ui,
                         &mut self.brush.color,
-                        body_height - 58.,
+                        body_height
+                            - if ui.available_width() < 320. {
+                                66.
+                            } else {
+                                32.
+                            },
                     );
                 });
                 self.color_slots(ui, false);
-                ui.color_edit_button_srgb(&mut self.brush.color);
                 if before != self.brush.color && self.tools.color_slot == 2 {
                     self.tools.color_slot = 0;
                 }
@@ -542,6 +549,7 @@ impl Parfait {
                     [active]
                     .opacity;
                 ui.horizontal(|ui| {
+                    self.layer_color_menu(ui, active);
                     let mut mode =
                         self.documents.active_session.document.layers[active]
                             .blend_mode;
@@ -682,6 +690,36 @@ impl Parfait {
                         RichText::new(Icon::More.glyph())
                             .family(egui::FontFamily::Name("icons".into())),
                         |ui| {
+                            ui.menu_button("새 레이어", |ui| {
+                                for command in [
+                                    Command::NewLayer,
+                                    Command::NewVectorLayer,
+                                    Command::NewTextLayer,
+                                    Command::NewLayerFolder,
+                                ] {
+                                    self.command_menu_item(ui, command);
+                                }
+                                ui.separator();
+                                self.solid_layer_creation_menu(ui);
+                            });
+                            ui.separator();
+                            ui.horizontal(|ui| {
+                                self.layer_command_icon(
+                                    ui,
+                                    Icon::Up,
+                                    Command::MoveLayerUp,
+                                );
+                                self.layer_command_icon(
+                                    ui,
+                                    Icon::Down,
+                                    Command::MoveLayerDown,
+                                );
+                                self.layer_command_icon(
+                                    ui,
+                                    Icon::Transfer,
+                                    Command::TransferLayerDown,
+                                );
+                            });
                             self.layer_operations_menu(ui);
                             ui.separator();
                             self.command_menu_item(
@@ -707,6 +745,16 @@ impl Parfait {
                     );
                     self.layer_command_icon(
                         ui,
+                        Icon::Vector,
+                        Command::NewVectorLayer,
+                    );
+                    self.layer_command_icon(
+                        ui,
+                        Icon::Text,
+                        Command::NewTextLayer,
+                    );
+                    self.layer_command_icon(
+                        ui,
                         Icon::Folder,
                         Command::NewLayerFolder,
                     );
@@ -714,17 +762,6 @@ impl Parfait {
                         ui,
                         Icon::Copy,
                         Command::DuplicateLayer,
-                    );
-                    self.layer_command_icon(ui, Icon::Up, Command::MoveLayerUp);
-                    self.layer_command_icon(
-                        ui,
-                        Icon::Down,
-                        Command::MoveLayerDown,
-                    );
-                    self.layer_command_icon(
-                        ui,
-                        Icon::Transfer,
-                        Command::TransferLayerDown,
                     );
                     self.layer_command_icon(
                         ui,

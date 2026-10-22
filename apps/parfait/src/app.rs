@@ -214,6 +214,7 @@ impl Parfait {
         let before_bytes = session.document.logical_pixel_bytes();
         let revision = session.document.revision;
         action(&mut session.document);
+        session.document.prune_layer_colors();
         if self.tabs.enabled
             && logical - before_bytes + session.document.logical_pixel_bytes()
                 > limit
@@ -766,6 +767,9 @@ impl Parfait {
     }
 }
 impl eframe::App for Parfait {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        [0.; 4]
+    }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.draw_ui(ui);
     }

@@ -221,6 +221,8 @@ pub struct ToolSettings {
     pub primary: [u8; 3],
     pub secondary: [u8; 3],
     pub color_slot: u8,
+    #[serde(default)]
+    pub front_color: u8,
     #[serde(skip)]
     pub drag: Option<ToolDrag>,
 }
@@ -285,6 +287,7 @@ impl Default for ToolSettings {
             primary: [46, 43, 54],
             secondary: [255; 3],
             color_slot: 0,
+            front_color: 0,
             drag: None,
         }
     }
@@ -306,6 +309,7 @@ impl ToolSettings {
                 .active_id
                 .is_none_or(|id| self.subtools.iter().any(|t| t.id == id))
             && self.color_slot <= 2
+            && self.front_color <= 1
             && self.selection_mode <= 3
             && self.subtools.iter().enumerate().all(|(i, t)| {
                 t.id > 0
@@ -593,35 +597,111 @@ impl Parfait {
         } else if self.tools.color_slot == 1 {
             self.tools.secondary = self.brush.color;
         }
-        let size =
-            if vertical { egui::vec2(28., 22.) } else { egui::vec2(36., 22.) };
-        let mut slots = |ui: &mut egui::Ui| {
-            for slot in 0..3 {
-                let (r, response) =
-                    ui.allocate_exact_size(size, egui::Sense::click());
-                response.widget_info(|| {
-                    egui::WidgetInfo::selected(
-                        egui::WidgetType::SelectableLabel,
-                        ui.is_enabled(),
-                        self.tools.color_slot == slot,
-                        ["메인 컬러 (색상 1)", "서브 컬러 (색상 2)", "투명색"]
-                            [slot as usize],
-                    )
-                });
-                let color = if slot == 0 {
-                    self.tools.primary
+        let compact = vertical || ui.available_width() < 320.;
+        if self.tools.color_slot < 2 {
+            self.tools.front_color = self.tools.color_slot;
+        }
+        let square = if vertical { 20. } else { 25. };
+        let offset = if vertical { 8. } else { 12. };
+        let size = if compact {
+            egui::vec2(square + offset, square + offset + 15.)
+        } else {
+            egui::vec2(112., 24.)
+        };
+        let (bounds, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+        let rects = if compact {
+            [
+                Rect::from_min_size(bounds.min, egui::vec2(square, square)),
+                Rect::from_min_size(
+                    bounds.min + egui::vec2(offset, offset),
+                    egui::vec2(square, square),
+                ),
+                Rect::from_min_size(
+                    bounds.min + egui::vec2(0., square + offset + 5.),
+                    egui::vec2(size.x, 10.),
+                ),
+            ]
+        } else {
+            std::array::from_fn(|i| {
+                Rect::from_min_size(
+                    bounds.min + egui::vec2(i as f32 * 38., 0.),
+                    egui::vec2(36., 24.),
+                )
+            })
+        };
+        let front = self.tools.front_color;
+        let labels = ["메인 컬러 (색상 1)", "서브 컬러 (색상 2)", "투명색"];
+        // Register the exposed part of the rear swatch only. Overlapping ink
+        // buttons never both receive the same click, even in a batched frame.
+        for slot in [1 - front, front, 2] {
+            let r = rects[slot as usize];
+            let rear = compact && slot == 1 - front;
+            let targets = if rear {
+                let f = rects[front as usize];
+                if slot == 1 {
+                    [
+                        Rect::from_min_max(
+                            egui::pos2(f.right(), r.top()),
+                            r.max,
+                        ),
+                        Rect::from_min_max(
+                            egui::pos2(r.left(), f.bottom()),
+                            egui::pos2(f.right(), r.bottom()),
+                        ),
+                    ]
                 } else {
-                    self.tools.secondary
-                };
-                if slot == 2 {
-                    for y in 0..3 {
-                        for x in 0..5 {
-                            let cell = Rect::from_min_size(
-                                r.min
-                                    + egui::vec2(x as f32 * 8., y as f32 * 8.),
-                                egui::vec2(8., 8.),
-                            )
-                            .intersect(r);
+                    [
+                        Rect::from_min_max(
+                            r.min,
+                            egui::pos2(r.right(), f.top()),
+                        ),
+                        Rect::from_min_max(
+                            egui::pos2(r.left(), f.top()),
+                            egui::pos2(f.left(), r.bottom()),
+                        ),
+                    ]
+                }
+            } else {
+                [r, Rect::NOTHING]
+            };
+            let mut clicked = false;
+            for (part, target) in targets.into_iter().enumerate() {
+                if !target.is_positive() {
+                    continue;
+                }
+                let response = ui.interact(
+                    target,
+                    ui.id().with(("ink", slot, part)),
+                    egui::Sense::click(),
+                );
+                if part == 0 {
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::WidgetType::SelectableLabel,
+                            ui.is_enabled(),
+                            self.tools.color_slot == slot,
+                            labels[slot as usize],
+                        )
+                    });
+                }
+                clicked |= response.clicked();
+                response.on_hover_text(labels[slot as usize]);
+            }
+            ui.painter().rect_filled(r, 2., Color32::from_gray(58));
+            let color = if slot == 0 {
+                self.tools.primary
+            } else {
+                self.tools.secondary
+            };
+            if slot == 2 {
+                for y in 0..(r.height() / 5.).ceil() as usize {
+                    for x in 0..(r.width() / 5.).ceil() as usize {
+                        let cell = Rect::from_min_size(
+                            r.min + egui::vec2(x as f32 * 5., y as f32 * 5.),
+                            egui::vec2(5., 5.),
+                        )
+                        .intersect(r.shrink(2.));
+                        if cell.is_positive() {
                             ui.painter().rect_filled(
                                 cell,
                                 0.,
@@ -633,44 +713,53 @@ impl Parfait {
                             );
                         }
                     }
-                } else {
-                    ui.painter().rect_filled(
-                        r.shrink(2.),
-                        0.,
-                        Color32::from_rgb(color[0], color[1], color[2]),
-                    );
                 }
-                ui.painter().rect_stroke(
-                    r.shrink(0.5),
-                    0.,
-                    egui::Stroke::new(
-                        if self.tools.color_slot == slot { 2. } else { 1. },
-                        if self.tools.color_slot == slot {
-                            crate::theme::ACCENT
-                        } else {
-                            Color32::from_gray(95)
-                        },
-                    ),
-                    egui::StrokeKind::Inside,
-                );
-                if response.clicked() {
-                    self.tools.color_slot = slot;
-                    if slot < 2 {
-                        self.brush.color = color;
-                    }
-                }
-                response.on_hover_text(
-                    ["메인 컬러 (색상 1)", "서브 컬러 (색상 2)", "투명색"]
-                        [slot as usize],
+            } else {
+                ui.painter().rect_filled(
+                    r.shrink(2.),
+                    1.,
+                    Color32::from_rgb(color[0], color[1], color[2]),
                 );
             }
-        };
-        if vertical {
-            ui.vertical(&mut slots);
-        } else {
-            ui.horizontal(&mut slots);
+            ui.painter().rect_stroke(
+                r.shrink(0.5),
+                2.,
+                egui::Stroke::new(
+                    if self.tools.color_slot == slot { 2. } else { 1. },
+                    if self.tools.color_slot == slot {
+                        crate::theme::ACCENT
+                    } else {
+                        Color32::from_gray(110)
+                    },
+                ),
+                egui::StrokeKind::Inside,
+            );
+            if clicked {
+                self.tools.color_slot = slot;
+                if slot < 2 {
+                    self.tools.front_color = slot;
+                    self.brush.color = color;
+                }
+                ui.ctx().request_repaint();
+            }
+        }
+        if compact && !vertical {
+            let [h, s, v] = crate::widgets::rgb_to_hsv(self.brush.color);
+            ui.painter().text(
+                egui::pos2(ui.max_rect().right(), bounds.bottom() - 1.),
+                egui::Align2::RIGHT_BOTTOM,
+                format!(
+                    "H {:.0}  S {:.0}  V {:.0}",
+                    h * 360.,
+                    s * 100.,
+                    v * 100.
+                ),
+                egui::FontId::proportional(11.),
+                Color32::from_gray(196),
+            );
         }
     }
+
     pub(crate) fn nonbrush_rows(&mut self, ui: &mut egui::Ui) {
         let ids: Vec<_> = self
             .tools

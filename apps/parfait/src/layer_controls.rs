@@ -260,6 +260,96 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
     response
 }
 
+impl crate::app::Parfait {
+    pub(crate) fn layer_color_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        active: usize,
+    ) {
+        let id = self.documents.active_session.document.layers[active].id;
+        let current = self.documents.active_session.document.layer_color(id);
+        let label = egui::RichText::new("■").color(
+            current.map_or(Color32::from_gray(155), |[r, g, b]| {
+                Color32::from_rgb(r, g, b)
+            }),
+        );
+        ui.menu_button(label, |ui| {
+            ui.label("레이어 구분 색상");
+            for (name, color) in [
+                ("없음", None),
+                ("빨강", Some([216, 96, 96])),
+                ("주황", Some([220, 152, 83])),
+                ("노랑", Some([211, 195, 102])),
+                ("초록", Some([111, 177, 125])),
+                ("파랑", Some([105, 152, 211])),
+                ("보라", Some([168, 130, 201])),
+                ("회색", Some([154, 154, 154])),
+            ] {
+                let text = egui::RichText::new(format!("■  {name}")).color(
+                    color.map_or(Color32::from_gray(195), |[r, g, b]| {
+                        Color32::from_rgb(r, g, b)
+                    }),
+                );
+                if ui.selectable_label(color == current, text).clicked() {
+                    let d = &self.documents.active_session.document;
+                    let extra = if current.is_none() && color.is_some() {
+                        if d.layer_colors.is_empty() {
+                            27 - 8 * u64::from(!d.contents.is_empty())
+                        } else {
+                            11
+                        }
+                    } else {
+                        0
+                    };
+                    if parfait_storage::snapshot_size(d).is_none_or(|n| {
+                        n.saturating_add(extra) > 512 * 1024 * 1024
+                    }) {
+                        self.notice = Some(
+                            "Layer label exceeds the project snapshot budget."
+                                .into(),
+                        );
+                    } else {
+                        self.edit_named("Layer palette color", |d| {
+                            d.set_layer_color(id, color);
+                        });
+                    }
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .on_hover_text("레이어 구분 색상");
+    }
+    pub(crate) fn solid_layer_creation_menu(&mut self, ui: &mut egui::Ui) {
+        for (name, paper) in [
+            ("채우기 레이어 (현재 색)", false),
+            ("용지 레이어 (현재 색)", true),
+        ] {
+            let title = if paper { "Paper" } else { "Fill" };
+            let reason = parfait_storage::solid_layer_growth_error(
+                &self.documents.active_session.document,
+                paper,
+                title,
+            );
+            let response =
+                ui.add_enabled(reason.is_none(), egui::Button::new(name));
+            if response.clicked() {
+                let color = self.brush.color;
+                self.edit_named("New solid layer", |d| {
+                    d.create_solid_layer(color, paper, title.into());
+                });
+                let session = &mut self.documents.active_session;
+                let active = session.document.active;
+                session.reveal_layer(active);
+                ui.close();
+            }
+            if let Some(reason) = reason {
+                response.on_disabled_hover_text(reason);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

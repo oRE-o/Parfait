@@ -139,11 +139,15 @@ pub fn snapshot_size(document: &Document) -> Option<u64> {
             bytes = bytes.checked_add(mask_payload_size(mask)?)?;
         }
     }
-    if !document.contents.is_empty() {
+    if !document.contents.is_empty() || !document.layer_colors.is_empty() {
         bytes = bytes.checked_add(8)?;
         for node in &document.contents {
             bytes = bytes.checked_add(node.encoded_bytes()?)?;
         }
+    }
+    if !document.layer_colors.is_empty() {
+        bytes =
+            bytes.checked_add(8 + document.layer_colors.len() as u64 * 11)?;
     }
     Some(bytes)
 }
@@ -252,6 +256,9 @@ pub fn layer_duplication_error(
                     )?
                     .checked_add(5 * u64::from(roots & (1 << index) != 0))?
                     .checked_add(layer.pixels.len() as u64)?;
+                if document.layer_color(layer.id).is_some() {
+                    bytes = bytes.checked_add(11)?;
+                }
                 if let Some(node) = document.native_content(index) {
                     bytes = bytes.checked_add(node.encoded_bytes()?)?;
                 }
@@ -305,6 +312,9 @@ pub fn layer_duplication_error(
                 .checked_add(layer.name.len() as u64)?
                 .checked_add(5)?
                 .checked_add(pixels.checked_mul(4)?)?;
+            if document.layer_color(layer.id).is_some() {
+                snapshot = snapshot.checked_add(11)?;
+            }
             if let Some(mask) = &layer.mask {
                 snapshot = snapshot.checked_add(mask_payload_size(mask)?)?;
             }

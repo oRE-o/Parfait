@@ -195,3 +195,14 @@ Color/image dialog controls use a label above a width-filling thin rail and a 64
 Local preview windows place 100-point Confirm, Cancel and Reset buttons in a separate right column, followed by Preview and Original comparison. Parameter scrolling remains independent, so actions stay accessible. Brush controls place their bar below both the label and numeric row, use the full remaining palette width, recover unused dynamics-button space, and truncate labels before the number. Logarithmic brush size, typed-entry commit, keyboard controls and pressure targets retain their behavior.
 
 Live CSP capture was attempted again but failed with FrameArrived/window-capture timeouts. Public official manual text is a reference; no live screenshot comparison or pixel-identical CSP layout is claimed. All controls and drawing code are independently authored.
+
+
+## Compact palette follow-up (2026-10-22)
+
+Tool-property rows are 29 points high, with a short bar below the label and separate numeric, arrow and dynamics targets. Brush-library cells stay at most 240 points wide and 40 points high; wider hosts introduce columns at 180-point intervals. The entire cell selects its subtool. Preview regeneration remains bounded to one visible item per frame and pauses during pointer gestures.
+
+Narrow color palettes and the tool rail overlap the primary/secondary swatches, bringing the selected real color forward. Transparent ink has its own thin checker strip. Palettes at least 320 points wide show three separate swatches. The wheel is the palette's sole color picker; HSV values below it are read-only.
+
+Dock-column resize gutters occupy ten points inside the dock, avoiding competing canvas targets. Native palette windows expose a per-palette inactive-opacity setting (20–100%) in the header context menu. Their transparent surfaces and all palette painting use that opacity when unfocused; focus restores full opacity. The main canvas remains opaque. Preferences without this field retain 100% opacity. Actual platform transparency depends on the window compositor; Windows and Linux have not been exercised locally.
+
+Layer palettes place a label-color menu beside blend/opacity, flags on the next row, and compact raster/vector/text/folder creation, duplication, merge, mask and delete buttons below. Additional operations, including fill/paper creation with the current drawing color, live in the palette's operation menu. Layer labels mark rows without tinting artwork and participate in undo, duplication, original saves and recovery.

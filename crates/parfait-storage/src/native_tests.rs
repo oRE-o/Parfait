@@ -14,7 +14,7 @@ fn native_v11_roundtrip_exact_size_read_only_and_corrupt_head_fallback() {
     let d = native();
     let encoded = bincode::DefaultOptions::new()
         .with_fixint_encoding()
-        .serialize(&d)
+        .serialize(&legacy_v11::Borrowed::from(&d))
         .unwrap();
     assert_eq!(
         snapshot_size(&d),
@@ -81,4 +81,50 @@ fn normal_drawings_continue_writing_exact_v10_payload() {
     assert_eq!(raw, expected);
     assert_eq!(snapshot_size(&d), Some(raw.len() as u64));
     assert_eq!(store.load().unwrap().unwrap().document, d);
+}
+
+#[test]
+fn palette_colors_roundtrip_v12_and_preserve_legacy_pixels_and_fallback() {
+    for mut d in [Document::new(8, 6), native()] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("labels.parfait");
+        let mut store = Store::open(&path).unwrap();
+        store.save(&d).unwrap();
+        d = store.load().unwrap().unwrap().document;
+        assert!(d.layer_colors.is_empty());
+        let before = d.clone();
+        let pixels = d.composite();
+        let id = d.layers[d.active].id;
+        assert!(d.set_layer_color(id, Some([105, 152, 211])));
+        assert_eq!(d.composite(), pixels);
+        assert!(!d.same_edit_state(&before));
+        assert_ne!(d.art_digest_v1(), before.art_digest_v1());
+        let raw = bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .serialize(&d)
+            .unwrap();
+        assert_eq!(
+            snapshot_size(&d),
+            Some(raw.len() as u64 + SNAPSHOT_V12.len() as u64)
+        );
+        store.save(&d).unwrap();
+        let loaded =
+            Store::open_read_only(&path).unwrap().load().unwrap().unwrap();
+        assert_eq!(loaded.document, d);
+        let copied = d.duplicate_layer_subtrees(1 << d.active).unwrap();
+        let index = copied.trailing_zeros() as usize;
+        assert_eq!(d.layer_color(d.layers[index].id), Some([105, 152, 211]));
+        assert!(d.validate());
+        store.connection.execute("INSERT INTO snapshots(revision,checksum,payload) VALUES(?1,?2,?3)",params![(d.revision + 1) as i64, vec![0_u8;32],vec![1_u8;16]]).unwrap();
+        let fallback = store.load().unwrap().unwrap();
+        assert!(fallback.fell_back);
+        assert_eq!(
+            fallback.document.layer_colors,
+            loaded.document.layer_colors
+        );
+        assert_eq!(
+            fallback.document.art_digest_v1(),
+            loaded.document.art_digest_v1()
+        );
+    }
 }

@@ -359,6 +359,14 @@ impl Document {
                 copies.push(copy);
             }
         }
+        let colors: Vec<_> = mapping
+            .iter()
+            .filter_map(|(old, new)| {
+                self.layer_color(*old).map(|color| (*new, color))
+            })
+            .collect();
+        self.layer_colors.extend(colors);
+        self.layer_colors.sort_by_key(|(layer, _)| layer.0);
         self.contents.extend(copies);
         self.contents.sort_by_key(|n| n.layer.0);
     }
@@ -408,10 +416,15 @@ fn bounded_vec<
     }
     d.deserialize_seq(Values::<T, LIMIT>(std::marker::PhantomData))
 }
-pub(crate) fn deserialize_contents<'de, D: serde::Deserializer<'de>>(
+pub fn deserialize_contents<'de, D: serde::Deserializer<'de>>(
     d: D,
 ) -> Result<Vec<ContentNode>, D::Error> {
     bounded_vec::<D, ContentNode, 64>(d)
+}
+pub(crate) fn deserialize_layer_colors<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Vec<(LayerId, [u8; 3])>, D::Error> {
+    bounded_vec::<D, (LayerId, [u8; 3]), 64>(d)
 }
 fn deserialize_points<'de, D: serde::Deserializer<'de>>(
     d: D,

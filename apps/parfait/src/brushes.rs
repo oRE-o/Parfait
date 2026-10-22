@@ -564,16 +564,31 @@ impl Parfait {
                     .resize_with(self.presets.len(), || None);
                 let mut regenerated = false;
                 let mut remove = None;
-                for index in 0..self.presets.len() {
-                    if self.tools.preset_category(&self.presets[index])
-                        != self.tools.category
-                    {
-                        continue;
-                    }
+                let indices: Vec<_> = (0..self.presets.len())
+                    .filter(|&index| {
+                        self.tools.preset_category(&self.presets[index])
+                            == self.tools.category
+                    })
+                    .collect();
+                let width = ui.available_width();
+                let columns = ((width + 2.) / 180.).floor().max(1.) as usize;
+                let cell_width = ((width - 2. * (columns - 1) as f32)
+                    / columns as f32)
+                    .min(240.);
+                let rows = indices.len().div_ceil(columns);
+                let (grid, _) = ui.allocate_exact_size(
+                    egui::vec2(width, rows as f32 * 41.),
+                    egui::Sense::hover(),
+                );
+                for (cell, index) in indices.into_iter().enumerate() {
                     ui.push_id(index, |ui| {
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::vec2(ui.available_width(), 40.),
-                            egui::Sense::hover(),
+                        let rect = egui::Rect::from_min_size(
+                            grid.min
+                                + egui::vec2(
+                                    (cell % columns) as f32 * (cell_width + 2.),
+                                    (cell / columns) as f32 * 41.,
+                                ),
+                            egui::vec2(cell_width, 40.),
                         );
                         if ui.is_rect_visible(rect)
                             && !ui.input(|i| i.pointer.any_down())
@@ -1190,7 +1205,12 @@ mod tests {
             let row = library_target(&app, "Round pen");
             assert_eq!(row.height(), 40.);
             assert!(row.top() > manage.bottom());
-            assert!(row.right() <= manage.right() + 0.1);
+            assert!(row.width() <= width.min(240.) + 0.1);
+            if width >= 360. {
+                let dotted = library_target(&app, "Dotted pen");
+                assert_eq!(row.top(), dotted.top());
+                assert!(dotted.left() > row.right());
+            }
             assert!(
                 !app.brush_library
                     .targets

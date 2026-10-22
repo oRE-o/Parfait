@@ -613,7 +613,7 @@ impl Parfait {
             self.tool_properties(ui);
             return;
         }
-        self.brush_preview(ui, 42., true);
+        self.brush_preview(ui, 34., true);
         for property in Property::ALL {
             if self.brush_details.properties.visibility(property)
                 && property_control(

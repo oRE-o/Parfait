@@ -5,6 +5,7 @@ pub use art_digest::ArtDigestV1;
 pub use edit_state::EditStateId;
 mod brush;
 mod content;
+pub use content::deserialize_contents;
 mod document;
 pub use content::{
     Affine, ContentBox, ContentNode, LayerContent, MAX_CONTENT_FONT_BYTES,
