@@ -8,75 +8,74 @@ use eframe::egui::{
 };
 
 impl Parfait {
-    pub fn title_bar(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx().clone();
-        egui::Panel::top("parfait_title")
-            .frame(
-                egui::Frame::NONE
-                    .fill(Color32::from_gray(41))
-                    .inner_margin(egui::Margin::symmetric(5, 2)),
+    pub(crate) fn window_drag(
+        &self,
+        ui: &mut egui::Ui,
+        width: f32,
+        logo: bool,
+    ) {
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(width.max(1.), 24.),
+            egui::Sense::click_and_drag(),
+        );
+        if logo {
+            let c = rect.center();
+            ui.painter().circle_filled(c, 9., Color32::from_rgb(153, 170, 194));
+            ui.painter().text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                "P",
+                egui::FontId::proportional(13.),
+                Color32::from_gray(34),
+            );
+        } else if rect.width() > 170. && !self.documents.is_empty() {
+            ui.painter().with_clip_rect(rect).text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                format!(
+                    "{}{}",
+                    self.documents.active_session.document.name,
+                    if self.project_is_modified() { " *" } else { "" }
+                ),
+                egui::FontId::proportional(11.),
+                Color32::from_gray(165),
+            );
+        }
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                true,
+                "창 이동 · 두 번 클릭하여 최대화 / 복원",
             )
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let (rect, drag) = ui.allocate_exact_size(
-                        egui::vec2((ui.available_width() - 90.).max(20.), 25.),
-                        egui::Sense::click_and_drag(),
-                    );
-                    drag.widget_info(|| {
-                        egui::WidgetInfo::labeled(
-                            egui::WidgetType::Button,
-                            true,
-                            "Parfait title bar: drag to move, double-click to maximize",
-                        )
-                    });
-                    ui.painter().text(
-                        rect.left_center() + egui::vec2(6., 0.),
-                        egui::Align2::LEFT_CENTER,
-                        "PARFAIT",
-                        egui::FontId::proportional(12.),
-                        Color32::from_rgb(190, 202, 218),
-                    );
-                    ui.painter().text(
-                        rect.center(),
-                        egui::Align2::CENTER_CENTER,
-                        if self.documents.is_empty() { "No drawing open".into() } else { format!(
-                            "{}{}  —  {} × {} px",
-                            self.documents.active_session.document.name,
-                            if self.project_is_modified() { " *" } else { "" },
-                            self.documents.active_session.document.width,
-                            self.documents.active_session.document.height
-                        ) },
-                        egui::FontId::proportional(11.),
-                        Color32::from_gray(170),
-                    );
-                    let maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
-                    if drag.double_clicked() {
-                        ctx.send_viewport_cmd(ViewportCommand::Maximized(!maximized));
-                    } else if drag.drag_started() {
-                        ctx.send_viewport_cmd(ViewportCommand::StartDrag);
-                    }
-                    if widgets::icon(ui, Icon::Minus, false, "Minimize window").clicked() {
-                        ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-                    }
-                    if widgets::icon(
-                        ui,
-                        if maximized {
-                            Icon::Restore
-                        } else {
-                            Icon::Maximize
-                        },
-                        false,
-                        "Maximize / restore window",
-                    )
-                    .clicked()
-                    {
-                        ctx.send_viewport_cmd(ViewportCommand::Maximized(!maximized));
-                    }
-                    if widgets::icon(ui, Icon::Close, false, "Close Parfait").clicked() {
-                        self.request_close(&ctx);
-                    }
-                });
-            });
+        });
+        if response.double_clicked() {
+            let maximized =
+                ui.input(|i| i.viewport().maximized.unwrap_or(false));
+            ui.ctx().send_viewport_cmd(ViewportCommand::Maximized(!maximized));
+        } else if response.is_pointer_button_down_on()
+            && ui.input(|i| i.pointer.delta() != egui::Vec2::ZERO)
+        {
+            ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
+        }
+    }
+    pub(crate) fn window_controls(&mut self, ui: &mut egui::Ui) {
+        let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
+        if widgets::icon(ui, Icon::Close, false, "Parfait 닫기").clicked() {
+            self.request_close(ui.ctx());
+        }
+        if widgets::icon(
+            ui,
+            if maximized { Icon::Restore } else { Icon::Maximize },
+            false,
+            "최대화 / 복원",
+        )
+        .clicked()
+        {
+            ui.ctx().send_viewport_cmd(ViewportCommand::Maximized(!maximized));
+        }
+        if widgets::icon(ui, Icon::Minus, false, "최소화").clicked() {
+            ui.ctx().send_viewport_cmd(ViewportCommand::Minimized(true));
+        }
     }
 }
 pub fn resize_edges(ui: &mut egui::Ui) {

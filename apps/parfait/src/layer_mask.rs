@@ -343,7 +343,10 @@ impl Parfait {
         ) {
             return false;
         }
-        let brush = self.brush.clone();
+        let mut brush = self.brush.clone();
+        if self.tools.color_slot == 2 {
+            brush.erase = true;
+        }
         let session = self.documents.get_by_key_mut(target).unwrap();
         session.editing.stroke = if mask {
             Stroke::begin_mask(&mut session.document, brush, point)

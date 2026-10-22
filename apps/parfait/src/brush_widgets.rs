@@ -32,7 +32,7 @@ struct ParameterGeometry {
 impl ParameterLayout {
     fn height(self) -> f32 {
         match self {
-            Self::Palette => 46.,
+            Self::Palette => 38.,
             Self::Detail => 42.,
         }
     }
@@ -48,7 +48,7 @@ impl ParameterLayout {
             dynamics_top,
             dynamics_height,
         ) = match self {
-            Self::Palette => (49., 2., 26., 33., 6., 28.),
+            Self::Palette => (49., 2., 25., 26., 3., 27.),
             Self::Detail => (49., 2., 23., 31., 2., 24.),
         };
         let number = Rect::from_min_max(
@@ -60,7 +60,11 @@ impl ParameterLayout {
             track: Rect::from_min_max(
                 rect.min + egui::vec2(8., track_top),
                 egui::pos2(
-                    right - if has_dynamics { 26. } else { 0. },
+                    if self == Self::Palette {
+                        number.left() - 14.
+                    } else {
+                        right - if has_dynamics { 26. } else { 0. }
+                    },
                     rect.top() + track_top + 6.,
                 ),
             ),
@@ -148,7 +152,7 @@ pub fn parameter(
     let number_rect = geometry.number;
     let mut label = egui::text::LayoutJob::simple_singleline(
         options.label.to_owned(),
-        egui::FontId::proportional(if compact { 11.5 } else { 13. }),
+        egui::FontId::proportional(if compact { 11.5 } else { 12. }),
         ui.visuals().strong_text_color(),
     );
     label.wrap = egui::text::TextWrapping::truncate_at_width(
@@ -164,9 +168,12 @@ pub fn parameter(
     let slider = ui.interact(
         track.expand2(egui::vec2(1., 6.)),
         ui.id().with("bar"),
-        Sense::drag(),
+        Sense::click_and_drag(),
     );
-    if (slider.clicked() || slider.dragged() || slider.drag_stopped())
+    if (slider.is_pointer_button_down_on()
+        || slider.clicked()
+        || slider.dragged()
+        || slider.drag_stopped())
         && let Some(pointer) = slider.interact_pointer_pos()
     {
         *value = from_fraction(
@@ -177,6 +184,16 @@ pub fn parameter(
         let multiplier = 10_f32.powi(options.decimals as i32);
         *value = (*value * multiplier).round() / multiplier;
         slider.request_focus();
+    }
+    if let Some(f) = crate::widgets::track_pointer_in(
+        ui,
+        slider.id,
+        track,
+        track.expand2(egui::vec2(1., 6.)),
+    ) {
+        *value = from_fraction(f, &options.range, options.logarithmic);
+        let multiplier = 10_f32.powi(options.decimals as i32);
+        *value = (*value * multiplier).round() / multiplier;
     }
     let step = 10_f32.powi(-(options.decimals as i32));
     if slider.has_focus() {

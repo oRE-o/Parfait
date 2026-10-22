@@ -468,6 +468,7 @@ impl Parfait {
             .as_ref()
             .is_none_or(|(brush, _)| brush != &self.brush);
         if changed
+            && !ui.input(|i| i.pointer.any_down())
             && (self.documents.is_empty()
                 || self.documents.active_session.editing.stroke.is_none())
         {
@@ -518,38 +519,50 @@ impl Parfait {
             }
         }
     }
-    pub fn brush_properties_ui(&mut self, ui: &mut egui::Ui) {
+    pub fn brush_properties_ui(&mut self, ui: &mut egui::Ui, body_height: f32) {
         ui.spacing_mut().item_spacing.y = 2.;
-        if self.navigation_tool != 0 {
-            ui.strong(if self.navigation_tool == 1 {
-                "Hand"
-            } else {
-                "Eyedropper"
+        let height = (body_height - 31.).max(24.);
+        egui::ScrollArea::vertical()
+            .id_salt("property_controls")
+            .max_height(height)
+            .min_scrolled_height(height)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                self.brush_property_controls(ui);
             });
-            ui.label(if self.navigation_tool == 1 { "Drag to pan the canvas. Space temporarily pans while a drawing tool is selected." } else { "Click the canvas to sample its composited color. Alt temporarily samples while drawing." });
-            if ui.button("Return to drawing tool").clicked() {
-                self.navigation_tool = 0;
-            }
-            return;
-        }
-        self.brush_preview(ui, 48., true);
-        for property in Property::ALL {
-            if self.brush_details.properties.visibility(property)
-                && property_control(
+        if self.navigation_tool != 0 {
+            ui.separator();
+            widgets::action_row(ui, |ui| {
+                if widgets::flat_icon(
                     ui,
-                    &mut self.brush,
-                    property,
-                    None,
-                    &mut self.brush_details.help,
+                    Icon::Undo,
+                    false,
+                    "보조 도구 설정 초기화",
+                    24.,
                 )
-            {
-                self.brush_details.dynamics = Some(property);
-            }
-        }
-        if !self.brush_details.properties.visible.contains(&true)
-            && !self.brush_details.properties.blending_visible.contains(&true)
-        {
-            ui.weak("Use the eyes in Details to show properties here.");
+                .clicked()
+                {
+                    self.tools.size = if self.active_tool()
+                        == Some(crate::tools::ToolKind::Text)
+                    {
+                        32.
+                    } else {
+                        4.
+                    };
+                    self.tools.opacity = 1.;
+                    if self.active_tool()
+                        == Some(crate::tools::ToolKind::Rotate)
+                    {
+                        self.documents.active_session.view.angle = 0.;
+                    }
+                    self.tools.tolerance = 10.;
+                    self.tools.contiguous = true;
+                    self.tools.zoom_drag = true;
+                    self.tools.selection_mode = 0;
+                    self.tools.shape_fill = false;
+                }
+            });
+            return;
         }
         ui.separator();
         widgets::action_row(ui, |ui| {
@@ -594,6 +607,31 @@ impl Parfait {
                 self.save_current_preset();
             }
         });
+    }
+    fn brush_property_controls(&mut self, ui: &mut egui::Ui) {
+        if self.navigation_tool != 0 {
+            self.tool_properties(ui);
+            return;
+        }
+        self.brush_preview(ui, 42., true);
+        for property in Property::ALL {
+            if self.brush_details.properties.visibility(property)
+                && property_control(
+                    ui,
+                    &mut self.brush,
+                    property,
+                    None,
+                    &mut self.brush_details.help,
+                )
+            {
+                self.brush_details.dynamics = Some(property);
+            }
+        }
+        if !self.brush_details.properties.visible.contains(&true)
+            && !self.brush_details.properties.blending_visible.contains(&true)
+        {
+            ui.weak("Use the eyes in Details to show properties here.");
+        }
     }
     pub fn brush_details_ui(&mut self, ctx: &egui::Context) {
         let dynamics_was_open = self.brush_details.dynamics.is_some();
@@ -1326,7 +1364,7 @@ mod tests {
                         ),
                         |ui| {
                             ui.set_width(210.);
-                            app.brush_properties_ui(ui);
+                            app.brush_properties_ui(ui, 310.);
                         },
                     );
                 });

@@ -1,14 +1,12 @@
 use crate::shortcuts::Command;
 use crate::{
     app::Parfait,
-    theme::ACCENT,
     widgets::{self, Icon},
 };
 use eframe::egui::{self, Color32, RichText};
 
 impl Parfait {
     pub fn top_panel(&mut self, ui: &mut egui::Ui) {
-        self.menu_bar(ui);
         egui::Panel::top("command_bar").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 self.configured_command_bar(ui);
@@ -78,106 +76,108 @@ impl Parfait {
             });
     }
     pub fn bottom_panel(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::bottom("status").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(format!(
-                    "{:.1}%",
-                    self.documents.active_session.view.zoom * 100.
-                ));
-                ui.separator();
-                ui.label(format!(
-                    "{:.1}°",
-                    self.documents.active_session.view.angle.to_degrees()
-                ));
-                if self.documents.active_session.view.flip_horizontal {
-                    ui.label(RichText::new("H-flip").color(ACCENT));
-                }
-                if self.documents.active_session.view.flip_vertical {
-                    ui.label(RichText::new("V-flip").color(ACCENT));
-                }
-                ui.separator();
-                ui.label(
-                    RichText::new(
-                        "Space: pan    Shift+Space: rotate    Alt: pick color",
-                    )
-                    .size(11.)
-                    .weak(),
-                );
-                ui.with_layout(
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("Parfait").size(11.).weak());
-                    },
-                );
-            });
-        });
-    }
-    pub fn tool_rail(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::left("tool_rail")
-            .exact_size(38.)
-            .resizable(false)
+        egui::Panel::bottom("status")
             .frame(
-                egui::Frame::NONE.fill(Color32::from_gray(66)).inner_margin(4),
+                egui::Frame::NONE
+                    .fill(Color32::from_gray(48))
+                    .inner_margin(egui::Margin::symmetric(4, 1)),
             )
             .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 1.;
-                use crate::brushes::BrushGroup;
-                for (group, icon, command) in [
-                    (BrushGroup::Ink, Icon::Pen, Command::ToolInk),
-                    (BrushGroup::Sketch, Icon::Pencil, Command::ToolSketch),
-                    (BrushGroup::Paint, Icon::Brush, Command::ToolPaint),
-                    (
-                        BrushGroup::Airbrush,
-                        Icon::Airbrush,
-                        Command::ToolAirbrush,
-                    ),
-                    (BrushGroup::Eraser, Icon::Eraser, Command::ToolEraser),
-                    (BrushGroup::Blend, Icon::Blend, Command::ToolBlend),
-                ] {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 3.;
+                    let mut zoom =
+                        self.documents.active_session.view.zoom * 100.;
+                    let number = ui.add(
+                        egui::DragValue::new(&mut zoom)
+                            .range(5. ..=1200.)
+                            .speed(1.)
+                            .suffix("%")
+                            .max_decimals(1),
+                    );
+                    ui.spacing_mut().slider_width =
+                        ((ui.available_width() - 230.) * 0.55).clamp(24., 70.);
+                    let slider = ui.add(
+                        egui::Slider::new(&mut zoom, 5. ..=1200.)
+                            .logarithmic(true)
+                            .show_value(false),
+                    );
+                    if number.changed() || slider.changed() {
+                        self.documents.active_session.view.request_zoom(
+                            crate::canvas::ViewZoom::Scale(zoom / 100.),
+                        );
+                    }
+                    for (icon, command, label) in [
+                        (Icon::Minus, Command::ZoomOut, "축소"),
+                        (Icon::Plus, Command::ZoomIn, "확대"),
+                        (Icon::Fit, Command::FitCanvas, "전체 보기"),
+                    ] {
+                        if widgets::flat_icon(ui, icon, false, label, 20.)
+                            .clicked()
+                        {
+                            self.execute_command(command, ui.ctx());
+                        }
+                    }
+                    ui.separator();
+                    let mut angle =
+                        self.documents.active_session.view.angle.to_degrees();
+                    let number = ui.add(
+                        egui::DragValue::new(&mut angle)
+                            .range(-180. ..=180.)
+                            .speed(0.5)
+                            .suffix("°")
+                            .max_decimals(1),
+                    );
+                    ui.spacing_mut().slider_width =
+                        ((ui.available_width() - 72.) * 0.45).clamp(24., 65.);
+                    let slider = ui.add(
+                        egui::Slider::new(&mut angle, -180. ..=180.)
+                            .show_value(false),
+                    );
+                    if number.changed() || slider.changed() {
+                        self.documents.active_session.view.angle =
+                            angle.to_radians();
+                    }
                     if widgets::flat_icon(
                         ui,
-                        icon,
-                        self.navigation_tool == 0
-                            && BrushGroup::of(&self.brush) == group,
-                        self.keymap.tooltip(command),
-                        30.,
+                        Icon::Undo,
+                        false,
+                        "회전 초기화",
+                        20.,
                     )
                     .clicked()
                     {
-                        self.select_brush_group(group);
+                        self.documents.active_session.view.angle = 0.;
+                    }
+                    if ui.available_width() > 260. {
+                        ui.weak("Space 이동 · Shift+Space 회전 · Alt 색 취득");
+                    }
+                });
+            });
+    }
+    pub fn tool_rail(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::left("tools")
+            .exact_size(34.)
+            .resizable(false)
+            .frame(
+                egui::Frame::NONE.fill(Color32::from_gray(47)).inner_margin(2.),
+            )
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(0., 1.);
+                for category in crate::tools::ToolCategory::ALL {
+                    if widgets::flat_icon(
+                        ui,
+                        category.icon(),
+                        self.tools.category == category,
+                        category.label(),
+                        27.,
+                    )
+                    .clicked()
+                    {
+                        self.choose_tool_category(category);
                     }
                 }
                 ui.separator();
-                if widgets::flat_icon(
-                    ui,
-                    Icon::Hand,
-                    self.navigation_tool == 1,
-                    self.keymap.tooltip(Command::ToolHand),
-                    30.,
-                )
-                .clicked()
-                {
-                    self.navigation_tool = 1;
-                }
-                if widgets::flat_icon(
-                    ui,
-                    Icon::Picker,
-                    self.navigation_tool == 2,
-                    self.keymap.tooltip(Command::ToolPicker),
-                    30.,
-                )
-                .clicked()
-                {
-                    self.navigation_tool = 2;
-                }
-                ui.separator();
-                if widgets::flat_icon(ui, Icon::Fit, false, "Fit canvas", 30.)
-                    .clicked()
-                {
-                    self.execute_command(Command::FitCanvas, ui.ctx());
-                }
-                ui.add_space(10.);
-                ui.color_edit_button_srgb(&mut self.brush.color);
+                self.color_slots(ui, true);
             });
     }
     pub(crate) fn duplicate_layer(&mut self) {
@@ -222,36 +222,60 @@ impl Parfait {
         for (i, layer) in
             self.documents.active_session.document.layers.iter().enumerate()
         {
-            if let Some(mask) = &layer.mask {
-                let mut pixels = Vec::with_capacity(40 * 40 * 4);
-                for row in 0..40 {
-                    for column in 0..40 {
-                        let index = (row
-                            * self.documents.active_session.document.height
-                            / 40
-                            * self.documents.active_session.document.width
-                            + column
+            let cached = self.render_cache.thumbnail_sources.get(i);
+            let pixels_changed = cached.is_none_or(|old| {
+                old.id != layer.id
+                    || old.kind != layer.kind
+                    || !std::sync::Arc::ptr_eq(&old.pixels, &layer.pixels)
+            });
+            let mask_changed = cached.is_none_or(|old| {
+                old.id != layer.id
+                    || !same_thumbnail_mask(&old.mask, &layer.mask)
+            });
+            if mask_changed {
+                if let Some(mask) = &layer.mask {
+                    let mut pixels = Vec::with_capacity(40 * 40 * 4);
+                    for row in 0..40 {
+                        for column in 0..40 {
+                            let index = (row
+                                * self.documents.active_session.document.height
+                                / 40
                                 * self.documents.active_session.document.width
-                                / 40)
-                            as usize;
-                        let value = mask.coverage.value(index);
-                        pixels.extend_from_slice(&[value, value, value, 255]);
+                                + column
+                                    * self
+                                        .documents
+                                        .active_session
+                                        .document
+                                        .width
+                                    / 40)
+                                as usize;
+                            let value = mask.coverage.value(index);
+                            pixels
+                                .extend_from_slice(&[value, value, value, 255]);
+                        }
                     }
-                }
-                let image =
-                    egui::ColorImage::from_rgba_unmultiplied([40, 40], &pixels);
-                if let Some(texture) = &mut self.render_cache.mask_previews[i] {
-                    texture.set(image, egui::TextureOptions::LINEAR);
+                    let image = egui::ColorImage::from_rgba_unmultiplied(
+                        [40, 40],
+                        &pixels,
+                    );
+                    if let Some(texture) =
+                        &mut self.render_cache.mask_previews[i]
+                    {
+                        texture.set(image, egui::TextureOptions::LINEAR);
+                    } else {
+                        self.render_cache.mask_previews[i] =
+                            Some(ctx.load_texture(
+                                format!("mask-{i}"),
+                                image,
+                                egui::TextureOptions::LINEAR,
+                            ));
+                    }
                 } else {
-                    self.render_cache.mask_previews[i] =
-                        Some(ctx.load_texture(
-                            format!("mask-{i}"),
-                            image,
-                            egui::TextureOptions::LINEAR,
-                        ));
+                    self.render_cache.mask_previews[i] = None;
                 }
-            } else {
-                self.render_cache.mask_previews[i] = None;
+            }
+            if !pixels_changed {
+                continue;
             }
             let mut pixels = Vec::with_capacity(40 * 40 * 4);
             for y in 0..40 {
@@ -286,6 +310,8 @@ impl Parfait {
                 ));
             }
         }
+        self.render_cache.thumbnail_sources =
+            self.documents.active_session.document.layers.clone();
         self.render_cache.preview_revision =
             self.documents.active_session.document.revision;
     }
@@ -319,8 +345,8 @@ impl Parfait {
         use crate::workspace::Palette;
         match palette {
             Palette::History => self.history_palette(ui, body_height),
-            Palette::Brushes => self.brush_library_ui(ui),
-            Palette::Properties => self.brush_properties_ui(ui),
+            Palette::Brushes => self.brush_library_ui(ui, body_height),
+            Palette::Properties => self.brush_properties_ui(ui, body_height),
             Palette::Sizes => {
                 let sizes = [
                     1., 2., 3., 4., 5., 7., 10., 12., 15., 20., 25., 30., 40.,
@@ -374,14 +400,19 @@ impl Parfait {
                     });
             }
             Palette::Color => {
+                let before = self.brush.color;
                 ui.vertical_centered(|ui| {
                     widgets::color_wheel_sized(
                         ui,
                         &mut self.brush.color,
-                        body_height - 30.,
+                        body_height - 58.,
                     );
                 });
+                self.color_slots(ui, false);
                 ui.color_edit_button_srgb(&mut self.brush.color);
+                if before != self.brush.color && self.tools.color_slot == 2 {
+                    self.tools.color_slot = 0;
+                }
             }
             Palette::Navigator => {
                 if let Some(texture) = self
@@ -717,6 +748,22 @@ impl Parfait {
                 self.layer_rows(ui, list_height);
             }
         }
+    }
+}
+
+fn same_thumbnail_mask(
+    a: &Option<parfait_core::LayerMask>,
+    b: &Option<parfait_core::LayerMask>,
+) -> bool {
+    use parfait_core::MaskCoverage as M;
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => match (&a.coverage, &b.coverage) {
+            (M::Uniform(a), M::Uniform(b)) => a == b,
+            (M::Dense(a), M::Dense(b)) => std::sync::Arc::ptr_eq(a, b),
+            _ => false,
+        },
+        _ => false,
     }
 }
 

@@ -280,6 +280,36 @@ impl BoundaryCache {
             return;
         }
         let size = egui::vec2(document.width as f32, document.height as f32);
+        if matches!(document.selection, Some(MaskCoverage::Uniform(128..=255)))
+        {
+            let mut contours = Contours {
+                document,
+                view,
+                viewport: rect,
+                size,
+                first: [0, 0],
+                last: [document.width as i32, document.height as i32],
+                step: 1,
+                segments: Vec::with_capacity(4),
+                quads: 0,
+            };
+            contours.segment(true, 0, 0, document.width as i32);
+            contours.segment(
+                true,
+                document.height as i32,
+                0,
+                document.width as i32,
+            );
+            contours.segment(false, 0, 0, document.height as i32);
+            contours.segment(
+                false,
+                document.width as i32,
+                0,
+                document.height as i32,
+            );
+            self.meshes = contours.meshes(key.pixels_per_point);
+            return;
+        }
         let mut bounds = Rect::NOTHING;
         for point in [
             rect.left_top(),

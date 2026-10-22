@@ -146,7 +146,7 @@ impl Workspace {
                         .map(|placement| placement.height)
                 })
                 .reduce(f32::max);
-            if let Some(height) = height {
+            if height.is_some() {
                 let next = rows.iter().skip(row_index + 1).find(|row| {
                     row.iter().any(|palette| {
                         self.panels.iter().any(|placement| {
@@ -155,16 +155,14 @@ impl Workspace {
                         })
                     })
                 });
+                let height = (bounds.height() - 29.).max(60.);
                 let next_height = next.map(|row| {
                     row.iter()
-                        .filter_map(|palette| {
-                            self.panels
+                        .filter_map(|p| {
+                            layout
                                 .iter()
-                                .find(|placement| {
-                                    placement.palette == *palette
-                                        && !placement.collapsed
-                                })
-                                .map(|placement| placement.height)
+                                .find(|(palette, _)| palette == p)
+                                .map(|(_, rect)| rect.height() - 29.)
                         })
                         .fold(60., f32::max)
                 });
@@ -173,14 +171,16 @@ impl Workspace {
                     egui::pos2(bounds.right(), bounds.bottom() + 1.),
                 );
                 let label = format!("Resize row below {}", row[0].title());
-                if let Some(drag) = handle(
-                    ui,
-                    ui.id().with(("row_resize", row[0])),
-                    target,
-                    CursorIcon::ResizeVertical,
-                    &label,
-                    [height, next_height.unwrap_or(0.), 0., 0.],
-                ) {
+                if let Some(drag) = next.and_then(|_| {
+                    handle(
+                        ui,
+                        ui.id().with(("row_resize", row[0])),
+                        target,
+                        CursorIcon::ResizeVertical,
+                        &label,
+                        [height, next_height.unwrap_or(0.), 0., 0.],
+                    )
+                }) {
                     self.resizing = true;
                     let delta = drag.delta.y.clamp(
                         if next.is_some() {

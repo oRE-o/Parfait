@@ -1,6 +1,6 @@
 use crate::{app::Parfait, brushes::Preset, workspace::Workspace};
 use serde::{Deserialize, Serialize};
-pub(crate) const VERSION: u32 = 22;
+pub(crate) const VERSION: u32 = 23;
 
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
@@ -13,6 +13,8 @@ pub struct Preferences {
     #[serde(default)]
     pub calibration: parfait_core::PressureCalibration,
     pub version: u32,
+    #[serde(default)]
+    pub tools: crate::tools::ToolSettings,
     pub workspace: Workspace,
     pub presets: Vec<Preset>,
     pub brush: parfait_core::Brush,
@@ -31,6 +33,11 @@ impl Preferences {
             options: app.options.clone(),
             calibration: app.calibration.clone(),
             version: VERSION,
+            tools: {
+                let mut t = app.tools.clone();
+                t.drag = None;
+                t
+            },
             keymap: app.keymap.preferences(),
             display: app.display,
             workspace: app.workspace.clone(),
@@ -45,6 +52,7 @@ impl Preferences {
 
     pub(crate) fn matches(&self, app: &Parfait) -> bool {
         self.version == VERSION
+            && self.tools == app.tools
             && self.options == app.options
             && self.keymap == app.keymap
             && self.display == app.display
@@ -62,6 +70,7 @@ impl Preferences {
 
     pub fn validate(&self) -> bool {
         (1..=VERSION).contains(&self.version)
+            && self.tools.validate()
             && self.options.validate()
             && self.keymap.validate()
             && self.display.validate()
@@ -94,6 +103,26 @@ impl Parfait {
                     pref.validate(),
                     "Invalid or unsupported preferences"
                 );
+                if pref.version < 23 {
+                    crate::brushes::upgrade_default_spacing(
+                        &mut pref.presets,
+                        &mut pref.brush,
+                        &pref.tip_name,
+                    );
+                    pref.tools.category =
+                        crate::tools::ToolCategory::from_brush(
+                            pref.brush_library.group.unwrap_or_else(|| {
+                                crate::brushes::BrushGroup::of(&pref.brush)
+                            }),
+                        );
+                }
+                self.tools = pref.tools.clone();
+                self.navigation_tool = self
+                    .tools
+                    .subtools
+                    .iter()
+                    .find(|t| Some(t.id) == self.tools.active_id)
+                    .map_or(0, |t| t.kind as u8);
                 self.options = pref.options.clone();
                 self.calibration = pref.calibration.clone();
                 self.display = pref.display;
@@ -119,8 +148,11 @@ impl Parfait {
     }
     pub fn persist_preferences(&mut self, force: bool) {
         if (!force
-            && !self.documents.is_empty()
-            && self.documents.active_session.editing.stroke.is_some())
+            && (self.tools.drag.is_some()
+                || self.documents.active_session.editing.layer_edit.is_some()))
+            || (!force
+                && !self.documents.is_empty()
+                && self.documents.active_session.editing.stroke.is_some())
             || self.preferences_read_failed
             || (!force && self.preferences_tick.elapsed().as_secs_f32() < 1.)
         {

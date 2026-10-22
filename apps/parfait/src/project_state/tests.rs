@@ -287,7 +287,7 @@ fn labels_and_unsaved_star_fit_the_minimum_and_normal_window_widths() {
                         ..Default::default()
                     },
                     |ui| {
-                        app.title_bar(ui);
+                        app.menu_bar(ui);
                         app.top_panel(ui);
                         egui::CentralPanel::default()
                             .show(ui, |ui| app.canvas_document_strip(ui));

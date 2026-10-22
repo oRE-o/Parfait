@@ -48,6 +48,7 @@ impl Parfait {
     pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
+                self.window_drag(ui, 26., true);
                 for menu in TopMenu::ALL {
                     let response = ui.menu_button(menu.label(), |ui| {
                         ui.set_min_width(188.);
@@ -62,7 +63,10 @@ impl Parfait {
                     });
                     let _ = response;
                 }
+                let status_width = 310.;
+                self.window_drag(ui, (ui.available_width() - status_width).max(1.), false);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.window_controls(ui);
                     let color = if self.documents.is_empty() || self.tabs.enabled { Color32::from_gray(184) } else if self.documents.active_session.recovery.failed {
                         Color32::LIGHT_RED
                     } else if self.documents.active_session.recovery.saved >= self.documents.active_session.document.revision {

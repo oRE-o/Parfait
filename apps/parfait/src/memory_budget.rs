@@ -16,6 +16,18 @@ impl Parfait {
         remove: &HashMap<DocumentId, usize>,
     ) -> bool {
         let mut census = BufferCensus::default();
+        if let Some(job) = &self.render_cache.composite_job {
+            census.add_document(&job.snapshot);
+        }
+        for layer in &self.render_cache.thumbnail_sources {
+            census.add_buffer(&layer.pixels);
+            if let Some(mask) = &layer.mask
+                && let parfait_core::MaskCoverage::Dense(values) =
+                    &mask.coverage
+            {
+                census.add_buffer(values);
+            }
+        }
         if let Some(runtime) = &self.recovery_runtime {
             for snapshot in runtime.worker.snapshots() {
                 census.add_document(&snapshot);
@@ -68,6 +80,12 @@ impl Parfait {
                     .as_ref()
                     .and_then(|d| d.reference_bytes())
                     .unwrap_or(0),
+            )
+            .saturating_add(
+                self.render_cache
+                    .composite_job
+                    .as_ref()
+                    .map_or(0, |job| job.reserved_bytes),
             )
             .saturating_add(additional)
             .saturating_add(self.tabs.reserved_pixels())

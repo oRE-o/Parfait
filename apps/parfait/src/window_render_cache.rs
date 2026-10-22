@@ -5,6 +5,8 @@ use parfait_core::LayerId;
 
 pub(crate) struct WindowRenderCache {
     pub key: Option<SessionKey>,
+    pub composite_job: Option<crate::canvas_render::CompositeJob>,
+    pub thumbnail_sources: Vec<parfait_core::Layer>,
     pub layer_previews: Vec<egui::TextureHandle>,
     pub mask_previews: Vec<Option<egui::TextureHandle>>,
     pub rendered_overlay: Option<LayerId>,
@@ -18,6 +20,8 @@ impl Default for WindowRenderCache {
     fn default() -> Self {
         Self {
             key: None,
+            composite_job: None,
+            thumbnail_sources: Vec::new(),
             layer_previews: Vec::new(),
             mask_previews: Vec::new(),
             rendered_overlay: None,
@@ -32,7 +36,8 @@ impl Default for WindowRenderCache {
 impl WindowRenderCache {
     pub fn ensure_session(&mut self, key: SessionKey) {
         if self.key != Some(key) {
-            *self = Self { key: Some(key), ..Self::default() };
+            let composite_job = self.composite_job.take();
+            *self = Self { key: Some(key), composite_job, ..Self::default() };
         }
     }
 }

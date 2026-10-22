@@ -4,6 +4,15 @@ mod boundary;
 pub(crate) use boundary::BoundaryCache;
 
 impl Parfait {
+    pub(crate) fn retain_selection_render(&mut self, previous: u64) {
+        let revision = self.documents.active_session.document.revision;
+        if self.render_cache.rendered == previous {
+            self.render_cache.rendered = revision;
+        }
+        if self.render_cache.preview_revision == previous {
+            self.render_cache.preview_revision = revision;
+        }
+    }
     pub(crate) fn pixel_selection_reason(
         &self,
         command: Command,
@@ -54,6 +63,7 @@ impl Parfait {
             return;
         }
         let selected = self.selected_layer_mask();
+        let revision = self.documents.active_session.document.revision;
         self.edit_named(command.label(), |document| {
             if let Some(mode) = command.selection_mode() {
                 document.selection_from_layers(selected, mode);
@@ -79,6 +89,12 @@ impl Parfait {
                 }
             }
         });
+        if !matches!(
+            command,
+            Command::LayerMaskOutsideSelection | Command::LayerMaskSelection
+        ) {
+            self.retain_selection_render(revision);
+        }
         if matches!(
             command,
             Command::LayerMaskOutsideSelection | Command::LayerMaskSelection

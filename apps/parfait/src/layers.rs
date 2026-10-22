@@ -1007,27 +1007,31 @@ impl Parfait {
                         Sense::click_and_drag(),
                     );
                     let doc = &self.documents.active_session.document;
-                    let row_label: std::borrow::Cow<'_, str> =
-                        doc.native_content(layer).map_or_else(
-                            || {
-                                std::borrow::Cow::Borrowed(
-                                    doc.layers[layer].name.as_str(),
-                                )
-                            },
-                            |n| {
-                                std::borrow::Cow::Owned(format!(
-                                    "{} · {}",
-                                    n.body().kind_label(),
-                                    doc.layers[layer].name
-                                ))
-                            },
+                    let row_label = doc.layers[layer].name.as_str();
+                    if let Some(node) = doc.native_content(layer) {
+                        let icon = match node.body().as_ref() {
+                            parfait_core::LayerContent::Text(_) => Icon::Text,
+                            parfait_core::LayerContent::Vector(_) => {
+                                Icon::Vector
+                            }
+                        };
+                        let badge = Rect::from_min_size(
+                            thumbnail.right_bottom() - egui::vec2(13., 13.),
+                            egui::vec2(13., 13.),
                         );
+                        ui.painter().rect_filled(
+                            badge,
+                            1.,
+                            Color32::from_gray(44),
+                        );
+                        paint_icon(ui, badge, icon, Color32::from_gray(225));
+                    }
                     response.widget_info(|| {
                         egui::WidgetInfo::selected(
                             egui::WidgetType::SelectableLabel,
                             ui.is_enabled(),
                             chosen,
-                            row_label.as_ref(),
+                            row_label,
                         )
                     });
                     let name = Rect::from_min_max(
@@ -1089,7 +1093,7 @@ impl Parfait {
                         clipped_text(
                             ui,
                             name.min,
-                            row_label.as_ref(),
+                            row_label,
                             12.,
                             name.width(),
                             ui.visuals().text_color(),

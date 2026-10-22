@@ -194,7 +194,7 @@ impl Default for Brush {
             minimum_size: 0.05,
             pressure_opacity: false,
             flow: 1.,
-            spacing: 0.12,
+            spacing: 0.1,
             pressure_spacing: false,
             minimum_spacing: 0.1,
             spacing_curve: Default::default(),

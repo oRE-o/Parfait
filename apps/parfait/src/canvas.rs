@@ -166,6 +166,9 @@ impl Parfait {
             || self.workspace.resizing
             || self.documents.active_session.layer_ui.list.owns_pointer();
         // Space takes ownership until pointer-up; painting never resumes mid-gesture.
+        if blocked || ctx.input(|i| i.key_pressed(Key::Escape) || !i.focused) {
+            self.tools.drag = None;
+        }
         let interrupted = (space || blocked) && self.finish_stroke();
         if interrupted
             && space
@@ -201,6 +204,7 @@ impl Parfait {
                     .zoom_at(factor, pos, rect, size);
             }
         }
+        self.poll_composite(&ctx);
         // Changes made outside this input batch (undo, layer edits, open) invalidate all pixels.
         let full_refresh = self.render_cache.rendered
             != self.documents.active_session.document.revision
@@ -223,6 +227,7 @@ impl Parfait {
                 Event::Touch { phase: egui::TouchPhase::Cancel, .. }
                 | Event::PointerGone
                 | Event::WindowFocused(false) => {
+                    self.tools.drag = None;
                     self.finish_stroke();
                     self.documents.active_session.view.gesture = None;
                     self.pressure = 1.;
@@ -258,6 +263,25 @@ impl Parfait {
                                     Gesture::Pan
                                 });
                             self.documents.active_session.view.last = pos;
+                        } else if button == PointerButton::Primary
+                            && matches!(self.navigation_tool, 3..=5)
+                        {
+                            let mode = self.navigation_tool;
+                            let view = &mut self.documents.active_session.view;
+                            view.last = pos;
+                            if mode == 3 {
+                                view.gesture = Some(Gesture::Rotate);
+                            } else {
+                                view.zoom_at(
+                                    if mode == 4 { 1.2 } else { 1. / 1.2 },
+                                    pos,
+                                    rect,
+                                    size,
+                                );
+                                if self.tools.zoom_drag {
+                                    view.gesture = Some(Gesture::Zoom);
+                                }
+                            }
                         } else if button == PointerButton::Primary {
                             let p = self
                                 .documents
@@ -289,7 +313,8 @@ impl Parfait {
                                         self.select_layer(layer);
                                     }
                                 } else if (modifiers.alt
-                                    && self.options.alt_picker)
+                                    && self.options.alt_picker
+                                    && self.navigation_tool == 0)
                                     || self.navigation_tool == 2
                                 {
                                     let pixels = self
@@ -305,16 +330,22 @@ impl Parfait {
                                     self.brush
                                         .color
                                         .copy_from_slice(&pixels[..3]);
-                                } else if !self
-                                    .documents
-                                    .active_session
-                                    .document
-                                    .layers[self
-                                    .documents
-                                    .active_session
-                                    .document
-                                    .active]
-                                    .locked
+                                    if self.tools.color_slot == 2 {
+                                        self.tools.color_slot = 0;
+                                    }
+                                } else if self.tool_pointer_down(p, modifiers) {
+                                    // The sub tool owns this gesture through pointer-up.
+                                } else if self.navigation_tool == 0
+                                    && !self
+                                        .documents
+                                        .active_session
+                                        .document
+                                        .layers[self
+                                        .documents
+                                        .active_session
+                                        .document
+                                        .active]
+                                        .locked
                                     && self
                                         .documents
                                         .active_session
@@ -342,6 +373,16 @@ impl Parfait {
                         && (button == PointerButton::Primary
                             || button == PointerButton::Middle)
                     {
+                        let p = self
+                            .documents
+                            .active_session
+                            .view
+                            .document(pos, rect, size);
+                        if !blocked {
+                            self.tool_pointer_up(p, modifiers.shift);
+                        } else {
+                            self.tools.drag = None;
+                        }
                         self.finish_stroke();
                         self.documents.active_session.view.gesture = None;
                         self.pressure = 1.;
@@ -375,6 +416,12 @@ impl Parfait {
                         }
                         self.documents.active_session.view.last = pos;
                     } else if !space && !blocked {
+                        let p = self
+                            .documents
+                            .active_session
+                            .view
+                            .document(pos, rect, size);
+                        self.tool_pointer_move(p, modifiers.shift);
                         let session = &mut *self.documents.active_session;
                         let p = session.view.document(pos, rect, size);
                         if let Some(stroke) = &mut session.editing.stroke {
@@ -401,6 +448,7 @@ impl Parfait {
             }
         }
         if !ctx.input(|i| i.pointer.primary_down()) {
+            self.tools.drag = None;
             self.finish_stroke();
         }
         let session = &mut *self.documents.active_session;
@@ -441,83 +489,105 @@ impl Parfait {
             || self.render_cache.texture.is_none()
             || overlay_changed
         {
-            let region = if let Some(r) =
-                damage.filter(|_| !full_refresh && !overlay_changed)
-            {
-                r
-            } else {
-                PixelRect {
-                    x0: 0,
-                    y0: 0,
-                    x1: self.documents.active_session.document.width,
-                    y1: self.documents.active_session.document.height,
-                }
-            };
-            let width = (region.x1 - region.x0) as usize;
-            let height = (region.y1 - region.y0) as usize;
-            let mut pixels =
-                self.documents.active_session.document.composite_region(region);
-            for (y, row) in pixels.chunks_exact_mut(width * 4).enumerate() {
-                for (x, p) in row.as_chunks_mut::<4>().0.iter_mut().enumerate()
+            let asynchronous = full_refresh
+                && damage.is_none()
+                && !stroke_started
+                && self.documents.active_session.editing.stroke.is_none()
+                && u64::from(self.documents.active_session.document.width)
+                    * u64::from(self.documents.active_session.document.height)
+                    > 262144
+                && (self.render_cache.composite_job.is_some()
+                    || self.can_reserve_pixel_headroom(
+                        u64::from(self.documents.active_session.document.width)
+                            * u64::from(
+                                self.documents.active_session.document.height,
+                            )
+                            * 8
+                            + 1024 * 1024,
+                    ));
+            if !(asynchronous && self.request_composite(&ctx)) {
+                let region = if let Some(r) =
+                    damage.filter(|_| !full_refresh && !overlay_changed)
                 {
-                    if p[3] == 255 {
-                        continue;
-                    }
-                    let bg = if ((x + region.x0 as usize) / 16
-                        + (y + region.y0 as usize) / 16)
-                        .is_multiple_of(2)
-                    {
-                        235.
-                    } else {
-                        218.
-                    };
-                    let a = p[3] as f32 / 255.;
-                    for c in &mut p[..3] {
-                        *c = (*c as f32 * a + bg * (1. - a)).round() as u8;
-                    }
-                    p[3] = 255;
-                }
-            }
-            if overlay.is_some() {
-                let mask = self.documents.active_session.document.layers
-                    [self.documents.active_session.document.active]
-                    .mask
-                    .as_ref()
-                    .unwrap();
-                crate::mask_area::tint_mask_area(
-                    &mut pixels,
-                    [
-                        self.documents.active_session.document.width,
-                        self.documents.active_session.document.height,
-                    ],
-                    &mask.coverage,
-                    region,
-                );
-            }
-            let image = egui::ColorImage::from_rgba_unmultiplied(
-                [width, height],
-                &pixels,
-            );
-            if let Some(tex) = &mut self.render_cache.texture {
-                if full_refresh || overlay_changed || damage.is_none() {
-                    tex.set(image, egui::TextureOptions::LINEAR);
+                    r
                 } else {
-                    tex.set_partial(
-                        [region.x0 as usize, region.y0 as usize],
-                        image,
-                        egui::TextureOptions::LINEAR,
+                    PixelRect {
+                        x0: 0,
+                        y0: 0,
+                        x1: self.documents.active_session.document.width,
+                        y1: self.documents.active_session.document.height,
+                    }
+                };
+                let width = (region.x1 - region.x0) as usize;
+                let height = (region.y1 - region.y0) as usize;
+                let mut pixels = self
+                    .documents
+                    .active_session
+                    .document
+                    .composite_region(region);
+                for (y, row) in pixels.chunks_exact_mut(width * 4).enumerate() {
+                    for (x, p) in
+                        row.as_chunks_mut::<4>().0.iter_mut().enumerate()
+                    {
+                        if p[3] == 255 {
+                            continue;
+                        }
+                        let bg = if ((x + region.x0 as usize) / 16
+                            + (y + region.y0 as usize) / 16)
+                            .is_multiple_of(2)
+                        {
+                            235.
+                        } else {
+                            218.
+                        };
+                        let a = p[3] as f32 / 255.;
+                        for c in &mut p[..3] {
+                            *c = (*c as f32 * a + bg * (1. - a)).round() as u8;
+                        }
+                        p[3] = 255;
+                    }
+                }
+                if overlay.is_some() {
+                    let mask = self.documents.active_session.document.layers
+                        [self.documents.active_session.document.active]
+                        .mask
+                        .as_ref()
+                        .unwrap();
+                    crate::mask_area::tint_mask_area(
+                        &mut pixels,
+                        [
+                            self.documents.active_session.document.width,
+                            self.documents.active_session.document.height,
+                        ],
+                        &mask.coverage,
+                        region,
                     );
                 }
-            } else {
-                self.render_cache.texture = Some(ctx.load_texture(
-                    "drawing",
-                    image,
-                    egui::TextureOptions::LINEAR,
-                ));
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [width, height],
+                    &pixels,
+                );
+                if let Some(tex) = &mut self.render_cache.texture {
+                    if full_refresh || overlay_changed || damage.is_none() {
+                        tex.set(image, egui::TextureOptions::LINEAR);
+                    } else {
+                        tex.set_partial(
+                            [region.x0 as usize, region.y0 as usize],
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        );
+                    }
+                } else {
+                    self.render_cache.texture = Some(ctx.load_texture(
+                        "drawing",
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    ));
+                }
+                self.render_cache.rendered =
+                    self.documents.active_session.document.revision;
+                self.render_cache.rendered_overlay = overlay;
             }
-            self.render_cache.rendered =
-                self.documents.active_session.document.revision;
-            self.render_cache.rendered_overlay = overlay;
         }
         if let Some(texture) = self
             .local_canvas_texture()
@@ -558,6 +628,26 @@ impl Parfait {
         if self.display.pixel_grid {
             self.documents.active_session.view.paint_pixel_grid(ui, rect, size);
         }
+        self.paint_tool_gesture(ui, rect, size);
+        if response.double_clicked() && !blocked {
+            if self.navigation_tool == 3 {
+                self.documents.active_session.view.angle = 0.;
+            }
+            if self.navigation_tool == 6
+                && self
+                    .documents
+                    .active_session
+                    .document
+                    .native_content(
+                        self.documents.active_session.document.active,
+                    )
+                    .is_some()
+            {
+                self.execute_native_command(
+                    crate::shortcuts::Command::EditNativeLayer,
+                );
+            }
+        }
         self.alignment_guides(ui, rect);
         self.render_cache.selection_boundary.paint(
             ui,
@@ -585,6 +675,12 @@ impl Parfait {
                 ctx.set_cursor_icon(egui::CursorIcon::Grab);
             } else if modifiers.alt || self.navigation_tool == 2 {
                 ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+            } else if self.navigation_tool != 0 {
+                ctx.set_cursor_icon(if self.navigation_tool == 1 {
+                    egui::CursorIcon::Grab
+                } else {
+                    egui::CursorIcon::Crosshair
+                });
             } else if self.display.brush_cursor
                 && let Some(pos) = ctx.input(|i| i.pointer.hover_pos())
             {

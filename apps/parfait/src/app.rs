@@ -40,6 +40,7 @@ pub struct Parfait {
     pub brush_details: crate::brush_details::BrushDetails,
     pub capture: Option<crate::diagnostics::Capture>,
     pub navigation_tool: u8,
+    pub tools: crate::tools::ToolSettings,
     pub brush: Brush,
     pub display: crate::display::DisplaySettings,
     pub show_display_settings: bool,
@@ -128,6 +129,7 @@ impl Parfait {
             brush_details: Default::default(),
             capture: None,
             navigation_tool: 0,
+            tools: Default::default(),
             brush: Brush::default(),
             display: Default::default(),
             show_display_settings: false,
@@ -560,10 +562,9 @@ impl Parfait {
         }
         self.shortcuts(&ctx);
         // Native window controls remain usable while an editor dialog is open.
-        self.title_bar(ui);
+        self.menu_bar(ui);
         ui.add_enabled_ui(!self.dialog_open(), |ui| {
             if self.documents.is_empty() {
-                self.menu_bar(ui);
                 if self.tabs.enabled {
                     self.document_tabs_ui(ui);
                 }
@@ -581,8 +582,6 @@ impl Parfait {
                 });
                 return;
             }
-            self.top_panel(ui);
-            self.bottom_panel(ui);
             self.workspace_ui(ui);
             self.settle_layer_edit(&ctx);
             egui::CentralPanel::default()
@@ -592,6 +591,8 @@ impl Parfait {
                     )),
                 )
                 .show(ui, |ui| {
+                    self.top_panel(ui);
+                    self.bottom_panel(ui);
                     self.canvas_document_strip(ui);
                     self.canvas(ui);
                 });
@@ -729,7 +730,9 @@ impl Parfait {
         }
         ctx.request_repaint_after(self.maintenance_interval());
         crate::chrome::resize_edges(ui);
-        self.persist_preferences(false);
+        if !ctx.input(|i| i.pointer.any_down()) {
+            self.persist_preferences(false);
+        }
         if !self.image_edit_preview_pending()
             && let Some(capture) = &mut self.capture
             && let Err(error) = capture.update(&ctx)

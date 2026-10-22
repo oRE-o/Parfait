@@ -106,6 +106,11 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
                     )
                 })
                 .inner;
+            if let Some(f) =
+                crate::widgets::track_pointer(ui, slider.id, slider.rect)
+            {
+                percent = (f * 100.).round();
+            }
             slider.widget_info(|| {
                 egui::WidgetInfo::slider(
                     ui.is_enabled(),
@@ -253,4 +258,63 @@ pub(crate) fn opacity(ui: &mut egui::Ui, value: &mut f32) -> Response {
         data.insert_temp(egui::Id::new("layer_opacity_focus"), response.id)
     });
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn batched_opacity_drag_keeps_release_position_and_disabled_controls_ignore_it()
+     {
+        let ctx = egui::Context::default();
+        let mut value = 1.;
+        let frame = |value: &mut f32, events, enabled| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(300., 100.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.add_enabled_ui(enabled, |ui| {
+                        opacity(ui, value);
+                    });
+                },
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut value, vec![], true);
+        frame(&mut value, vec![], true);
+        let (r, width) = ctx
+            .data(|d| d.get_temp::<(Rect, f32)>(egui::Id::new("layer_opacity")))
+            .unwrap();
+        let start = egui::pos2(r.left() + width * 0.2, r.center().y);
+        let end = egui::pos2(r.left() + width * 0.8, r.center().y);
+        let events = || {
+            vec![
+                egui::Event::PointerMoved(start),
+                egui::Event::PointerButton {
+                    pos: start,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerMoved(end),
+                egui::Event::PointerButton {
+                    pos: end,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ]
+        };
+        frame(&mut value, events(), true);
+        assert!((value - 0.8).abs() < 0.02, "value={value}");
+        value = 0.42;
+        frame(&mut value, events(), false);
+        assert_eq!(value, 0.42);
+    }
 }

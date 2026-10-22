@@ -1084,8 +1084,12 @@ impl Parfait {
             }
             Command::ToolEraser => self.select_brush_group(BrushGroup::Eraser),
             Command::ToolBlend => self.select_brush_group(BrushGroup::Blend),
-            Command::ToolHand => self.navigation_tool = 1,
-            Command::ToolPicker => self.navigation_tool = 2,
+            Command::ToolHand => {
+                self.choose_tool_category(crate::tools::ToolCategory::Move)
+            }
+            Command::ToolPicker => {
+                self.choose_tool_category(crate::tools::ToolCategory::Picker)
+            }
             Command::BrushSmaller => {
                 self.brush.size = (self.brush.size / 1.2).max(1.)
             }

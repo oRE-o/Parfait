@@ -57,7 +57,6 @@ fn frame(app: &mut Parfait, ctx: &egui::Context, events: Vec<egui::Event>) {
             app.document_tabs_ui(ui);
             if app.documents.is_empty() {
                 app.menu_bar(ui);
-                app.title_bar(ui);
             } else {
                 egui::CentralPanel::default().show(ui, |ui| app.canvas(ui));
             }

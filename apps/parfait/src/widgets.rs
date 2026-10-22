@@ -43,10 +43,28 @@ pub enum Icon {
     Reference,
     NewLayer,
     LayerMask,
+    Text,
+    Vector,
+    Move,
+    Select,
+    Magic,
+    Fill,
+    Gradient,
+    Shape,
+    Rotate,
 }
 impl Icon {
     pub fn glyph(self) -> &'static str {
         match self {
+            Icon::Text => "\u{f031}",
+            Icon::Vector => "\u{f5cb}",
+            Icon::Move => "\u{f0b2}",
+            Icon::Select => "\u{f0c8}",
+            Icon::Magic => "\u{f0d0}",
+            Icon::Fill => "\u{f576}",
+            Icon::Gradient => "\u{f042}",
+            Icon::Shape => "\u{f61f}",
+            Icon::Rotate => "\u{f2f1}",
             Icon::Grip => "\u{f58e}",
             Icon::Pen => "\u{f5ad}",
             Icon::Pencil => "\u{f303}",
@@ -118,8 +136,92 @@ pub fn action_row<Result>(
     })
 }
 
-/// A label above a full-width track, with a stable numeric column on the right.
-/// Keep sizing local so compact palette rows don't inherit dialog dimensions.
+/// Preserve the last position even when press/move/release arrive in one frame.
+pub(crate) fn track_pointer(
+    ui: &egui::Ui,
+    id: egui::Id,
+    rect: Rect,
+) -> Option<f32> {
+    track_pointer_in(ui, id, rect, rect)
+}
+pub(crate) fn track_pointer_in(
+    ui: &egui::Ui,
+    id: egui::Id,
+    rect: Rect,
+    hit_rect: Rect,
+) -> Option<f32> {
+    let key = id.with("ordered_track");
+    let mut active = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false);
+    let transform = ui.ctx().layer_transform_from_global(ui.layer_id());
+    let local = |p: Pos2| transform.map_or(p, |t| t * p);
+    let mut value = None;
+    let enabled = ui.is_enabled() && ui.input(|i| i.focused);
+    active &= enabled;
+    let layer_matches =
+        ui.input(|i| i.pointer.press_origin()).is_none_or(|p| {
+            ui.ctx().layer_id_at(p).is_none_or(|layer| layer == ui.layer_id())
+        });
+    ui.input(|input| {
+        for event in &input.events {
+            match *event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    ..
+                } => {
+                    let point = local(pos);
+                    active = enabled
+                        && hit_rect.contains(point)
+                        && ui.clip_rect().contains(point)
+                        && layer_matches;
+                    if active {
+                        value = Some(
+                            ((point.x - rect.left()) / rect.width())
+                                .clamp(0., 1.),
+                        );
+                    }
+                }
+                egui::Event::PointerMoved(pos) if active => {
+                    value = Some(
+                        ((local(pos).x - rect.left()) / rect.width())
+                            .clamp(0., 1.),
+                    );
+                }
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    ..
+                } if active => {
+                    value = Some(
+                        ((local(pos).x - rect.left()) / rect.width())
+                            .clamp(0., 1.),
+                    );
+                    active = false;
+                }
+                egui::Event::PointerGone
+                | egui::Event::WindowFocused(false) => {
+                    active = false;
+                    value = None;
+                }
+                egui::Event::Key {
+                    key: egui::Key::Escape,
+                    pressed: true,
+                    ..
+                } => {
+                    active = false;
+                    value = None;
+                }
+                _ => {}
+            }
+        }
+        active &= input.pointer.primary_down() && enabled;
+    });
+    ui.data_mut(|d| d.insert_temp(key, active));
+    value
+}
+
 pub(crate) fn numeric_slider<N: egui::emath::Numeric>(
     ui: &mut egui::Ui,
     value: &mut N,
@@ -139,7 +241,7 @@ pub(crate) fn numeric_slider<N: egui::emath::Numeric>(
                     - ui.spacing().item_spacing.x)
                     .max(24.);
                 ui.spacing_mut().slider_rail_height = 3.;
-                let slider = ui
+                let mut slider = ui
                     .add(
                         egui::Slider::new(value, range.clone())
                             .show_value(false)
@@ -151,6 +253,17 @@ pub(crate) fn numeric_slider<N: egui::emath::Numeric>(
                             .trailing_fill(false),
                     )
                     .on_hover_text(label);
+                if let Some(f) = track_pointer(ui, slider.id, slider.rect) {
+                    let next = N::from_f64(
+                        range.start().to_f64()
+                            + (range.end().to_f64() - range.start().to_f64())
+                                * f64::from(f),
+                    );
+                    if next.to_f64() != value.to_f64() {
+                        *value = next;
+                        slider.mark_changed();
+                    }
+                }
                 let speed =
                     (range.end().to_f64() - range.start().to_f64()) / 200.;
                 let number = ui
@@ -540,6 +653,37 @@ pub fn brush_row(
     response.on_hover_text(name)
 }
 
+pub(crate) fn rgb_to_hsv(rgb: [u8; 3]) -> [f32; 3] {
+    let [r, g, b] = rgb.map(|v| f32::from(v) / 255.);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let d = max - min;
+    let h = if d == 0. {
+        0.
+    } else if max == r {
+        ((g - b) / d).rem_euclid(6.) / 6.
+    } else if max == g {
+        ((b - r) / d + 2.) / 6.
+    } else {
+        ((r - g) / d + 4.) / 6.
+    };
+    [h, if max == 0. { 0. } else { d / max }, max]
+}
+pub(crate) fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
+    let h = h.rem_euclid(1.) * 6.;
+    let c = v * s;
+    let x = c * (1. - (h.rem_euclid(2.) - 1.).abs());
+    let rgb = match h as u32 {
+        0 => [c, x, 0.],
+        1 => [x, c, 0.],
+        2 => [0., c, x],
+        3 => [0., x, c],
+        4 => [x, 0., c],
+        _ => [c, 0., x],
+    };
+    rgb.map(|n| ((n + v - c) * 255.).round().clamp(0., 255.) as u8)
+}
+
 pub fn color_wheel_sized(
     ui: &mut egui::Ui,
     color: &mut [u8; 3],
@@ -558,9 +702,8 @@ pub fn color_wheel_sized(
     let c = rect.center();
     let outer = side / 2. - 4.; // 98
     let inner = outer * (84. / 98.); // iner = outer - 14
-    let mut hsv = egui::ecolor::Hsva::from(Color32::from_rgb(
-        color[0], color[1], color[2],
-    ));
+    let [h, s, v] = rgb_to_hsv(*color);
+    let mut hsv = egui::ecolor::Hsva::new(h, s, v, 1.);
     let hue_id = ui.id().with("wheel_hue");
     if hsv.s < 0.001 || hsv.v < 0.001 {
         hsv.h = ui.data(|d| d.get_temp::<f32>(hue_id)).unwrap_or(hsv.h);
@@ -578,15 +721,18 @@ pub fn color_wheel_sized(
         {
             hsv.h = ((pos - c).angle() / std::f32::consts::TAU).rem_euclid(1.);
         }
-        let rgb = Color32::from(hsv);
-        *color = [rgb.r(), rgb.g(), rgb.b()];
+        *color = hsv_to_rgb(hsv.h, hsv.s, hsv.v);
     }
     ui.data_mut(|d| d.insert_temp(hue_id, hsv.h));
     let mut mesh = egui::Mesh::default();
     for i in 0..=96 {
         let h = i as f32 / 96.;
         let d = Vec2::angled(h * std::f32::consts::TAU);
-        let col = Color32::from(egui::ecolor::Hsva::new(h, 1., 1., 1.));
+        let col = Color32::from_rgb(
+            hsv_to_rgb(h, 1., 1.)[0],
+            hsv_to_rgb(h, 1., 1.)[1],
+            hsv_to_rgb(h, 1., 1.)[2],
+        );
         mesh.colored_vertex(c + d * inner, col);
         mesh.colored_vertex(c + d * outer, col);
         if i < 96 {
@@ -606,7 +752,10 @@ pub fn color_wheel_sized(
                     sq.left() + s * sq.width(),
                     sq.top() + (1. - v) * sq.height(),
                 ),
-                Color32::from(egui::ecolor::Hsva::new(hsv.h, s, v, 1.)),
+                {
+                    let rgb = hsv_to_rgb(hsv.h, s, v);
+                    Color32::from_rgb(rgb[0], rgb[1], rgb[2])
+                },
             );
             if x < 16 && y < 16 {
                 let n = y * 17 + x;

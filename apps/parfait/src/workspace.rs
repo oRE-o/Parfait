@@ -44,6 +44,7 @@ impl Palette {
 pub enum Location {
     Left,
     Right,
+    Top,
     Floating,
     Window,
 }
@@ -217,6 +218,9 @@ impl Workspace {
                 .find(|s| s.palette == p)
                 .map(|s| s.row.unwrap_or(s.palette))
         });
+        if location == Location::Top {
+            item.row = Some(Palette::Brushes);
+        }
         if location == Location::Floating {
             item.rect[0] = pos.x;
             item.rect[1] = pos.y;
@@ -230,7 +234,11 @@ impl Workspace {
         let mut rows: Vec<(Palette, Vec<Palette>)> = Vec::new();
         for p in self.panels.iter().filter(|p| p.visible && p.location == side)
         {
-            let key = p.row.unwrap_or(p.palette);
+            let key = if side == Location::Top {
+                Palette::Brushes
+            } else {
+                p.row.unwrap_or(p.palette)
+            };
             if let Some((_, row)) = rows.iter_mut().find(|(id, _)| *id == key) {
                 row.push(p.palette);
             } else {
@@ -249,24 +257,64 @@ impl Workspace {
         let width = bounds
             .width()
             .max(rows.iter().map(|r| r.len()).max().unwrap_or(1) as f32 * 180.);
+        let preferred: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .filter_map(|palette| {
+                        let p = self
+                            .panels
+                            .iter()
+                            .find(|p| p.palette == *palette)
+                            .unwrap();
+                        (!p.collapsed).then_some(p.height + 29.)
+                    })
+                    .reduce(f32::max)
+            })
+            .collect();
+        let fixed =
+            preferred.iter().filter(|h| h.is_none()).count() as f32 * 23.;
+        let expanded = preferred.iter().filter(|h| h.is_some()).count();
+        let available = (bounds.height()
+            - fixed
+            - rows.len().saturating_sub(1) as f32 * 3.)
+            .max(expanded as f32 * 89.);
+        let mut heights: Vec<f32> =
+            preferred.iter().map(|p| p.map_or(23., |_| 0.)).collect();
+        let mut remaining = available;
+        loop {
+            let weight: f32 = preferred
+                .iter()
+                .enumerate()
+                .filter(|(i, p)| p.is_some() && heights[*i] == 0.)
+                .map(|(_, p)| p.unwrap())
+                .sum();
+            let mut clamped = false;
+            for (i, p) in preferred.iter().enumerate() {
+                if let Some(p) = p
+                    && heights[i] == 0.
+                    && remaining * p / weight.max(1.) < 89.
+                {
+                    heights[i] = 89.;
+                    remaining -= 89.;
+                    clamped = true;
+                }
+            }
+            if !clamped {
+                for (i, p) in preferred.iter().enumerate() {
+                    if let Some(p) = p
+                        && heights[i] == 0.
+                    {
+                        heights[i] = remaining * p / weight.max(1.);
+                    }
+                }
+                break;
+            }
+        }
         let mut y = bounds.top();
         let mut result = Vec::new();
-        for row in rows {
-            let row_height = row
-                .iter()
-                .map(|palette| {
-                    let placement = self
-                        .panels
-                        .iter()
-                        .find(|placement| placement.palette == *palette)
-                        .unwrap();
-                    if placement.collapsed {
-                        23.
-                    } else {
-                        placement.height + 29.
-                    }
-                })
-                .fold(23., f32::max);
+        for (row_index, row) in rows.into_iter().enumerate() {
+            let row_height = heights[row_index];
             let weight_sum: f32 = row
                 .iter()
                 .map(|palette| {
@@ -461,6 +509,12 @@ impl Workspace {
                 self.panels[i].location = Location::Window;
                 ui.close();
             }
+            if ui.button("위에 도킹").clicked() {
+                self.reserve_row_identity(palette);
+                self.panels[i].location = Location::Top;
+                self.panels[i].row = Some(Palette::Brushes);
+                ui.close();
+            }
             if ui.button("앱 안에 띄우기").clicked() {
                 self.panels[i].location = Location::Floating;
                 ui.close();
@@ -489,8 +543,10 @@ impl Workspace {
                 .unwrap_or(rect.min)
                 - rect.min;
             let item = &mut self.panels[i];
-            if matches!(item.location, Location::Left | Location::Right)
-                && !item.collapsed
+            if matches!(
+                item.location,
+                Location::Left | Location::Right | Location::Top
+            ) && !item.collapsed
             {
                 item.height = (ui.max_rect().height() - 29.).clamp(60., 2000.);
             }
@@ -518,27 +574,39 @@ impl Workspace {
         if p.collapsed || !p.visible {
             return;
         }
-        let body_height =
-            if matches!(p.location, Location::Left | Location::Right) {
-                (ui.max_rect().height() - 29.).max(60.)
-            } else {
-                p.height
-            };
-        let body = egui::ScrollArea::vertical()
-            .id_salt(("palette_body", palette))
-            .vertical_scroll_offset(p.scroll_offset)
-            .max_height(body_height)
-            .min_scrolled_height(body_height)
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 3.;
-                app.palette(ui, palette, body_height);
-            });
-        self.panels
-            .iter_mut()
-            .find(|p| p.palette == palette)
-            .unwrap()
-            .scroll_offset = body.state.offset.y;
+        let body_height = if matches!(
+            p.location,
+            Location::Left | Location::Right | Location::Top
+        ) {
+            (ui.max_rect().height() - 29.).max(60.)
+        } else {
+            p.height
+        };
+        if matches!(palette, Palette::Brushes | Palette::Properties) {
+            app.palette(ui, palette, body_height);
+        } else {
+            let body = egui::ScrollArea::vertical()
+                .id_salt(("palette_body", palette))
+                .vertical_scroll_offset(p.scroll_offset)
+                .max_height(body_height)
+                .min_scrolled_height(body_height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 3.;
+                    app.palette(ui, palette, body_height);
+                });
+            self.panels
+                .iter_mut()
+                .find(|p| p.palette == palette)
+                .unwrap()
+                .scroll_offset = body.state.offset.y;
+        }
+        if matches!(
+            p.location,
+            Location::Left | Location::Right | Location::Top
+        ) {
+            return;
+        }
         let (grip, _) = ui.allocate_exact_size(
             egui::vec2(ui.available_width(), 6.),
             egui::Sense::hover(),
@@ -578,7 +646,9 @@ impl Workspace {
             return;
         }
         let left = location == Location::Left;
-        let panel = if left {
+        let panel = if location == Location::Top {
+            egui::Panel::top("dock_top")
+        } else if left {
             egui::Panel::left("dock_left")
         } else {
             egui::Panel::right("dock_right")
@@ -587,7 +657,31 @@ impl Workspace {
             egui::Frame::side_top_panel(ui.style()).total_margin().sum().x
                 + ui.spacing().scroll.allocated_width()
                 + 1.;
-        let width = self.dock_width(location, dock_margin);
+        let width = if location == Location::Top {
+            self.panels
+                .iter()
+                .filter(|p| p.visible && p.location == location)
+                .map(|p| p.height + 29.)
+                .fold(140., f32::max)
+                .min(ui.available_height() * 0.4)
+        } else {
+            self.dock_width(location, dock_margin)
+        };
+        let width = if location == Location::Top {
+            width
+        } else {
+            let other = if left
+                && self
+                    .panels
+                    .iter()
+                    .any(|p| p.visible && p.location == Location::Right)
+            {
+                180.
+            } else {
+                0.
+            };
+            width.min((ui.available_width() - 320. - other).max(180.))
+        };
         let result = panel.exact_size(width).resizable(false).show(ui, |ui| {
             let viewport = ui.available_rect_before_wrap();
             let dock_width =
@@ -624,7 +718,9 @@ impl Workspace {
                             }
                         }
                     }
-                    self.dock_resize(ui, location, &layout);
+                    if location != Location::Top {
+                        self.dock_resize(ui, location, &layout);
+                    }
                     if let Some(total) =
                         layout.iter().map(|(_, r)| *r).reduce(|a, b| a.union(b))
                     {
@@ -654,6 +750,9 @@ impl Workspace {
                 )
             });
         });
+        if location == Location::Top {
+            return;
+        }
         let boundary = if left {
             result.response.rect.right()
         } else {
@@ -711,6 +810,7 @@ impl Workspace {
         }
         let dock_area = ui.available_rect_before_wrap();
         if !app.hide_panels {
+            self.side(ui, app, Location::Top);
             self.side(ui, app, Location::Left);
             self.side(ui, app, Location::Right);
         }
@@ -875,7 +975,12 @@ impl Workspace {
                     .find(|(_, _, r)| r.contains(pos))
                     .copied();
                 let screen = ctx.content_rect();
-                let edge = if pos.x < screen.left() + 100. {
+                let edge = if pos.y < dock_area.top() + 45.
+                    && pos.x > dock_area.left() + 100.
+                    && pos.x < dock_area.right() - 100.
+                {
+                    Some(Location::Top)
+                } else if pos.x < screen.left() + 100. {
                     Some(Location::Left)
                 } else if pos.x > screen.right() - 100. {
                     Some(Location::Right)
@@ -910,68 +1015,38 @@ impl Workspace {
                     None
                 };
                 if let Some(side) = side {
-                    let frame_margin =
-                        egui::Frame::side_top_panel(ui.style()).total_margin();
-                    let scroll_width = ui.spacing().scroll.allocated_width();
-                    let margin = frame_margin.sum().x + scroll_width + 1.;
-                    let width = planned.dock_width(side, margin);
-                    let content_width =
-                        width - frame_margin.sum().x - scroll_width;
-                    let mut bounds = self
-                        .dock_bounds
-                        .iter()
-                        .find(|(s, _)| *s == side)
-                        .map(|(_, r)| *r)
-                        .unwrap_or_else(|| {
-                            Rect::from_min_size(
-                                egui::pos2(
-                                    if side == Location::Left {
-                                        dock_area.left() + frame_margin.left
-                                    } else {
-                                        dock_area.right() - width
-                                            + frame_margin.left
-                                    },
-                                    dock_area.top() + frame_margin.top,
-                                ),
-                                egui::vec2(
-                                    content_width,
-                                    dock_area.height() - frame_margin.sum().y,
-                                ),
-                            )
-                        });
-                    if side == Location::Right {
-                        bounds.min.x = bounds.right() - content_width;
-                    }
-                    bounds.max.x = bounds.left() + content_width;
-                    if let Some((_, preview)) = planned
-                        .dock_layout(side, bounds)
-                        .into_iter()
-                        .find(|(p, _)| *p == palette)
-                    {
-                        let clip = self
-                            .dock_clips
+                    if side == Location::Top {
+                        let h = planned
+                            .panels
                             .iter()
-                            .find(|(s, _)| *s == side)
-                            .map_or(dock_area, |(_, r)| *r);
-                        let left = if side == Location::Right {
-                            clip.right() - content_width
-                        } else {
-                            clip.left()
-                        };
-                        let clip = Rect::from_min_max(
-                            egui::pos2(left, clip.top()),
-                            egui::pos2(left + content_width, clip.bottom()),
-                        )
-                        .intersect(ctx.content_rect());
-                        let preview = preview.intersect(clip);
-                        if preview.is_positive() {
-                            // A quiet footprint leaves the target's contents readable.
-                            let paint = paint.with_clip_rect(clip);
+                            .filter(|p| {
+                                p.visible && p.location == Location::Top
+                            })
+                            .map(|p| p.height + 29.)
+                            .fold(140., f32::max)
+                            .min(dock_area.height() * 0.4);
+                        let bounds = self
+                            .dock_bounds
+                            .iter()
+                            .find(|(s, _)| *s == Location::Top)
+                            .map(|(_, r)| *r)
+                            .unwrap_or_else(|| {
+                                Rect::from_min_size(
+                                    dock_area.min + egui::vec2(8., 2.),
+                                    egui::vec2(dock_area.width() - 16., h - 4.),
+                                )
+                            });
+                        if let Some((_, preview)) = planned
+                            .dock_layout(side, bounds)
+                            .into_iter()
+                            .find(|(p, _)| *p == palette)
+                        {
+                            let paint = paint.with_clip_rect(dock_area);
                             paint.rect_filled(
                                 preview,
                                 0.,
                                 Color32::from_rgba_unmultiplied(
-                                    110, 170, 225, 18,
+                                    100, 140, 200, 65,
                                 ),
                             );
                             paint.rect_stroke(
@@ -981,12 +1056,95 @@ impl Workspace {
                                 egui::StrokeKind::Inside,
                             );
                             #[cfg(test)]
-                            ctx.data_mut(|data| {
-                                data.insert_temp(
+                            ctx.data_mut(|d| {
+                                d.insert_temp(
                                     egui::Id::new("dock_preview_rect"),
                                     preview,
                                 )
                             });
+                        }
+                    } else {
+                        let frame_margin =
+                            egui::Frame::side_top_panel(ui.style())
+                                .total_margin();
+                        let scroll_width =
+                            ui.spacing().scroll.allocated_width();
+                        let margin = frame_margin.sum().x + scroll_width + 1.;
+                        let width = planned.dock_width(side, margin);
+                        let content_width =
+                            width - frame_margin.sum().x - scroll_width;
+                        let mut bounds = self
+                            .dock_bounds
+                            .iter()
+                            .find(|(s, _)| *s == side)
+                            .map(|(_, r)| *r)
+                            .unwrap_or_else(|| {
+                                Rect::from_min_size(
+                                    egui::pos2(
+                                        if side == Location::Left {
+                                            dock_area.left() + frame_margin.left
+                                        } else {
+                                            dock_area.right() - width
+                                                + frame_margin.left
+                                        },
+                                        dock_area.top() + frame_margin.top,
+                                    ),
+                                    egui::vec2(
+                                        content_width,
+                                        dock_area.height()
+                                            - frame_margin.sum().y,
+                                    ),
+                                )
+                            });
+                        if side == Location::Right {
+                            bounds.min.x = bounds.right() - content_width;
+                        }
+                        bounds.max.x = bounds.left() + content_width;
+                        if let Some((_, preview)) = planned
+                            .dock_layout(side, bounds)
+                            .into_iter()
+                            .find(|(p, _)| *p == palette)
+                        {
+                            let clip = self
+                                .dock_clips
+                                .iter()
+                                .find(|(s, _)| *s == side)
+                                .map_or(dock_area, |(_, r)| *r);
+                            let left = if side == Location::Right {
+                                clip.right() - content_width
+                            } else {
+                                clip.left()
+                            };
+                            let clip = Rect::from_min_max(
+                                egui::pos2(left, clip.top()),
+                                egui::pos2(left + content_width, clip.bottom()),
+                            )
+                            .intersect(ctx.content_rect());
+                            let preview = preview.intersect(clip);
+                            if preview.is_positive() {
+                                // A quiet footprint leaves the target's contents readable.
+                                let paint = paint.with_clip_rect(clip);
+                                paint.rect_filled(
+                                    preview,
+                                    0.,
+                                    Color32::from_rgba_unmultiplied(
+                                        110, 170, 225, 18,
+                                    ),
+                                );
+                                paint.rect_stroke(
+                                    preview,
+                                    0.,
+                                    egui::Stroke::new(1.5, Color32::LIGHT_BLUE),
+                                    egui::StrokeKind::Inside,
+                                );
+                                #[cfg(test)]
+                                ctx.data_mut(|data| {
+                                    data.insert_temp(
+                                        egui::Id::new("dock_preview_rect"),
+                                        preview,
+                                    )
+                                });
+                            }
                         }
                     }
                 }

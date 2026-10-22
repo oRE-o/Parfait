@@ -40,26 +40,6 @@ impl BrushGroup {
             Self::Materials => widgets::Icon::Material,
         }
     }
-    pub const ALL: [Self; 7] = [
-        Self::Ink,
-        Self::Sketch,
-        Self::Paint,
-        Self::Airbrush,
-        Self::Eraser,
-        Self::Blend,
-        Self::Materials,
-    ];
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Ink => "Ink",
-            Self::Sketch => "Sketch",
-            Self::Paint => "Paint",
-            Self::Airbrush => "Airbrush",
-            Self::Eraser => "Eraser",
-            Self::Blend => "Blend",
-            Self::Materials => "Materials",
-        }
-    }
     pub fn of(brush: &Brush) -> Self {
         if matches!(
             brush.operation(),
@@ -116,6 +96,7 @@ impl BrushLibrary {
             ..Default::default()
         }
     }
+    #[cfg(test)]
     fn matches(&self, preset: &Preset) -> bool {
         self.group.is_none_or(|group| group == BrushGroup::of(&preset.brush))
             && (!self.favorites_only || preset.favorite)
@@ -146,6 +127,7 @@ pub fn defaults() -> Vec<Preset> {
                 tip: BrushTip::Soft,
                 size: 70.,
                 flow: 0.25,
+                spacing: 0.06,
                 pressure_opacity: true,
                 ..Default::default()
             },
@@ -169,6 +151,7 @@ pub fn defaults() -> Vec<Preset> {
                 tip: BrushTip::Soft,
                 size: 70.,
                 flow: 0.06,
+                spacing: 0.06,
                 pressure: false,
                 continuous_spray: true,
                 ..Default::default()
@@ -218,7 +201,7 @@ pub fn defaults() -> Vec<Preset> {
             brush: Brush {
                 tip: BrushTip::Pencil,
                 size: 24.,
-                spacing: 0.22,
+                spacing: 0.1,
                 flow: 0.35,
                 pressure_opacity: true,
                 ..Default::default()
@@ -276,6 +259,7 @@ pub fn defaults() -> Vec<Preset> {
                 size: 30.,
                 flow: 0.75,
                 color_stretch: 0.7,
+                spacing: 0.03,
                 pressure: false,
                 hardness: 0.6,
                 ..Default::default()
@@ -295,7 +279,83 @@ pub fn defaults() -> Vec<Preset> {
                 ..Default::default()
             },
         },
+        Preset {
+            name: "별 장식".into(),
+            favorite: false,
+            properties: Default::default(),
+            brush: Brush {
+                tip: decoration_tip(true),
+                size: 32.,
+                spacing: 0.75,
+                pressure: false,
+                ..Default::default()
+            },
+        },
+        Preset {
+            name: "원 장식".into(),
+            favorite: false,
+            properties: Default::default(),
+            brush: Brush {
+                tip: decoration_tip(false),
+                size: 24.,
+                spacing: 0.8,
+                pressure: false,
+                ..Default::default()
+            },
+        },
     ]
+}
+
+/// Upgrade only unchanged built-in settings; user edits and imported tips survive.
+pub(crate) fn upgrade_default_spacing(
+    presets: &mut [Preset],
+    brush: &mut Brush,
+    name: &str,
+) {
+    let defaults = defaults();
+    let update = |brush: &mut Brush, name: &str| {
+        if let Some(preset) = defaults.iter().find(|p| {
+            p.name == name && !matches!(p.brush.tip, BrushTip::Image { .. })
+        }) {
+            let mut old = preset.brush.clone();
+            old.spacing = if name == "Dotted pen" {
+                1.5
+            } else if name == "Dry pencil" {
+                0.22
+            } else {
+                0.12
+            };
+            old.color = brush.color;
+            if *brush == old {
+                brush.spacing = preset.brush.spacing;
+            }
+        }
+    };
+    for p in presets {
+        update(&mut p.brush, &p.name);
+    }
+    update(brush, name);
+}
+
+fn decoration_tip(star: bool) -> BrushTip {
+    let mask = (0..32 * 32)
+        .map(|i| {
+            let x = (i % 32) as f32 - 15.5;
+            let y = (i / 32) as f32 - 15.5;
+            let r = x.hypot(y);
+            let edge = if star {
+                let a = (y.atan2(x) + std::f32::consts::FRAC_PI_2)
+                    .rem_euclid(std::f32::consts::TAU / 5.);
+                let t = (a / (std::f32::consts::PI / 5.) - 1.).abs();
+                7. + 8. * t
+            } else {
+                14.
+            };
+            let coverage = if star { edge - r } else { (r - 10.).min(14. - r) };
+            ((coverage + 0.5).clamp(0., 1.) * 255.).round() as u8
+        })
+        .collect();
+    BrushTip::Image { width: 32, height: 32, mask: Arc::new(mask) }
 }
 
 pub(crate) fn preview_image(brush: &Brush) -> egui::ColorImage {
@@ -388,6 +448,10 @@ impl Parfait {
         }
     }
     pub fn select_brush_group(&mut self, group: BrushGroup) {
+        self.remember_native_options();
+        self.tools.category = crate::tools::ToolCategory::from_brush(group);
+        self.tools.active_id = None;
+        self.tools.drag = None;
         if group == BrushGroup::Blend {
             for preset in defaults().into_iter().filter(|preset| {
                 BrushGroup::of(&preset.brush) == BrushGroup::Blend
@@ -439,7 +503,8 @@ impl Parfait {
         }
         self.brush.color = color;
     }
-    fn select_preset(&mut self, index: usize) {
+    pub(crate) fn select_preset(&mut self, index: usize) {
+        self.remember_native_options();
         self.brush_details.clear_help();
         self.remember_brush();
         let color = self.brush.color;
@@ -448,6 +513,8 @@ impl Parfait {
         self.tip_name = self.presets[index].name.clone();
         self.brush_details.properties = self.presets[index].properties;
         self.navigation_tool = 0;
+        self.tools.active_id = None;
+        self.remember_tool(self.tip_name.clone());
     }
     pub(crate) fn preset_modified(&self) -> bool {
         self.presets
@@ -467,204 +534,161 @@ impl Parfait {
             self.select_preset(index);
         }
     }
-    pub fn brush_library_ui(&mut self, ui: &mut egui::Ui) {
+    pub fn brush_library_ui(&mut self, ui: &mut egui::Ui, body_height: f32) {
         #[cfg(test)]
         self.brush_library.targets.clear();
         ui.spacing_mut().item_spacing = egui::vec2(2., 1.);
-        let search_id = ui.id().with("library_search_visible");
-        let mut show_search =
-            ui.data(|data| data.get_temp::<bool>(search_id)).unwrap_or(false)
-                || !self.brush_library.query.is_empty();
-        let mut focus_search = false;
         ui.horizontal(|ui| {
-            ui.spacing_mut().interact_size.y = 22.;
-            let filter = egui::ComboBox::from_id_salt("brush_family_filter")
-                .selected_text(
-                    self.brush_library
-                        .group
-                        .map_or("All brushes", BrushGroup::label),
-                )
-                .width((ui.available_width() - 76.).max(64.))
-                .truncate()
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.brush_library.group, None, "All brushes");
-                    for group in BrushGroup::ALL {
-                        let choice = ui.selectable_value(
-                            &mut self.brush_library.group,
-                            Some(group),
-                            group.label(),
+            ui.add_sized(
+                [(ui.available_width() - 25.).max(1.), 25.],
+                egui::Button::new(self.tools.category.label())
+                    .selected(true)
+                    .truncate(),
+            );
+            self.brush_library_menu(ui);
+        });
+        ui.separator();
+        self.remember_native_options();
+        self.brush_library.query.clear();
+        self.brush_library.favorites_only = false;
+        let height = (body_height - 60.).max(24.);
+        egui::ScrollArea::vertical()
+            .id_salt("subtool_list")
+            .max_height(height)
+            .min_scrolled_height(height)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                self.nonbrush_rows(ui);
+                self.brush_library
+                    .previews
+                    .resize_with(self.presets.len(), || None);
+                let mut regenerated = false;
+                let mut remove = None;
+                for index in 0..self.presets.len() {
+                    if self.tools.preset_category(&self.presets[index])
+                        != self.tools.category
+                    {
+                        continue;
+                    }
+                    ui.push_id(index, |ui| {
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), 40.),
+                            egui::Sense::hover(),
+                        );
+                        if ui.is_rect_visible(rect)
+                            && !ui.input(|i| i.pointer.any_down())
+                            && self
+                                .documents
+                                .active_session
+                                .editing
+                                .stroke
+                                .is_none()
+                        {
+                            let changed = self.brush_library.previews[index]
+                                .as_ref()
+                                .is_none_or(|(cached, _)| {
+                                    cached != &self.presets[index].brush
+                                });
+                            if changed && !regenerated {
+                                let image = library_preview_image(
+                                    &self.presets[index].brush,
+                                );
+                                if let Some((cached, texture)) =
+                                    &mut self.brush_library.previews[index]
+                                {
+                                    texture.set(
+                                        image,
+                                        egui::TextureOptions::LINEAR,
+                                    );
+                                    *cached = self.presets[index].brush.clone();
+                                } else {
+                                    self.brush_library.previews[index] =
+                                        Some((
+                                            self.presets[index].brush.clone(),
+                                            ui.ctx().load_texture(
+                                                format!("preset-{index}"),
+                                                image,
+                                                egui::TextureOptions::LINEAR,
+                                            ),
+                                        ));
+                                }
+                                regenerated = true;
+                                ui.ctx().request_repaint();
+                            } else if changed {
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                        let preview = self.brush_library.previews[index]
+                            .as_ref()
+                            .map(|(_, texture)| texture.id());
+                        let row = widgets::brush_row(
+                            ui,
+                            rect,
+                            &self.presets[index].name,
+                            self.navigation_tool == 0
+                                && self.tip_name == self.presets[index].name
+                                && self.brush.operation()
+                                    == self.presets[index].brush.operation(),
+                            BrushGroup::of(&self.presets[index].brush).icon(),
+                            preview,
                         );
                         #[cfg(test)]
                         self.brush_library
                             .targets
-                            .push((format!("Filter {}", group.label()), choice.rect));
-                        #[cfg(not(test))]
-                        let _ = choice;
-                    }
-                })
-                .response
-                .on_hover_text("Browse a brush family without changing the active drawing tool");
-            #[cfg(test)]
-            self.brush_library
-                .targets
-                .push(("Family filter".into(), filter.rect));
-            #[cfg(not(test))]
-            let _ = filter;
-            let search = widgets::flat_icon(
-                ui,
-                widgets::Icon::Search,
-                show_search,
-                if show_search {
-                    "Close search and clear filter"
-                } else {
-                    "Search brushes"
-                },
-                22.,
-            );
-            #[cfg(test)]
-            self.brush_library
-                .targets
-                .push(("Search brushes".into(), search.rect));
-            if search.clicked() {
-                show_search = !show_search;
-                if show_search {
-                    focus_search = true;
-                } else {
-                    self.brush_library.query.clear();
-                }
-            }
-            let favorites = widgets::flat_icon(
-                ui,
-                widgets::Icon::Favorite,
-                self.brush_library.favorites_only,
-                "Show favorites only",
-                22.,
-            );
-            #[cfg(test)]
-            self.brush_library
-                .targets
-                .push(("Show favorites only".into(), favorites.rect));
-            if favorites.clicked() {
-                self.brush_library.favorites_only = !self.brush_library.favorites_only;
-            }
-            self.brush_library_menu(ui);
-        });
-        if show_search {
-            let search = ui.add(
-                egui::TextEdit::singleline(&mut self.brush_library.query)
-                    .char_limit(64)
-                    .hint_text("Search brushes…")
-                    .desired_width(ui.available_width()),
-            );
-            if focus_search {
-                search.request_focus();
-            }
-            #[cfg(test)]
-            self.brush_library
-                .targets
-                .push(("Search input".into(), search.rect));
-        }
-        ui.data_mut(|data| data.insert_temp(search_id, show_search));
-        let count = self
-            .presets
-            .iter()
-            .filter(|preset| self.brush_library.matches(preset))
-            .count();
-        if count == 0 {
-            ui.label("No matching brushes.");
-            if ui.button("Show all brushes").clicked() {
-                self.brush_library.group = None;
-                self.brush_library.favorites_only = false;
-                self.brush_library.query.clear();
-            }
-        }
-        self.brush_library.previews.resize_with(self.presets.len(), || None);
-        let mut regenerated = false;
-        for index in 0..self.presets.len() {
-            if !self.brush_library.matches(&self.presets[index]) {
-                continue;
-            }
-            ui.push_id(index, |ui| {
-                let (rect, _) = ui.allocate_exact_size(
-                    egui::vec2(ui.available_width(), 40.),
-                    egui::Sense::hover(),
-                );
-                if ui.is_rect_visible(rect)
-                    && self.documents.active_session.editing.stroke.is_none()
-                {
-                    let changed =
-                        self.brush_library.previews[index].as_ref().is_none_or(
-                            |(cached, _)| cached != &self.presets[index].brush,
-                        );
-                    if changed && !regenerated {
-                        let image =
-                            library_preview_image(&self.presets[index].brush);
-                        if let Some((cached, texture)) =
-                            &mut self.brush_library.previews[index]
-                        {
-                            texture.set(image, egui::TextureOptions::LINEAR);
-                            *cached = self.presets[index].brush.clone();
-                        } else {
-                            self.brush_library.previews[index] = Some((
-                                self.presets[index].brush.clone(),
-                                ui.ctx().load_texture(
-                                    format!("preset-{index}"),
-                                    image,
-                                    egui::TextureOptions::LINEAR,
-                                ),
-                            ));
+                            .push((self.presets[index].name.clone(), row.rect));
+                        if row.clicked() {
+                            self.select_preset(index);
                         }
-                        regenerated = true;
-                        ui.ctx().request_repaint();
-                    } else if changed {
-                        ui.ctx().request_repaint();
-                    }
+                        row.context_menu(|ui| {
+                            ui.menu_button("다른 분류로 이동", |ui| {
+                                for category in crate::tools::ToolCategory::ALL
+                                {
+                                    if ui.button(category.label()).clicked() {
+                                        self.tools.assign(
+                                            self.presets[index].name.clone(),
+                                            category,
+                                        );
+                                        ui.close();
+                                    }
+                                }
+                            });
+                            if ui.button("보조 도구 복제").clicked()
+                                && self.presets.len() < 64
+                            {
+                                let mut p = self.presets[index].clone();
+                                let base =
+                                    p.name.chars().take(36).collect::<String>();
+                                let mut n = 2;
+                                p.name = format!("{base} {n}");
+                                while self
+                                    .presets
+                                    .iter()
+                                    .any(|v| v.name == p.name)
+                                {
+                                    n += 1;
+                                    p.name = format!("{base} {n}");
+                                }
+                                self.tools.assign(
+                                    p.name.clone(),
+                                    self.tools.category,
+                                );
+                                self.presets.push(p);
+                                ui.close();
+                            }
+                            if ui.button("보조 도구 삭제").clicked() {
+                                remove = Some(index);
+                                ui.close();
+                            }
+                        });
+                    });
                 }
-                let preview = self.brush_library.previews[index]
-                    .as_ref()
-                    .map(|(_, texture)| texture.id());
-                let row = widgets::brush_row(
-                    ui,
-                    rect,
-                    &self.presets[index].name,
-                    self.tip_name == self.presets[index].name
-                        && self.brush.operation()
-                            == self.presets[index].brush.operation(),
-                    BrushGroup::of(&self.presets[index].brush).icon(),
-                    preview,
-                );
-                #[cfg(test)]
-                self.brush_library
-                    .targets
-                    .push((self.presets[index].name.clone(), row.rect));
-                if row.clicked() {
-                    self.select_preset(index);
+                if let Some(index) = remove {
+                    let name = self.presets.remove(index).name;
+                    self.brush_library.previews.remove(index);
+                    self.tools.assignments.retain(|(n, _)| *n != name);
                 }
-                ui.scope_builder(
-                    egui::UiBuilder::new().max_rect(egui::Rect::from_min_max(
-                        egui::pos2(rect.right() - 23., rect.top() + 9.),
-                        egui::pos2(rect.right() - 1., rect.top() + 31.),
-                    )),
-                    |ui| {
-                        let label =
-                            format!("Favorite {}", self.presets[index].name);
-                        let favorite = &mut self.presets[index].favorite;
-                        let response = widgets::flat_icon(
-                            ui,
-                            widgets::Icon::Favorite,
-                            *favorite,
-                            &label,
-                            22.,
-                        );
-                        #[cfg(test)]
-                        self.brush_library.targets.push((label, response.rect));
-                        if response.clicked() {
-                            *favorite = !*favorite;
-                        }
-                    },
-                );
             });
-        }
+        self.subtool_add_menu(ui);
     }
     fn brush_library_menu(&mut self, ui: &mut egui::Ui) {
         let menu = ui
@@ -678,7 +702,21 @@ impl Parfait {
                         ),
                     ),
                     |ui| {
-                        ui.strong("Brush library");
+                        ui.strong("보조 도구 관리");
+                        if let Some(preset) = self
+                            .presets
+                            .iter_mut()
+                            .find(|p| p.name == self.tip_name)
+                        {
+                            ui.checkbox(
+                                &mut preset.favorite,
+                                egui::RichText::new(format!(
+                                    "{} 즐겨찾기",
+                                    widgets::Icon::Favorite.glyph()
+                                ))
+                                .family(egui::FontFamily::Name("icons".into())),
+                            );
+                        }
                         if ui.button("Import tips / presets…").clicked() {
                             self.import_brushes();
                             ui.close();
@@ -745,8 +783,10 @@ impl Parfait {
         } else if let Some(old) =
             self.presets.iter_mut().find(|v| v.name == p.name)
         {
+            self.tools.assign(p.name.clone(), self.tools.category);
             *old = p;
         } else if self.presets.len() < 64 {
+            self.tools.assign(p.name.clone(), self.tools.category);
             self.presets.push(p);
         } else {
             self.error = Some(
@@ -848,6 +888,7 @@ impl Parfait {
             })();
             match result {
                 Ok(p) => {
+                    self.tools.assign(p.name.clone(), self.tools.category);
                     self.presets.push(p);
                     self.select_preset(self.presets.len() - 1);
                     self.brush_library.group = None;
@@ -1096,7 +1137,7 @@ mod tests {
                         ),
                         |ui| {
                             ui.set_width(width);
-                            app.brush_library_ui(ui);
+                            app.brush_library_ui(ui, 300.);
                         },
                     );
                 });
@@ -1137,7 +1178,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_library_header_and_rows_fit_narrow_palettes() {
+    fn compact_library_category_and_rows_fit_narrow_palettes() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
@@ -1145,123 +1186,33 @@ mod tests {
         let artwork = app.documents.active_session.document.clone();
         for width in [190., 210., 246., 360.] {
             library_frame(&mut app, &ctx, width, vec![]);
-            let header: Vec<_> = [
-                "Family filter",
-                "Search brushes",
-                "Show favorites only",
-                "Manage brushes",
-            ]
-            .map(|name| library_target(&app, name))
-            .into();
-            assert!(
-                header.windows(2).all(|pair| pair[0].right() <= pair[1].left())
-            );
-            assert!(
-                header
-                    .iter()
-                    .all(|rect| rect.right() <= header[0].left() + width + 0.1),
-                "width={width}, header={header:?}"
-            );
-            assert!(
-                header
-                    .iter()
-                    .all(|rect| rect.center().y == header[0].center().y)
-            );
+            let manage = library_target(&app, "Manage brushes");
             let row = library_target(&app, "Round pen");
-            let favorite = library_target(&app, "Favorite Round pen");
             assert_eq!(row.height(), 40.);
-            assert!(row.top() - header[0].top() <= 25.);
-            assert!(row.right() <= favorite.left());
-            assert!(favorite.right() <= header[0].left() + width);
+            assert!(row.top() > manage.bottom());
+            assert!(row.right() <= manage.right() + 0.1);
             assert!(
                 !app.brush_library
                     .targets
                     .iter()
-                    .any(|(name, _)| name == "Search input")
+                    .any(|(name, _)| name == "Family filter"
+                        || name == "Search input"
+                        || name == "Search brushes")
             );
         }
-        assert_eq!(app.documents.active_session.document, artwork);
-    }
-
-    #[test]
-    fn compact_library_favorites_search_and_preset_targets_remain_independent()
-    {
-        let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
-        let ctx = egui::Context::default();
-        crate::theme::apply(&ctx);
-        let artwork = app.documents.active_session.document.clone();
-        let original = app.brush.clone();
-        library_frame(&mut app, &ctx, 210., vec![]);
-        library_click(&mut app, &ctx, "Favorite Dotted pen");
-        assert!(
-            app.presets
-                .iter()
-                .find(|preset| preset.name == "Dotted pen")
-                .unwrap()
-                .favorite
-        );
-        assert_eq!(app.tip_name, "Round pen");
-        assert!(app.brush == original);
         library_click(&mut app, &ctx, "Dotted pen");
         assert_eq!(app.tip_name, "Dotted pen");
-        let dotted = app.brush.clone();
-        library_click(&mut app, &ctx, "Search brushes");
-        assert!(ctx.egui_wants_keyboard_input());
-        library_frame(
-            &mut app,
-            &ctx,
-            210.,
-            vec![egui::Event::Text("ROUND".into())],
-        );
-        assert_eq!(app.brush_library.query, "ROUND");
-        assert!(
-            app.brush_library
-                .targets
-                .iter()
-                .any(|(name, _)| name == "Round pen")
-        );
-        assert!(
-            !app.brush_library
-                .targets
-                .iter()
-                .any(|(name, _)| name == "Dotted pen")
-        );
-        library_click(&mut app, &ctx, "Show favorites only");
-        assert!(app.brush_library.favorites_only);
-        assert!(
-            !app.brush_library
-                .targets
-                .iter()
-                .any(|(name, _)| name == "Round pen")
-        );
-        library_click(&mut app, &ctx, "Show favorites only");
-        library_click(&mut app, &ctx, "Search brushes");
-        assert!(app.brush_library.query.is_empty());
-        assert!(
-            !app.brush_library
-                .targets
-                .iter()
-                .any(|(name, _)| name == "Search input")
-        );
-        assert!(app.brush == dotted);
         assert_eq!(app.documents.active_session.document, artwork);
     }
 
     #[test]
-    fn family_dropdown_only_filters_and_manage_menu_keeps_its_actions() {
+    fn manage_menu_keeps_its_import_export_and_preset_actions() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let brush = app.brush.clone();
         let artwork = app.documents.active_session.document.clone();
         library_frame(&mut app, &ctx, 210., vec![]);
-        library_click(&mut app, &ctx, "Family filter");
-        library_click(&mut app, &ctx, "Filter Eraser");
-        assert_eq!(app.brush_library.group, Some(BrushGroup::Eraser));
-        assert!(app.brush == brush);
-        assert_eq!(app.tip_name, "Round pen");
         library_click(&mut app, &ctx, "Manage brushes");
         let output = library_frame(&mut app, &ctx, 210., vec![]);
         fn contains_text(shape: &egui::Shape, label: &str) -> bool {
