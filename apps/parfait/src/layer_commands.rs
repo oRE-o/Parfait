@@ -20,6 +20,14 @@ impl Parfait {
         &self,
         command: Command,
     ) -> Option<&'static str> {
+        if matches!(command, Command::ImportImage | Command::ImportImageLayer) {
+            if command == Command::ImportImageLayer && self.documents.is_empty()
+            {
+                return Some("열린 그림이 없습니다.");
+            }
+            return self
+                .image_import_reason(command == Command::ImportImageLayer);
+        }
         if command == Command::Quit {
             return self.dialog_open().then_some("현재 편집 창을 마쳐 주세요.");
         }

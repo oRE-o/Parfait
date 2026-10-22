@@ -24,6 +24,7 @@ pub struct Parfait {
     pub(crate) screen_capture_busy:
         std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) native_dialog: Option<crate::native_content::NativeDialog>,
+    pub(crate) image_import: crate::image_import::ImageImport,
     pub(crate) image_edit: crate::image_edit::ImageEditState,
     pub(crate) tabs: crate::document_tabs::DocumentTabs,
     pub(crate) render_cache: WindowRenderCache,
@@ -114,6 +115,7 @@ impl Parfait {
             screen_capture_busy: Default::default(),
             native_dialog: None,
             image_edit: Default::default(),
+            image_import: Default::default(),
             tabs: Default::default(),
             render_cache: WindowRenderCache::default(),
             calibration: Default::default(),
@@ -166,7 +168,8 @@ impl Parfait {
                 session.layer_ui.rename.is_some()
                     || session.layer_ui.details.is_some()
             });
-        self.tab_close_dialog_open()
+        self.image_import.dialog_open()
+            || self.tab_close_dialog_open()
             || self.settings.dialog.is_some()
             || self.settings.quick_open
             || self.settings.about_open
@@ -553,6 +556,7 @@ impl Parfait {
     pub(crate) fn draw_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.saving();
+        self.poll_image_import();
         self.poll_transform_preview(&ctx);
         self.poll_local_preview(&ctx);
         self.poll_controllers(&ctx);
@@ -600,6 +604,7 @@ impl Parfait {
         self.screen_picker_ui(&ctx);
         self.image_edit_dialog_ui(&ctx);
         self.native_content_ui(&ctx);
+        self.image_import_ui(&ctx);
         self.source_save_dialogs(&ctx);
         self.tab_close_prompt_ui(&ctx);
         self.brush_details_ui(&ctx);

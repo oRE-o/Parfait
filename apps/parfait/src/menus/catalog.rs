@@ -71,7 +71,8 @@ const FILE: &[MenuItem] = &[
     Group(
         "가져오기",
         &[
-            Planned("이미지…"),
+            Action(Command::ImportImage),
+            Action(Command::ImportImageLayer),
             Planned("이미지에서 패턴…"),
             Planned("파일 오브젝트…"),
             Planned("3D 데이터…"),

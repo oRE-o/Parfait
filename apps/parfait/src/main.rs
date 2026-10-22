@@ -20,6 +20,7 @@ mod editor_window;
 mod folder_ui;
 mod history_palette;
 mod image_edit;
+mod image_import;
 mod layer_commands;
 mod layer_controls;
 mod layer_details;

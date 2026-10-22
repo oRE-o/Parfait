@@ -371,6 +371,10 @@ impl Parfait {
         clean: bool,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
+            !self.image_import.dialog_open(),
+            "Finish or cancel the image import first"
+        );
+        anyhow::ensure!(
             self.tabs.pending.is_empty(),
             "Finish or cancel pending opens first"
         );

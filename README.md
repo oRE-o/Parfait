@@ -42,7 +42,7 @@ Run an isolated session with `parfait --data-dir PATH`. Otherwise recovery data 
 - Raster layers: add, duplicate, remove, reorder, rename, show/hide, full/alpha lock, stable identities, opacity and 14 blend modes.
 - Named, bounded undo/redo with copy-on-write snapshots and an optional History palette.
 - Pan, cursor-centered zoom, view rotation, fit view and navigator preview.
-- Local `.parfait` projects, PNG export, background autosave and startup recovery.
+- Local `.parfait` projects, PNG/JPEG import as a new document or layer, PNG export, background autosave and startup recovery.
 - Dark workspace: tools on the left, canvas in the middle, navigator and layers on the right.
 - Compact desktop palettes: icon tool rail, brush previews and size presets, hue/SV color wheel, canvas rulers and live layer thumbnails.
 - Draggable palettes: reorder or move between side docks, dock side by side, detach into in-app palettes or independent desktop windows, resize and restore your layout on restart.
@@ -111,6 +111,8 @@ Unused Ctrl/Cmd combinations keep ordinary key actions; registered combinations 
 An unnamed drawing is protected from the first edit. Completed strokes request an immediate background save; longer edits request a snapshot approximately every 400 ms. Pending work is coalesced so slow disks cannot create an unlimited queue.
 
 The UI shows **Saved locally** only after the worker confirms a committed SQLite transaction. Three checksum-verified compressed snapshots are retained. An invalid newest payload falls back to an earlier valid generation, and the app reports that fallback. An unrecoverable database produces an error rather than silently starting over.
+
+Use **파일 → 가져오기 → 이미지를 새 그림으로… / 이미지를 레이어로…** for local PNG/JPEG artwork. Imports are decoded on one bounded background job, limited to 32 MiB per file and 4096 pixels per side. New documents retain image size and alpha without binding the source image as a writable project. Layer imports are centered at original size, are undoable, and reject images larger than the canvas instead of cropping them. JPEG orientation metadata is applied; imported pixels use 8-bit RGBA without ICC color-profile conversion. Cancelled or failed imports preserve the existing artwork and source file.
 
 An unexpected exit restores the latest valid committed snapshot on next launch. Input not yet committed may be lost. Disk failure and real power-loss durability are not guaranteed by the process-kill tests. Keep exported project backups for important work.
 

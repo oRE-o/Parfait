@@ -198,6 +198,8 @@ pub enum Command {
     PreviousCanvas,
     CloseCanvas,
     Quit,
+    ImportImage,
+    ImportImageLayer,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -428,6 +430,8 @@ impl Command {
         Self::PreviousCanvas,
         Self::CloseCanvas,
         Self::Quit,
+        Self::ImportImage,
+        Self::ImportImageLayer,
     ];
 
     pub fn label(self) -> &'static str {
@@ -436,6 +440,8 @@ impl Command {
             Self::PreviousCanvas => "이전 캔버스",
             Self::CloseCanvas => "닫기",
             Self::Quit => "Parfait 종료",
+            Self::ImportImage => "이미지를 새 그림으로…",
+            Self::ImportImageLayer => "이미지를 레이어로…",
             Self::EditTextInkBounds => "텍스트 그리기 경계 정렬",
             Self::EditVectorCenters => "벡터 중심선 정렬",
             Self::NewTextLayer => "텍스트 레이어…",
@@ -641,7 +647,10 @@ impl Command {
             | Self::LayerSelectionIntersect
             | Self::LayerMaskOutsideSelection
             | Self::LayerMaskSelection => Category::Layer,
-            Self::CloseCanvas | Self::Quit => Category::File,
+            Self::CloseCanvas
+            | Self::Quit
+            | Self::ImportImage
+            | Self::ImportImageLayer => Category::File,
             Self::NextCanvas | Self::PreviousCanvas => Category::Window,
             Self::NewDrawing
             | Self::OpenProject
@@ -934,6 +943,12 @@ impl Command {
 
 impl Parfait {
     pub fn execute_command(&mut self, command: Command, ctx: &egui::Context) {
+        if matches!(command, Command::ImportImage | Command::ImportImageLayer) {
+            if self.command_disabled_reason(command).is_none() {
+                self.import_image(command == Command::ImportImageLayer);
+            }
+            return;
+        }
         if command == Command::Quit {
             if !self.dialog_open() {
                 self.request_close(ctx);
@@ -983,6 +998,9 @@ impl Parfait {
                 self.execute_pixel_selection(command)
             }
             Command::Quit => self.request_close(ctx),
+            Command::ImportImage | Command::ImportImageLayer => {
+                self.import_image(command == Command::ImportImageLayer)
+            }
             Command::NewDrawing => self.confirm_new = true,
             Command::OpenProject => self.open_project(),
             Command::SaveProject => self.save_project(false),

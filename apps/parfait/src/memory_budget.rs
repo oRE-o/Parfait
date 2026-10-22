@@ -87,6 +87,7 @@ impl Parfait {
                     .as_ref()
                     .map_or(0, |job| job.reserved_bytes),
             )
+            .saturating_add(self.image_import.reserved_bytes())
             .saturating_add(additional)
             .saturating_add(self.tabs.reserved_pixels())
             .saturating_add(self.source_saves.reserved_pixels())
@@ -160,7 +161,9 @@ impl Parfait {
             || label.starts_with("Mask brush:")
         {
             0
-        } else if label == "New layer" || label == "Merge visible to new layer"
+        } else if label == "New layer"
+            || label == "Import image layer"
+            || label == "Merge visible to new layer"
         {
             canvas * 4
         } else if label.starts_with("Duplicate layer") {

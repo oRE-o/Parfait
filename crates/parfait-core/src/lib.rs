@@ -14,6 +14,7 @@ pub use content::{
 };
 mod history;
 mod image_edit;
+mod image_import;
 pub use image_edit::{PixelClipboard, PixelEdit};
 mod tools;
 pub use tools::SampleSource;
