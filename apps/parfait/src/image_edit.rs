@@ -4,6 +4,7 @@ use parfait_core::{CanvasEdit, PixelClipboard, PixelEdit};
 use std::borrow::Cow;
 
 mod assist;
+mod geometry_canvas;
 mod geometry_ui;
 mod local_preview;
 #[cfg(test)]
@@ -125,12 +126,10 @@ impl EditDialog {
             transform_canvas: transform_canvas::TransformCanvas::default(),
             reference: None,
             tone_ui: tone_ui::ToneUi::new(app),
-            geometry: geometry_ui::GeometryUi {
-                original: [document.width, document.height],
-                linked: true,
-                nearest: false,
-                anchor: [1, 1],
-            },
+            geometry: geometry_ui::GeometryUi::new([
+                document.width,
+                document.height,
+            ]),
             local_preview: local_preview::LocalPreview::default(),
             shading: parfait_core::LocalShading {
                 radius: (document.width.min(document.height) as f32 / 4.)

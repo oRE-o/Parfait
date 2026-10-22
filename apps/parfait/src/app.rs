@@ -169,6 +169,7 @@ impl Parfait {
         self.tab_close_dialog_open()
             || self.settings.dialog.is_some()
             || self.settings.quick_open
+            || self.settings.about_open
             || self.screen_picker.is_some()
             || self.native_dialog.is_some()
             || self.image_edit.dialog.is_some()

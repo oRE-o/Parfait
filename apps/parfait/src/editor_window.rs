@@ -9,7 +9,7 @@ pub(crate) fn window(
 ) -> egui::Window<'static> {
     let screen = ctx.content_rect();
     let height = match command {
-        Command::EditPreferences => 280.,
+        Command::EditPreferences => (screen.height() - 160.).clamp(350., 580.),
         Command::EditModifierSettings => 260.,
         Command::EditFontSettings => 250.,
         Command::EditSystemServices => 230.,

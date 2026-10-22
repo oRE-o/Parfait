@@ -5,6 +5,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 mod controllers;
+mod preferences_ui;
 #[cfg(test)]
 mod tests;
 
@@ -99,11 +100,16 @@ pub(crate) struct SettingsDialog {
     display: DisplaySettings,
     filter: String,
     error: Option<String>,
+    page: preferences_ui::Page,
+    workspace: crate::workspace::Workspace,
+    calibration: parfait_core::PressureCalibration,
+    pressure_point: Option<usize>,
 }
 #[derive(Default)]
 pub(crate) struct SettingsState {
     pub dialog: Option<SettingsDialog>,
     pub quick_open: bool,
+    pub about_open: bool,
     gilrs: Option<gilrs::Gilrs>,
     controller_failed: bool,
     controller_error: Option<String>,
@@ -157,9 +163,30 @@ impl Parfait {
             display: self.display,
             filter: String::new(),
             error: None,
+            page: preferences_ui::Page::Interface,
+            workspace: self.workspace.clone(),
+            calibration: self.calibration.clone(),
+            pressure_point: None,
         });
     }
     pub(crate) fn settings_ui(&mut self, ctx: &egui::Context) {
+        if self.settings.about_open {
+            let mut open = true;
+            let mut close = false;
+            egui::Window::new("Parfait에 대하여").collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
+                ui.heading("Parfait");
+                ui.label(format!("버전 {}", env!("CARGO_PKG_VERSION")));
+                ui.label("가볍고 반응 빠른 로컬 드로잉 도구");
+                ui.label("그리기와 복구 저장은 계정 없이 오프라인으로 동작합니다.");
+                ui.separator();
+                if ui.button("오픈소스 라이선스…").clicked() { self.show_licenses = true; close = true; }
+                close |= ui.button("닫기").clicked();
+            });
+            self.settings.about_open = open
+                && !close
+                && !ctx.input(|i| i.key_pressed(egui::Key::Escape));
+            return;
+        }
         if self.settings.quick_open {
             let mut chosen = None;
             let mut close = false;
@@ -193,17 +220,17 @@ impl Parfait {
         let mut accept = false;
         let mut cancel = false;
         let mut open = true;
-        let response=crate::editor_window::window(ctx,dialog.command,480.).open(&mut open).show(ctx,|ui|{
-            ui.set_width(480.);
-            egui::ScrollArea::vertical().max_height((ctx.content_rect().height()-180.).clamp(120.,620.)).show(ui,|ui|{
+        let width = if dialog.command == Command::EditPreferences {
+            800.
+        } else {
+            480.
+        };
+        let response=crate::editor_window::window(ctx,dialog.command,width).open(&mut open).show(ctx,|ui|{
+            ui.set_width(width);
+            egui::ScrollArea::vertical().max_height((ui.clip_rect().bottom()-ui.cursor().top()-60.).clamp(120.,620.)).show(ui,|ui|{
                 use Command::*;
                 match dialog.command {
-                    EditPreferences=>{
-                        ui.checkbox(&mut dialog.display.brush_cursor,"브러시 커서 표시");ui.checkbox(&mut dialog.display.rulers,"눈금자 표시");ui.checkbox(&mut dialog.display.pixel_grid,"확대할 때 픽셀 격자 표시");
-                        crate::widgets::numeric_slider(ui,&mut dialog.display.background,16..=240,"캔버스 바깥 밝기",0,"");
-                        crate::widgets::numeric_slider(ui,&mut dialog.display.rotation_step,1. ..=90.,"보기 회전 간격",1,"°");
-                        crate::widgets::numeric_slider(ui,&mut dialog.candidate.font_size,8. ..=24.,"UI 글꼴 크기",1,"");
-                    }
+                    EditPreferences=>self.preferences_contents(ui,&mut dialog),
                     EditModifierSettings=>{
                         for (value,label) in [(&mut dialog.candidate.space_pan,"Space + 드래그: 이동"),(&mut dialog.candidate.space_rotate,"Shift + Space + 드래그: 보기 회전"),(&mut dialog.candidate.space_zoom,"Ctrl/Cmd + Space + 드래그: 보기 확대"),(&mut dialog.candidate.alt_picker,"Alt + 클릭: 캔버스 색 추출"),(&mut dialog.candidate.layer_picker,"Ctrl/Cmd + Shift + 클릭: 레이어 선택"),(&mut dialog.candidate.middle_pan,"마우스 가운데 버튼: 이동")] {ui.checkbox(value,label);}
                     }
@@ -249,7 +276,11 @@ impl Parfait {
             return;
         }
         if accept {
-            if !dialog.candidate.validate() || !dialog.display.validate() {
+            if !dialog.candidate.validate()
+                || !dialog.display.validate()
+                || !dialog.calibration.validate()
+                || !dialog.workspace.validate()
+            {
                 dialog.error =
                     Some("설정 범위나 명령 목록을 확인해 주세요.".into());
             } else {
@@ -260,6 +291,8 @@ impl Parfait {
                 }
                 let previous_options = self.options.clone();
                 let previous_display = self.display;
+                let previous_calibration = self.calibration.clone();
+                let previous_workspace = self.workspace.clone();
                 let previous_fonts = ctx.fonts(|f| f.definitions().clone());
                 let previous_style = ctx.style_of(egui::Theme::Dark);
                 let font_changed = self.options.font_path
@@ -275,6 +308,10 @@ impl Parfait {
                 } else {
                     self.options = dialog.candidate.clone();
                     self.display = dialog.display;
+                    if dialog.command == Command::EditPreferences {
+                        self.workspace = dialog.workspace.clone();
+                        self.calibration = dialog.calibration.clone();
+                    }
                     self.persist_preferences(true);
                     if self
                         .preferences_saved
@@ -285,6 +322,8 @@ impl Parfait {
                     }
                     self.options = previous_options;
                     self.display = previous_display;
+                    self.calibration = previous_calibration;
+                    self.workspace = previous_workspace;
                     if font_changed {
                         ctx.set_fonts(previous_fonts);
                         ctx.set_style_of(egui::Theme::Dark, previous_style);

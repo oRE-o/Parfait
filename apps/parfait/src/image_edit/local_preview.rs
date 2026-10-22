@@ -387,6 +387,7 @@ impl Parfait {
         if draft.command == Command::EditAutoShade {
             self.shading_light_handle(ctx, &mut draft);
         }
+        self.geometry_canvas_overlay(ctx, &mut draft);
         let mut open = true;
         let mut confirm = false;
         let mut cancel = false;
@@ -406,7 +407,7 @@ impl Parfait {
                     if draft.command==Command::EditSuperResolution {ui.label("학습 모델 없이 원본과의 차이를 반복 보정합니다.");slider(ui,&mut draft.values[0],1. ..=8.,"반복 횟수");slider(ui,&mut draft.values[1],0. ..=1.,"보정 강도");}
                 } else if draft.command==Command::EditAdvancedFill {slider(ui,&mut draft.values[0],0. ..=100.,"색 불투명도");}
                 else if draft.command==Command::EditBorder {slider(ui,&mut draft.values[0],1. ..=128.,"안쪽 테두리 (px)");}
-                if is_canvas && draft.local_preview.enabled && !draft.local_preview.compare && let Some(texture)=&draft.local_preview.texture {ui.add(egui::Image::new(texture).max_size(egui::vec2(330.,175.)));}
+                if is_canvas && draft.command==Command::EditSuperResolution && draft.local_preview.enabled && !draft.local_preview.compare && let Some(texture)=&draft.local_preview.texture {ui.add(egui::Image::new(texture).max_size(egui::vec2(330.,175.)));}
                 if let Some(error)=&draft.error{ui.colored_label(egui::Color32::LIGHT_RED,error);}
             });
             });
@@ -426,6 +427,17 @@ impl Parfait {
             });
             });
         });
+        if matches!(
+            draft.command,
+            Command::EditResolution
+                | Command::EditCanvasSize
+                | Command::EditCanvasBasic
+        ) && let Some(output) = &window_output
+        {
+            // The canvas overlay is an interactive Area; its large hit surface
+            // must stay below the controls even after a handle is clicked.
+            ctx.move_to_top(output.response.layer_id);
+        }
         #[cfg(test)]
         if let Some(output) = &window_output {
             ctx.data_mut(|d| {
@@ -463,7 +475,17 @@ impl Parfait {
             }
             draft.error = self.notice.clone();
         }
-        self.request_local_preview(&mut draft, &operation, ctx);
+        // Geometry follows immediately using the source texture. Exact native
+        // content/extent and sampling previews wait until a size gesture ends.
+        if !matches!(
+            draft.command,
+            Command::EditResolution
+                | Command::EditCanvasSize
+                | Command::EditCanvasBasic
+        ) || !ctx.input(|i| i.pointer.primary_down())
+        {
+            self.request_local_preview(&mut draft, &operation, ctx);
+        }
         self.image_edit.dialog = Some(draft);
     }
     fn shading_light_handle(

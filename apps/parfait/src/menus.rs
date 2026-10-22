@@ -48,7 +48,7 @@ impl Parfait {
     pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                self.window_drag(ui, 26., true);
+                self.application_menu(ui);
                 for menu in TopMenu::ALL {
                     let response = ui.menu_button(menu.label(), |ui| {
                         ui.set_min_width(188.);
@@ -90,6 +90,79 @@ impl Parfait {
                     ui.data_mut(|data| data.insert_temp(egui::Id::new("project_save_status"), response.rect));
                 });
             });
+        });
+    }
+
+    fn application_menu(&mut self, ui: &mut egui::Ui) {
+        let response = ui.menu_button("   ", |ui| {
+            ui.set_min_width(250.);
+            let enabled = !self.dialog_open();
+            ui.add_enabled_ui(enabled, |ui| {
+                if ui.button("Parfait에 대하여…").clicked() {
+                    self.settings.about_open = true;
+                    ui.close();
+                }
+                ui.separator();
+                for command in [
+                    Command::EditPreferences,
+                    Command::EditPrivacySettings,
+                    Command::EditCommandBarSettings,
+                    Command::ShortcutSettings,
+                    Command::EditModifierSettings,
+                ] {
+                    self.top_menu_command(ui, command);
+                }
+                ui.separator();
+                self.top_menu_command(ui, Command::EditFontSettings);
+                ui.separator();
+                ui.menu_button("외부 컨트롤러", |ui| {
+                    for command in [
+                        Command::EditControllerSettings,
+                        Command::EditQuickSettings,
+                        Command::EditToolCycleSettings,
+                        Command::EditExternalDevice,
+                        Command::EditControllerAdd,
+                    ] {
+                        self.top_menu_command(ui, command);
+                    }
+                });
+                self.top_menu_command(ui, Command::EditPressure);
+                self.top_menu_command(ui, Command::EditSystemServices);
+                ui.separator();
+                self.top_menu_command(ui, Command::Notices);
+                ui.separator();
+                if ui.button("Parfait 종료").clicked() {
+                    self.request_close(ui.ctx());
+                    ui.close();
+                }
+            });
+        });
+        let center = response.response.rect.center();
+        ui.painter().circle_filled(
+            center,
+            9.,
+            Color32::from_rgb(153, 170, 194),
+        );
+        ui.painter().text(
+            center,
+            egui::Align2::CENTER_CENTER,
+            "P",
+            egui::FontId::proportional(13.),
+            Color32::from_gray(34),
+        );
+        response.response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                true,
+                "Parfait 설정 메뉴",
+            )
+        });
+        #[cfg(test)]
+        ui.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("application_menu"),
+                response.response.rect,
+            )
         });
     }
 

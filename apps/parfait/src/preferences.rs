@@ -1,6 +1,6 @@
 use crate::{app::Parfait, brushes::Preset, workspace::Workspace};
 use serde::{Deserialize, Serialize};
-pub(crate) const VERSION: u32 = 24;
+pub(crate) const VERSION: u32 = 25;
 
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
@@ -101,6 +101,9 @@ impl Parfait {
                 }
                 if pref.version < 24 {
                     pref.workspace.upgrade_tools();
+                }
+                if pref.version < 25 {
+                    pref.workspace.upgrade_columns();
                 }
                 anyhow::ensure!(
                     pref.validate(),

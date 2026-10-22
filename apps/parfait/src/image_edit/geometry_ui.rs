@@ -4,6 +4,22 @@ pub(super) struct GeometryUi {
     pub linked: bool,
     pub nearest: bool,
     pub anchor: [usize; 2],
+    pub(super) drag: Option<super::geometry_canvas::GeometryDrag>,
+    pub(super) checker: Option<egui::TextureHandle>,
+    pub(super) exterior: Option<egui::Color32>,
+}
+impl GeometryUi {
+    pub(super) fn new(original: [u32; 2]) -> Self {
+        Self {
+            original,
+            linked: true,
+            nearest: false,
+            anchor: [1, 1],
+            drag: None,
+            checker: None,
+            exterior: None,
+        }
+    }
 }
 impl EditDialog {
     pub(super) fn geometry_controls(&mut self, ui: &mut egui::Ui) {
@@ -152,6 +168,7 @@ impl EditDialog {
             }
         }
         ui.label(format!("출력: {} × {} px", self.width, self.height));
+        ui.weak("그림의 테두리 핸들을 드래그해 크기를 조절할 수 있습니다.");
     }
     fn place_anchor(&mut self) {
         self.offset = [

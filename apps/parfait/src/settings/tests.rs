@@ -21,11 +21,18 @@ fn settings_drafts_cancel_without_mutating_preferences_or_artwork() {
     ] {
         let (_dir, mut app, ctx) = setup();
         let before = app.options.clone();
+        let workspace = app.workspace.clone();
+        let calibration = app.calibration.clone();
         let artwork = app.documents.active_session.document.clone();
         app.execute_command(command, &ctx);
         assert!(app.settings.dialog.is_some());
         app.settings.dialog.as_mut().unwrap().candidate.autosave_delay_ms =
             1000;
+        if command == Command::EditPreferences {
+            let dialog = app.settings.dialog.as_mut().unwrap();
+            dialog.workspace.panels[0].inactive_opacity = 0.4;
+            dialog.calibration.points.insert(1, [0.4, 0.8]);
+        }
         let mut out = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -59,6 +66,8 @@ fn settings_drafts_cancel_without_mutating_preferences_or_artwork() {
         out.textures_delta.clear();
         assert!(app.settings.dialog.is_none());
         assert_eq!(app.options, before);
+        assert!(app.workspace.same_preferences(&workspace));
+        assert_eq!(app.calibration, calibration);
         assert!(
             app.documents.active_session.document.same_edit_state(&artwork)
         );

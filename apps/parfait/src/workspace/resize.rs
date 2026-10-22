@@ -139,7 +139,81 @@ impl Workspace {
         layout: &[(Palette, Rect)],
     ) {
         let rows = self.dock_rows(side);
+        let columns = self.dock_columns(side);
+        for pair in columns.windows(2) {
+            let bounds = |column: &[Palette]| {
+                layout
+                    .iter()
+                    .filter(|(p, _)| column.contains(p))
+                    .map(|(_, r)| *r)
+                    .reduce(|a, b| a.union(b))
+                    .unwrap()
+            };
+            let first = bounds(&pair[0]);
+            let second = bounds(&pair[1]);
+            let target = Rect::from_min_max(
+                egui::pos2(first.right() - 4., first.top()),
+                egui::pos2(
+                    first.right() + 4.,
+                    first.bottom().max(second.bottom()),
+                ),
+            );
+            let minimum = |column: &[Palette]| {
+                rows.iter()
+                    .filter(|row| column.contains(&row[0]))
+                    .map(|row| row.len())
+                    .max()
+                    .unwrap_or(1) as f32
+                    * 180.
+            };
+            let a = minimum(&pair[0]);
+            let b = minimum(&pair[1]);
+            let weight = |column: &[Palette]| {
+                self.panels
+                    .iter()
+                    .find(|p| p.palette == column[0])
+                    .unwrap()
+                    .width_weight
+            };
+            let label = format!(
+                "Resize between {} and {}",
+                pair[0][0].title(),
+                pair[1][0].title()
+            );
+            if let Some(drag) = handle(
+                ui,
+                ui.id().with(("dock_column_resize", pair[0][0], pair[1][0])),
+                target,
+                CursorIcon::ResizeHorizontal,
+                &label,
+                [
+                    first.width(),
+                    second.width(),
+                    weight(&pair[0]),
+                    weight(&pair[1]),
+                ],
+            ) {
+                self.resizing = true;
+                let extra = drag.initial[0] + drag.initial[1] - a - b;
+                if extra > 0.001 {
+                    let fraction = (drag.initial[0] - a + drag.delta.x)
+                        .clamp(0., extra)
+                        / extra;
+                    let weight = (drag.initial[2] + drag.initial[3]).max(1.);
+                    for p in &mut self.panels {
+                        if pair[0].contains(&p.palette) {
+                            p.width_weight = weight * fraction;
+                        }
+                        if pair[1].contains(&p.palette) {
+                            p.width_weight = weight * (1. - fraction);
+                        }
+                    }
+                }
+            }
+        }
         for (row_index, row) in rows.iter().enumerate() {
+            let column =
+                columns.iter().find(|column| column.contains(&row[0])).unwrap();
             let bounds = row
                 .iter()
                 .filter_map(|palette| {
@@ -164,12 +238,13 @@ impl Workspace {
                 .reduce(f32::max);
             if height.is_some() {
                 let next = rows.iter().skip(row_index + 1).find(|row| {
-                    row.iter().any(|palette| {
-                        self.panels.iter().any(|placement| {
-                            placement.palette == *palette
-                                && !placement.collapsed
+                    column.contains(&row[0])
+                        && row.iter().any(|palette| {
+                            self.panels.iter().any(|placement| {
+                                placement.palette == *palette
+                                    && !placement.collapsed
+                            })
                         })
-                    })
                 });
                 let height = (bounds.height() - 29.).max(60.);
                 let next_height = next.map(|row| {
@@ -211,6 +286,18 @@ impl Workspace {
                         },
                     );
                     for placement in &mut self.panels {
+                        // Heights are proportional weights. Normalize the
+                        // untouched rows to their displayed heights as well,
+                        // so moving one splitter cannot resize a third row.
+                        if column.contains(&placement.palette)
+                            && !placement.collapsed
+                            && let Some((_, rect)) = layout
+                                .iter()
+                                .find(|(p, _)| *p == placement.palette)
+                        {
+                            placement.height =
+                                (rect.height() - 29.).clamp(60., 2000.);
+                        }
                         if !placement.collapsed
                             && row.contains(&placement.palette)
                         {
@@ -222,20 +309,6 @@ impl Workspace {
                         {
                             placement.height = drag.initial[1] - delta;
                         }
-                    }
-                }
-            }
-            if row.iter().all(|palette| {
-                self.panels
-                    .iter()
-                    .find(|placement| placement.palette == *palette)
-                    .unwrap()
-                    .width_weight
-                    == 0.
-            }) {
-                for placement in &mut self.panels {
-                    if row.contains(&placement.palette) {
-                        placement.width_weight = 1.;
                     }
                 }
             }
@@ -478,6 +551,15 @@ mod tests {
                 .find(|placement| placement.palette == palette)
                 .unwrap()
         }
+        fn rect(&self, palette: Palette) -> Rect {
+            self.app
+                .workspace
+                .slots
+                .iter()
+                .find(|(p, _, _)| *p == palette)
+                .unwrap()
+                .2
+        }
 
         fn drag(&mut self, label: &str, delta: Vec2, batched: bool) {
             self.frame(vec![]);
@@ -520,20 +602,43 @@ mod tests {
             let mut fixture = Fixture::new();
             let artwork = fixture.app.documents.active_session.document.clone();
             let collapsed = fixture.placement(Palette::Sizes).height;
+            fixture.frame(vec![]);
+            fixture.frame(vec![]);
+            let brushes = fixture.rect(Palette::Brushes).height();
+            let properties = fixture.rect(Palette::Properties).height();
+            let color = fixture.rect(Palette::Color).height();
             fixture.drag(
                 "Resize row below 보조 도구",
                 egui::vec2(0., 70.),
                 batched,
             );
-            assert_eq!(fixture.placement(Palette::Brushes).height, 320.);
-            assert_eq!(fixture.placement(Palette::Properties).height, 195.);
+            assert!(
+                (fixture.rect(Palette::Brushes).height() - brushes - 70.).abs()
+                    < 0.1
+            );
+            assert!(
+                (fixture.rect(Palette::Properties).height() - properties + 70.)
+                    .abs()
+                    < 0.1
+            );
+            assert!(
+                (fixture.rect(Palette::Color).height() - color).abs() < 0.1
+            );
             fixture.drag(
                 "Resize row below 도구 속성",
                 egui::vec2(0., -40.),
                 batched,
             );
-            assert_eq!(fixture.placement(Palette::Properties).height, 155.);
-            assert_eq!(fixture.placement(Palette::Color).height, 230.);
+            assert!(
+                (fixture.rect(Palette::Properties).height() - properties
+                    + 110.)
+                    .abs()
+                    < 0.1
+            );
+            assert!(
+                (fixture.rect(Palette::Color).height() - color - 40.).abs()
+                    < 0.1
+            );
             assert_eq!(fixture.placement(Palette::Sizes).height, collapsed);
             assert!(fixture.placement(Palette::Sizes).collapsed);
             assert_eq!(fixture.app.documents.active_session.document, artwork);
@@ -584,7 +689,8 @@ mod tests {
             .1;
         assert!((first.width() - before.width() - 40.).abs() < 1.);
         assert!((first.width() + second.width() - 572.).abs() < 0.1);
-        assert_eq!(first.height(), second.height());
+        assert!(first.height() < second.height());
+        assert_eq!(second.height(), 1000.);
         assert_eq!(fixture.app.documents.active_session.document, artwork);
         fixture.drag(
             "Resize between 보조 도구 and 도구 속성",
@@ -678,6 +784,7 @@ mod tests {
         let mut fixture = Fixture::new();
         fixture.frame(vec![]);
         fixture.frame(vec![]);
+        let original = fixture.rect(Palette::Brushes).height() - 29.;
         let start = fixture.target("Resize row below 보조 도구").center();
         fixture
             .frame(vec![egui::Event::PointerMoved(start), button(start, true)]);
@@ -688,13 +795,19 @@ mod tests {
         fixture.frame(vec![egui::Event::PointerMoved(
             start + egui::vec2(0., 30.),
         )]);
-        assert_eq!(fixture.placement(Palette::Brushes).height, 280.);
+        assert!(
+            (fixture.placement(Palette::Brushes).height - original - 30.).abs()
+                < 0.1
+        );
         fixture.frame(vec![egui::Event::WindowFocused(false)]);
         fixture.frame(vec![
             egui::Event::PointerMoved(start + egui::vec2(0., 100.)),
             button(start, false),
         ]);
-        assert_eq!(fixture.placement(Palette::Brushes).height, 280.);
+        assert!(
+            (fixture.placement(Palette::Brushes).height - original - 30.).abs()
+                < 0.1
+        );
         assert!(!fixture.app.workspace.resizing);
         assert!(fixture.app.workspace.validate());
     }

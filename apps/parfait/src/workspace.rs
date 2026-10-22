@@ -160,6 +160,8 @@ pub struct Placement {
     #[serde(default)]
     pub row: Option<Palette>,
     #[serde(default)]
+    pub column: Option<Palette>,
+    #[serde(default)]
     pub window_rect: Option<[f32; 4]>,
     #[serde(default = "default_width_weight")]
     pub inactive_opacity: f32,
@@ -211,6 +213,7 @@ impl Default for Workspace {
                     visible: p != Palette::History,
                     collapsed: p == Palette::Sizes,
                     row: None,
+                    column: None,
                     window_rect: None,
                     inactive_opacity: 1.,
                     scroll_offset: 0.,
@@ -239,6 +242,27 @@ impl Default for Workspace {
     }
 }
 impl Workspace {
+    pub(crate) fn upgrade_columns(&mut self) {
+        for side in [Location::Left, Location::Right] {
+            let rows = self.dock_rows(side);
+            let mut keys = Vec::new();
+            for row in rows {
+                for (index, palette) in row.into_iter().enumerate() {
+                    if keys.len() <= index {
+                        keys.push(palette);
+                    }
+                    let placement = self
+                        .panels
+                        .iter_mut()
+                        .find(|p| p.palette == palette)
+                        .unwrap();
+                    placement.column =
+                        if index == 0 { None } else { Some(keys[index]) };
+                    placement.row = None;
+                }
+            }
+        }
+    }
     pub(crate) fn upgrade_tools(&mut self) {
         if self.panels.len() == 7
             && !self.panels.iter().any(|p| p.palette == Palette::Tools)
@@ -266,6 +290,7 @@ impl Workspace {
                     && current.visible == saved.visible
                     && current.collapsed == saved.collapsed
                     && current.row == saved.row
+                    && current.column == saved.column
                     && current.window_rect == saved.window_rect
                     && current.inactive_opacity == saved.inactive_opacity
                     && current.height == saved.height
@@ -310,6 +335,9 @@ impl Workspace {
         let mut item = self.panels.remove(i);
         self.reserve_row_identity(palette);
         item.location = location;
+        item.column = before.and_then(|p| {
+            self.panels.iter().find(|s| s.palette == p).and_then(|s| s.column)
+        });
         item.row = before.and_then(|p| {
             self.panels
                 .iter()
@@ -329,14 +357,17 @@ impl Workspace {
         self.panels.insert(index, item);
     }
     fn dock_rows(&self, side: Location) -> Vec<Vec<Palette>> {
-        let mut rows: Vec<(Palette, Vec<Palette>)> = Vec::new();
+        type RowKey = (Option<Palette>, Palette);
+        let mut rows: Vec<(RowKey, Vec<Palette>)> = Vec::new();
         for p in self.panels.iter().filter(|p| p.visible && p.location == side)
         {
-            let key = if side == Location::Top {
+            let row = if side == Location::Top {
                 Palette::Brushes
             } else {
                 p.row.unwrap_or(p.palette)
             };
+            let key =
+                (if side == Location::Top { None } else { p.column }, row);
             if let Some((_, row)) = rows.iter_mut().find(|(id, _)| *id == key) {
                 row.push(p.palette);
             } else {
@@ -344,6 +375,21 @@ impl Workspace {
             }
         }
         rows.into_iter().map(|(_, row)| row).collect()
+    }
+    fn dock_columns(&self, side: Location) -> Vec<Vec<Palette>> {
+        let mut columns: Vec<(Option<Palette>, Vec<Palette>)> = Vec::new();
+        for p in self.panels.iter().filter(|p| p.visible && p.location == side)
+        {
+            let key = if side == Location::Top { None } else { p.column };
+            if let Some((_, column)) =
+                columns.iter_mut().find(|(id, _)| *id == key)
+            {
+                column.push(p.palette);
+            } else {
+                columns.push((key, vec![p.palette]));
+            }
+        }
+        columns.into_iter().map(|(_, column)| column).collect()
     }
     fn insert_line(
         &self,
@@ -364,22 +410,48 @@ impl Workspace {
             }
         };
         let key = row_key(palette);
+        let column =
+            self.panels.iter().find(|p| p.palette == palette).unwrap().column;
         let row = self
             .slots
             .iter()
-            .filter(|(p, location, _)| *location == side && row_key(*p) == key)
+            .filter(|(p, location, _)| {
+                *location == side
+                    && row_key(*p) == key
+                    && self
+                        .panels
+                        .iter()
+                        .find(|item| item.palette == *p)
+                        .unwrap()
+                        .column
+                        == column
+            })
             .map(|(_, _, r)| *r)
             .reduce(|a, b| a.union(b))
             .unwrap_or(slot);
+        let column_bounds = self
+            .slots
+            .iter()
+            .filter(|(p, location, _)| {
+                *location == side
+                    && self
+                        .panels
+                        .iter()
+                        .find(|item| item.palette == *p)
+                        .unwrap()
+                        .column
+                        == column
+            })
+            .map(|(_, _, rect)| *rect)
+            .reduce(|a, b| a.union(b))
+            .unwrap_or(slot);
         let (from, to) = match direction {
-            DockDirection::Left => (
-                egui::pos2(slot.left(), row.top()),
-                egui::pos2(slot.left(), row.bottom()),
-            ),
-            DockDirection::Right => (
-                egui::pos2(slot.right(), row.top()),
-                egui::pos2(slot.right(), row.bottom()),
-            ),
+            DockDirection::Left => {
+                (column_bounds.left_top(), column_bounds.left_bottom())
+            }
+            DockDirection::Right => {
+                (column_bounds.right_top(), column_bounds.right_bottom())
+            }
             DockDirection::Top => (row.left_top(), row.right_top()),
             DockDirection::Bottom => (row.left_bottom(), row.right_bottom()),
         };
@@ -392,7 +464,62 @@ impl Workspace {
         side: Location,
         bounds: Rect,
     ) -> Vec<(Palette, Rect)> {
+        let columns = self.dock_columns(side);
         let rows = self.dock_rows(side);
+        let minimums: Vec<f32> = columns
+            .iter()
+            .map(|column| {
+                rows.iter()
+                    .filter(|row| column.contains(&row[0]))
+                    .map(|row| row.len())
+                    .max()
+                    .unwrap_or(1) as f32
+                    * 180.
+            })
+            .collect();
+        let minimum: f32 = minimums.iter().sum();
+        let weights: Vec<f32> = columns
+            .iter()
+            .map(|column| {
+                self.panels
+                    .iter()
+                    .find(|p| p.palette == column[0])
+                    .unwrap()
+                    .width_weight
+            })
+            .collect();
+        let weight: f32 = weights.iter().sum();
+        let mut x = bounds.left();
+        let mut result = Vec::new();
+        for (i, column) in columns.iter().enumerate() {
+            let width = minimums[i]
+                + (bounds.width() - minimum).max(0.)
+                    * if weight > 0. {
+                        weights[i] / weight
+                    } else {
+                        1. / columns.len() as f32
+                    };
+            let column_rows: Vec<_> = rows
+                .iter()
+                .filter(|row| column.contains(&row[0]))
+                .cloned()
+                .collect();
+            result.extend(self.row_layout(
+                Rect::from_min_size(
+                    egui::pos2(x, bounds.top()),
+                    egui::vec2(width, bounds.height()),
+                ),
+                column_rows,
+            ));
+            x += width;
+        }
+        result
+    }
+    fn row_layout(
+        &self,
+        bounds: Rect,
+        rows: Vec<Vec<Palette>>,
+    ) -> Vec<(Palette, Rect)> {
         let width = bounds
             .width()
             .max(rows.iter().map(|r| r.len()).max().unwrap_or(1) as f32 * 180.);
@@ -501,6 +628,22 @@ impl Workspace {
                 .find(|p| {
                     p.palette != palette
                         && p.location == side
+                        && p.column == Some(palette)
+                })
+                .map(|p| p.palette)
+            {
+                for p in &mut self.panels {
+                    if p.location == side && p.column == Some(palette) {
+                        p.column = Some(key);
+                    }
+                }
+            }
+            if let Some(key) = self
+                .panels
+                .iter()
+                .find(|p| {
+                    p.palette != palette
+                        && p.location == side
                         && p.row == Some(palette)
                 })
                 .map(|p| p.palette)
@@ -530,16 +673,14 @@ impl Workspace {
             self.panels.iter().find(|p| p.palette == other).unwrap().clone();
         let group = target.row.unwrap_or(other);
         item.location = target.location;
+        item.column = target.column;
         if matches!(direction, DockDirection::Left | DockDirection::Right) {
-            // Give all existing members the same explicit row identity.
-            for p in &mut self.panels {
-                if p.location == target.location
-                    && p.row.unwrap_or(p.palette) == group
-                {
-                    p.row = Some(group);
-                }
+            if target.location == Location::Top {
+                item.row = Some(Palette::Brushes);
+            } else {
+                item.column = Some(palette);
+                item.row = None;
             }
-            item.row = Some(group);
         } else {
             item.row = None;
         }
@@ -549,15 +690,23 @@ impl Workspace {
             .enumerate()
             .filter(|(_, p)| {
                 p.location == target.location
-                    && p.row.unwrap_or(p.palette) == group
+                    && p.column == target.column
+                    && (matches!(
+                        direction,
+                        DockDirection::Left | DockDirection::Right
+                    ) || p.row.unwrap_or(p.palette) == group)
             })
             .map(|(i, _)| i)
             .collect();
         let target_index =
             self.panels.iter().position(|p| p.palette == other).unwrap();
         let index = match direction {
-            DockDirection::Left => target_index,
-            DockDirection::Right => target_index + 1,
+            DockDirection::Left => {
+                members.first().copied().unwrap_or(target_index)
+            }
+            DockDirection::Right => {
+                members.last().copied().unwrap_or(target_index) + 1
+            }
             DockDirection::Top => {
                 members.first().copied().unwrap_or(target_index)
             }
@@ -656,6 +805,7 @@ impl Workspace {
                     self.reserve_row_identity(palette);
                     self.panels[i].location = Location::Rail;
                     self.panels[i].row = None;
+                    self.panels[i].column = None;
                     self.panels[i].collapsed = false;
                     ui.close();
                 }
@@ -722,6 +872,7 @@ impl Workspace {
             {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Top;
+                self.panels[i].column = None;
                 self.panels[i].row = Some(Palette::Brushes);
                 ui.close();
             }
@@ -747,6 +898,7 @@ impl Workspace {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Left;
                 self.panels[i].row = None;
+                self.panels[i].column = None;
                 ui.close();
             }
             if ui
@@ -760,6 +912,7 @@ impl Workspace {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Right;
                 self.panels[i].row = None;
+                self.panels[i].column = None;
                 ui.close();
             }
         });
@@ -871,11 +1024,21 @@ impl Workspace {
         );
     }
     fn dock_minimum(&self, side: Location, margin: f32) -> f32 {
-        (self.dock_rows(side).iter().map(|row| row.len()).max().unwrap_or(1)
-            as f32
-            * 180.
+        let rows = self.dock_rows(side);
+        (self
+            .dock_columns(side)
+            .iter()
+            .map(|column| {
+                rows.iter()
+                    .filter(|row| column.contains(&row[0]))
+                    .map(|row| row.len())
+                    .max()
+                    .unwrap_or(1) as f32
+                    * 180.
+            })
+            .sum::<f32>()
             + margin)
-            .min(800.)
+            .clamp(180., 800.)
     }
     fn dock_width(&self, side: Location, margin: f32) -> f32 {
         let minimum = self.dock_minimum(side, margin);
@@ -1477,18 +1640,72 @@ mod tests {
         workspace.slots = vec![
             (Palette::Brushes, Location::Left, a),
             (Palette::Properties, Location::Left, b),
+            (
+                Palette::Color,
+                Location::Left,
+                Rect::from_min_size(a.left_bottom(), egui::vec2(180., 400.)),
+            ),
         ];
         let target = workspace.slots[0];
         let vertical = workspace.insert_line(target, DockDirection::Right);
-        assert_eq!(vertical.size(), egui::vec2(3., 200.));
+        assert_eq!(vertical.size(), egui::vec2(3., 600.));
         assert_eq!(vertical.center().x, a.right());
         let horizontal = workspace.insert_line(target, DockDirection::Bottom);
-        assert_eq!(horizontal.size(), egui::vec2(360., 3.));
+        assert_eq!(horizontal.size(), egui::vec2(180., 3.));
         assert_eq!(horizontal.center().y, a.bottom());
         assert!(matches!(
             DockDirection::at(a, egui::pos2(a.left() + 40., a.top() + 8.)),
             DockDirection::Top
         ));
+    }
+
+    #[test]
+    fn side_docking_creates_full_height_columns_with_independent_stacks() {
+        let mut workspace = Workspace::default();
+        workspace.dock_to(
+            Palette::Properties,
+            Palette::Brushes,
+            DockDirection::Right,
+        );
+        workspace.dock_to(
+            Palette::Color,
+            Palette::Properties,
+            DockDirection::Bottom,
+        );
+        let bounds = Rect::from_min_size(Pos2::ZERO, egui::vec2(600., 800.));
+        let layout = workspace.dock_layout(Location::Left, bounds);
+        let get =
+            |palette| layout.iter().find(|(p, _)| *p == palette).unwrap().1;
+        let brushes = get(Palette::Brushes);
+        let properties = get(Palette::Properties);
+        let color = get(Palette::Color);
+        assert_eq!(properties.top(), bounds.top());
+        assert!((color.bottom() - bounds.bottom()).abs() < 0.1);
+        assert_eq!(properties.x_range(), color.x_range());
+        assert_eq!(brushes.right(), properties.left());
+        workspace.dock_to(
+            Palette::Properties,
+            Palette::Brushes,
+            DockDirection::Top,
+        );
+        assert!(
+            workspace
+                .dock_columns(Location::Left)
+                .iter()
+                .any(|c| c == &vec![Palette::Color])
+        );
+        let mut legacy = Workspace::default();
+        legacy.panels[0].row = Some(Palette::Brushes);
+        legacy.panels[1].row = Some(Palette::Brushes);
+        let mut encoded = serde_json::to_value(&legacy).unwrap();
+        for p in encoded["panels"].as_array_mut().unwrap() {
+            p.as_object_mut().unwrap().remove("column");
+        }
+        let mut restored: Workspace = serde_json::from_value(encoded).unwrap();
+        restored.upgrade_columns();
+        assert!(restored.validate());
+        assert_eq!(restored.dock_columns(Location::Left).len(), 2);
+        assert_eq!(restored.panels[0].height, legacy.panels[0].height);
     }
 
     #[test]
@@ -2236,6 +2453,15 @@ mod tests {
                     .unwrap()
                     .2
                     .intersect(ctx.content_rect());
+                let column_bounds = app
+                    .workspace
+                    .slots
+                    .iter()
+                    .filter(|(_, location, _)| *location == side)
+                    .map(|(_, _, rect)| *rect)
+                    .reduce(|a, b| a.union(b))
+                    .unwrap()
+                    .intersect(ctx.content_rect());
                 let preview = ctx
                     .data(|d| {
                         d.get_temp::<Rect>(egui::Id::new("dock_insert_line"))
@@ -2252,8 +2478,10 @@ mod tests {
                     .2;
                 assert!((preview.width() - 3.).abs() < 0.1);
                 assert!((preview.center().x - target.right()).abs() < 0.1);
-                assert!((preview.top() - target.top()).abs() < 0.1);
-                assert!((preview.bottom() - target.bottom()).abs() < 0.1);
+                assert!((preview.top() - column_bounds.top()).abs() < 0.1);
+                assert!(
+                    (preview.bottom() - column_bounds.bottom()).abs() < 0.1
+                );
                 assert!(actual.is_positive());
                 let inserted = app
                     .workspace
@@ -2268,10 +2496,8 @@ mod tests {
                     .find(|p| p.palette == Palette::Properties)
                     .unwrap();
                 assert_eq!(inserted.location, side);
-                assert_eq!(
-                    inserted.row,
-                    Some(neighbor.row.unwrap_or(neighbor.palette))
-                );
+                assert_ne!(inserted.column, neighbor.column);
+                assert_eq!(inserted.row, None);
             }
         }
     }
