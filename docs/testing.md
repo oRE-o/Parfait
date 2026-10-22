@@ -1,5 +1,9 @@
 # Testing
 
+## File workflow and local image import (2026-10-22)
+
+See [the file-workflow validation record](validation/file-workflow-2026-10-22.md) for current targeted tests, native macOS import/save/exit checks, retained recovery coverage and pre-existing full-suite failures. This follow-up does not change the project format or claim Windows/Linux native validation.
+
 ## Edit-menu implementation and native content
 
 2026-10-20, Windows x86_64 / Intel Core i7-8700 / Rust 1.99.1 GNU. `cargo test --workspace --quiet` passes **513 tests, zero failures, nine opt-in workloads ignored**. All-target warnings-denied Clippy and formatting checks pass. The two old malformed-snapshot fixtures additionally use the explicit v10 encoder so their failures still exercise invalid layer/selection validation rather than merely trailing bytes; the storage library suite was rerun after that adjustment.

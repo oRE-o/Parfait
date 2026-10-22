@@ -522,7 +522,7 @@ fn malformed_current_ids_fall_back_to_v2_and_resave_a_newer_valid_generation() {
 
 #[test]
 fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
-    for version in [-1, 12] {
+    for version in [-1, 13] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("future.parfait");
         let connection = Connection::open(&path).unwrap();
@@ -550,7 +550,7 @@ fn unsupported_database_and_snapshot_versions_are_preserved_and_rejected() {
     }
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(&dir.path().join("unknown.parfait")).unwrap();
-    let raw = b"PARFAIT\0SNAP11\0unknown";
+    let raw = b"PARFAIT\0SNAP13\0unknown";
     insert_raw(&store, 1, raw);
     assert!(store.load().is_err());
     assert_eq!(

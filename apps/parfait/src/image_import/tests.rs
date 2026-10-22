@@ -108,6 +108,20 @@ fn layer_import_is_one_undoable_edit_and_does_not_touch_other_tab() {
     .unwrap();
     assert_eq!(app.documents.active_id(), Some(second));
     assert_eq!(app.documents.get(second).unwrap().document, other_before);
+    app.documents.remove(key.document_id);
+    assert!(
+        app.apply_import(
+            target,
+            DecodedImage {
+                name: "Closed target".into(),
+                width: 1,
+                height: 1,
+                pixels: vec![0; 4],
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(app.documents.get(second).unwrap().document, other_before);
 }
 #[test]
 fn invalid_files_oversized_layer_cancel_and_stale_target_leave_artwork_and_redo_unchanged()
