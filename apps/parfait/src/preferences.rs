@@ -1,6 +1,6 @@
 use crate::{app::Parfait, brushes::Preset, workspace::Workspace};
 use serde::{Deserialize, Serialize};
-pub(crate) const VERSION: u32 = 23;
+pub(crate) const VERSION: u32 = 24;
 
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
@@ -98,6 +98,9 @@ impl Parfait {
                 let mut pref: Preferences = serde_json::from_str(&json)?;
                 if (1..=9).contains(&pref.version) {
                     pref.workspace.upgrade_history();
+                }
+                if pref.version < 24 {
+                    pref.workspace.upgrade_tools();
                 }
                 anyhow::ensure!(
                     pref.validate(),
@@ -199,6 +202,61 @@ mod history_migration_tests {
     use crate::workspace::{Location, Palette};
 
     #[test]
+    fn version_23_adds_detachable_tools_and_restores_separate_window_preferences()
+     {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        app.workspace.left_width = 320.;
+        app.persist_preferences(true);
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(&app.saved_preferences_json()).unwrap();
+        legacy["version"] = 23.into();
+        legacy["workspace"]["panels"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|p| p["palette"] != "Tools");
+        let expected = legacy["workspace"]["panels"].clone();
+        drop(app);
+        parfait_storage::save_preferences(
+            &dir.path().join("preferences.sqlite"),
+            &legacy.to_string(),
+        )
+        .unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        assert!(!app.preferences_read_failed);
+        assert_eq!(app.workspace.left_width, 320.);
+        assert_eq!(
+            &serde_json::to_value(&app.workspace).unwrap()["panels"]
+                .as_array()
+                .unwrap()[..7],
+            expected.as_array().unwrap().as_slice()
+        );
+        let tools = app
+            .workspace
+            .panels
+            .iter_mut()
+            .find(|p| p.palette == Palette::Tools)
+            .unwrap();
+        assert_eq!(tools.location, Location::Rail);
+        tools.location = Location::Window;
+        tools.window_rect = Some([140., 120., 64., 329.]);
+        tools.inactive_opacity = 0.6;
+        app.persist_preferences(true);
+        drop(app);
+        let app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        assert!(!app.preferences_read_failed);
+        let tools = app
+            .workspace
+            .panels
+            .iter()
+            .find(|p| p.palette == Palette::Tools)
+            .unwrap();
+        assert_eq!(tools.location, Location::Window);
+        assert_eq!(tools.window_rect, Some([140., 120., 64., 329.]));
+        assert_eq!(tools.inactive_opacity, 0.6);
+    }
+
+    #[test]
     fn six_palette_versions_upgrade_without_moving_existing_layouts_or_resetting_keys()
      {
         let dir = tempfile::tempdir().unwrap();
@@ -208,10 +266,12 @@ mod history_migration_tests {
         app.persist_preferences(true);
         let mut legacy: serde_json::Value =
             serde_json::from_str(&app.saved_preferences_json()).unwrap();
-        legacy["workspace"]["panels"]
-            .as_array_mut()
-            .unwrap()
-            .retain(|placement| placement["palette"] != "History");
+        legacy["workspace"]["panels"].as_array_mut().unwrap().retain(
+            |placement| {
+                placement["palette"] != "History"
+                    && placement["palette"] != "Tools"
+            },
+        );
         let expected = legacy["workspace"]["panels"].clone();
         let keys = app.keymap.clone();
         drop(app);
@@ -224,7 +284,7 @@ mod history_migration_tests {
                 Parfait::open_legacy(dir.path().to_owned()).unwrap();
             assert!(!restored.preferences_read_failed);
             assert!(restored.keymap == keys);
-            assert_eq!(restored.workspace.panels.len(), 7);
+            assert_eq!(restored.workspace.panels.len(), 8);
             let history = restored
                 .workspace
                 .panels
@@ -240,7 +300,7 @@ mod history_migration_tests {
             restored.persist_preferences(true);
             assert_eq!(
                 restored.preferences_saved.as_ref().unwrap().version,
-                22
+                VERSION
             );
         }
         legacy["version"] = 10.into();

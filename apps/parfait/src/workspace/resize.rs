@@ -5,7 +5,7 @@ use eframe::egui::{self, Color32, CursorIcon, Id, Pos2, Rect, Vec2};
 pub(super) struct Drag {
     pub initial: [f32; 4],
     pub delta: Vec2,
-    origin: Pos2,
+    pub origin: Pos2,
 }
 
 pub(super) fn handle(
@@ -29,6 +29,20 @@ pub(super) fn handle(
     ui.data_mut(|data| {
         data.insert_temp(Id::new(("resize_target", label)), rect)
     });
+    let drag = track(ui, id, rect, cursor, initial);
+    if response.hovered() || ui.ctx().dragged_id() == Some(id) {
+        ui.painter().rect_filled(rect, 0., Color32::from_white_alpha(28));
+    }
+    drag
+}
+
+pub(super) fn track(
+    ui: &mut egui::Ui,
+    id: Id,
+    rect: Rect,
+    cursor: CursorIcon,
+    initial: [f32; 4],
+) -> Option<Drag> {
     let state_id = id.with("resize_origin");
     let mut state = ui.data(|data| data.get_temp::<Drag>(state_id));
     let enabled = ui.is_enabled() && ui.input(|input| input.focused);
@@ -84,7 +98,12 @@ pub(super) fn handle(
                     }
                 }
                 egui::Event::PointerGone
-                | egui::Event::WindowFocused(false) => {
+                | egui::Event::WindowFocused(false)
+                | egui::Event::Key {
+                    key: egui::Key::Escape,
+                    pressed: true,
+                    ..
+                } => {
                     state = None;
                     result = None;
                 }
@@ -102,9 +121,6 @@ pub(super) fn handle(
             data.remove::<Drag>(state_id);
         }
     });
-    if response.hovered() || state.is_some() {
-        ui.painter().rect_filled(rect, 0., Color32::from_white_alpha(28));
-    }
     if state.is_some() {
         ui.ctx().set_dragged_id(id);
         ui.ctx().set_cursor_icon(cursor);
@@ -381,7 +397,7 @@ impl Workspace {
                 self.resizing = true;
                 let width = (drag.initial[2]
                     + drag.delta.x * horizontal as f32)
-                    .clamp(180., 800.);
+                    .clamp(palette.minimum_width(), 800.);
                 let height = if collapsed {
                     23.
                 } else {

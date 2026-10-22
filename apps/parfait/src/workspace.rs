@@ -17,9 +17,10 @@ pub enum Palette {
     Navigator,
     Layers,
     History,
+    Tools,
 }
 impl Palette {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Brushes,
         Self::Properties,
         Self::Sizes,
@@ -27,6 +28,7 @@ impl Palette {
         Self::Navigator,
         Self::Layers,
         Self::History,
+        Self::Tools,
     ];
     pub fn title(self) -> &'static str {
         match self {
@@ -37,7 +39,11 @@ impl Palette {
             Self::Navigator => "내비게이터",
             Self::Layers => "레이어",
             Self::History => "작업 내역",
+            Self::Tools => "도구",
         }
+    }
+    pub(super) fn minimum_width(self) -> f32 {
+        if self == Self::Tools { 64. } else { 180. }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +53,7 @@ pub enum Location {
     Top,
     Floating,
     Window,
+    Rail,
 }
 #[derive(Clone, Copy, Debug)]
 enum DockDirection {
@@ -120,7 +127,9 @@ impl Default for Workspace {
                 .enumerate()
                 .map(|(i, p)| Placement {
                     palette: p,
-                    location: if i < 4 {
+                    location: if p == Palette::Tools {
+                        Location::Rail
+                    } else if i < 4 {
                         Location::Left
                     } else {
                         Location::Right
@@ -131,12 +140,12 @@ impl Default for Workspace {
                     window_rect: None,
                     inactive_opacity: 1.,
                     scroll_offset: 0.,
-                    height: [250., 265., 115., 190., 190., 400., 200.][i],
+                    height: [250., 265., 115., 190., 190., 400., 200., 300.][i],
                     width_weight: 1.,
                     rect: [
                         300. + i as f32 * 24.,
                         120. + i as f32 * 24.,
-                        270.,
+                        if p == Palette::Tools { 64. } else { 270. },
                         340.,
                     ],
                 })
@@ -156,6 +165,13 @@ impl Default for Workspace {
     }
 }
 impl Workspace {
+    pub(crate) fn upgrade_tools(&mut self) {
+        if self.panels.len() == 7
+            && !self.panels.iter().any(|p| p.palette == Palette::Tools)
+        {
+            self.panels.push(Self::default().panels.remove(7));
+        }
+    }
     pub(crate) fn upgrade_history(&mut self) {
         if self.panels.len() == 6
             && !self
@@ -194,7 +210,7 @@ impl Workspace {
             && self.panels.iter().all(|s| {
                 s.window_rect.is_none_or(|r| {
                     r.iter().all(|v| v.is_finite())
-                        && r[2] >= 180.
+                        && r[2] >= s.palette.minimum_width()
                         && r[3] >= 23.
                 }) && s.inactive_opacity.is_finite()
                     && (0.2..=1.).contains(&s.inactive_opacity)
@@ -203,8 +219,10 @@ impl Workspace {
                     && s.width_weight.is_finite()
                     && (0. ..=1000.).contains(&s.width_weight)
                     && s.rect.iter().all(|v| v.is_finite())
-                    && s.rect[2] >= 180.
+                    && s.rect[2] >= s.palette.minimum_width()
                     && s.rect[3] >= 80.
+                    && (s.location != Location::Rail
+                        || s.palette == Palette::Tools)
             })
     }
     pub fn relocate(
@@ -439,8 +457,12 @@ impl Workspace {
             egui::vec2(ui.available_width(), 23.),
             egui::Sense::hover(),
         );
-        let drag_rect =
-            Rect::from_min_max(rect.min, rect.max - egui::vec2(42., 0.));
+        let compact = palette == Palette::Tools && rect.width() < 90.;
+        let drag_rect = if compact {
+            rect
+        } else {
+            Rect::from_min_max(rect.min, rect.max - egui::vec2(42., 0.))
+        };
         let response = ui.interact(
             drag_rect,
             ui.id().with("move"),
@@ -464,46 +486,74 @@ impl Workspace {
             egui::FontId::new(10., egui::FontFamily::Name("icons".into())),
             Color32::LIGHT_GRAY,
         );
-        painter.text(
-            rect.left_center() + egui::vec2(22., 0.),
-            egui::Align2::LEFT_CENTER,
-            palette.title(),
-            egui::FontId::proportional(11.),
-            Color32::LIGHT_GRAY,
-        );
-        let i = self.panels.iter().position(|p| p.palette == palette).unwrap();
-        let collapse = Rect::from_min_size(
-            rect.right_top() - egui::vec2(42., 0.),
-            egui::vec2(21., 23.),
-        );
-        let close = Rect::from_min_size(
-            rect.right_top() - egui::vec2(21., 0.),
-            egui::vec2(21., 23.),
-        );
-        if ui
-            .put(
-                collapse,
-                egui::Button::new(if self.panels[i].collapsed {
-                    "+"
-                } else {
-                    "−"
-                })
-                .frame(false),
-            )
-            .on_hover_text("팔레트 접기 / 펼치기")
-            .clicked()
-        {
-            self.panels[i].collapsed = !self.panels[i].collapsed;
+        if !compact {
+            painter.text(
+                rect.left_center() + egui::vec2(22., 0.),
+                egui::Align2::LEFT_CENTER,
+                palette.title(),
+                egui::FontId::proportional(11.),
+                Color32::LIGHT_GRAY,
+            );
         }
-        if ui
-            .put(close, egui::Button::new("×").frame(false))
-            .on_hover_text("팔레트 숨기기 · 창 메뉴에서 다시 열기")
-            .clicked()
-        {
-            self.panels[i].visible = false;
+        let i = self.panels.iter().position(|p| p.palette == palette).unwrap();
+        if !compact {
+            let collapse = Rect::from_min_size(
+                rect.right_top() - egui::vec2(42., 0.),
+                egui::vec2(21., 23.),
+            );
+            let close = Rect::from_min_size(
+                rect.right_top() - egui::vec2(21., 0.),
+                egui::vec2(21., 23.),
+            );
+            if ui
+                .put(
+                    collapse,
+                    egui::Button::new(if self.panels[i].collapsed {
+                        "+"
+                    } else {
+                        "−"
+                    })
+                    .frame(false),
+                )
+                .on_hover_text("팔레트 접기 / 펼치기")
+                .clicked()
+            {
+                self.panels[i].collapsed = !self.panels[i].collapsed;
+            }
+            if ui
+                .put(close, egui::Button::new("×").frame(false))
+                .on_hover_text("팔레트 숨기기 · 창 메뉴에서 다시 열기")
+                .clicked()
+            {
+                self.panels[i].visible = false;
+            }
         }
         response.context_menu(|ui| {
-            let spawn = ui.button("독립 창으로 열기");
+            if palette == Palette::Tools {
+                if ui
+                    .button(if compact {
+                        "막대 도킹"
+                    } else {
+                        "왼쪽 도구 막대로 도킹"
+                    })
+                    .clicked()
+                {
+                    self.reserve_row_identity(palette);
+                    self.panels[i].location = Location::Rail;
+                    self.panels[i].row = None;
+                    self.panels[i].collapsed = false;
+                    ui.close();
+                }
+                if compact && ui.button("숨기기").clicked() {
+                    self.panels[i].visible = false;
+                    ui.close();
+                }
+            }
+            let spawn = ui.button(if compact {
+                "독립 창"
+            } else {
+                "독립 창으로 열기"
+            });
             #[cfg(test)]
             ui.ctx().data_mut(|d| {
                 d.insert_temp(
@@ -515,56 +565,112 @@ impl Workspace {
                 self.panels[i].location = Location::Window;
                 ui.close();
             }
-            ui.menu_button("독립 창 비활성 투명도", |ui| {
+            if compact {
+                ui.label(format!(
+                    "불투명도 {:.0}%",
+                    self.panels[i].inactive_opacity * 100.
+                ));
+                ui.spacing_mut().slider_width = 40.;
                 ui.add(
                     egui::Slider::new(
                         &mut self.panels[i].inactive_opacity,
                         0.2..=1.,
                     )
                     .step_by(0.01)
-                    .text("불투명도")
-                    .custom_formatter(|v, _| format!("{:.0}%", v * 100.))
-                    .custom_parser(|v| {
-                        v.trim()
-                            .trim_end_matches('%')
-                            .trim()
-                            .parse::<f64>()
-                            .ok()
-                            .map(|value| value / 100.)
-                    }),
-                );
-            });
-            if ui.button("위에 도킹").clicked() {
+                    .show_value(false),
+                )
+                .on_hover_text("독립 창이 포커스를 잃었을 때의 불투명도");
+            } else {
+                ui.menu_button("독립 창 비활성 투명도", |ui| {
+                    ui.add(
+                        egui::Slider::new(
+                            &mut self.panels[i].inactive_opacity,
+                            0.2..=1.,
+                        )
+                        .step_by(0.01)
+                        .text("불투명도")
+                        .custom_formatter(|v, _| format!("{:.0}%", v * 100.))
+                        .custom_parser(|v| {
+                            v.trim()
+                                .trim_end_matches('%')
+                                .trim()
+                                .parse::<f64>()
+                                .ok()
+                                .map(|value| value / 100.)
+                        }),
+                    );
+                });
+            }
+            if ui
+                .button(if compact { "위 도킹" } else { "위에 도킹" })
+                .clicked()
+            {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Top;
                 self.panels[i].row = Some(Palette::Brushes);
                 ui.close();
             }
-            if ui.button("앱 안에 띄우기").clicked() {
+            if ui
+                .button(if compact {
+                    "앱 안"
+                } else {
+                    "앱 안에 띄우기"
+                })
+                .clicked()
+            {
                 self.panels[i].location = Location::Floating;
                 ui.close();
             }
-            if ui.button("왼쪽에 도킹").clicked() {
+            if ui
+                .button(if compact {
+                    "왼쪽 도킹"
+                } else {
+                    "왼쪽에 도킹"
+                })
+                .clicked()
+            {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Left;
                 self.panels[i].row = None;
                 ui.close();
             }
-            if ui.button("오른쪽에 도킹").clicked() {
+            if ui
+                .button(if compact {
+                    "오른쪽 도킹"
+                } else {
+                    "오른쪽에 도킹"
+                })
+                .clicked()
+            {
                 self.reserve_row_identity(palette);
                 self.panels[i].location = Location::Right;
                 self.panels[i].row = None;
                 ui.close();
             }
         });
-        if response.drag_started()
-            && self.panels[i].location == Location::Window
-        {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-        } else if response.drag_started() && self.dragging.is_none() {
+        let tool_drag = if palette == Palette::Tools {
+            resize::track(
+                ui,
+                response.id,
+                drag_rect,
+                egui::CursorIcon::Grab,
+                [rect.left(), rect.top(), rect.width(), rect.height()],
+            )
+            .filter(|drag| drag.delta.length() > 4.)
+        } else {
+            None
+        };
+        let drag_started = tool_drag.is_some()
+            || (palette != Palette::Tools && response.drag_started());
+        if drag_started && self.panels[i].location == Location::Window {
+            if ui.input(|input| input.pointer.primary_down()) {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+        } else if drag_started && self.dragging.is_none() {
             self.drag_origin = Some((i, self.panels[i].clone()));
-            self.drag_offset = ui
-                .input(|input| input.pointer.press_origin())
+            self.drag_offset = tool_drag
+                .map(|drag| drag.origin)
+                .or_else(|| ui.input(|input| input.pointer.press_origin()))
                 .unwrap_or(rect.min)
                 - rect.min;
             let item = &mut self.panels[i];
@@ -576,9 +682,11 @@ impl Workspace {
                 item.height = (ui.max_rect().height() - 29.).clamp(60., 2000.);
             }
             item.location = Location::Floating;
-            item.rect[0] = rect.left();
-            item.rect[1] = rect.top();
-            item.rect[2] = rect.width().max(180.);
+            item.rect[0] =
+                rect.left() + tool_drag.map_or(0., |drag| drag.delta.x);
+            item.rect[1] =
+                rect.top() + tool_drag.map_or(0., |drag| drag.delta.y);
+            item.rect[2] = rect.width().max(palette.minimum_width());
             self.dragging = Some(palette);
         }
         response.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text(
@@ -593,6 +701,9 @@ impl Workspace {
         palette: Palette,
     ) {
         ui.spacing_mut().item_spacing.y = 0.;
+        if palette == Palette::Tools {
+            ui.spacing_mut().scroll = egui::style::ScrollStyle::floating();
+        }
         self.header(ui, palette);
         let p =
             self.panels.iter().find(|p| p.palette == palette).unwrap().clone();
@@ -601,7 +712,7 @@ impl Workspace {
         }
         let body_height = if matches!(
             p.location,
-            Location::Left | Location::Right | Location::Top
+            Location::Left | Location::Right | Location::Top | Location::Rail
         ) {
             (ui.max_rect().height() - 29.).max(60.)
         } else {
@@ -628,7 +739,7 @@ impl Workspace {
         }
         if matches!(
             p.location,
-            Location::Left | Location::Right | Location::Top
+            Location::Left | Location::Right | Location::Top | Location::Rail
         ) {
             return;
         }
@@ -839,6 +950,23 @@ impl Workspace {
                 p.rect[1] = pos.y - self.drag_offset.y;
             }
         }
+        if !app.hide_panels
+            && self.panels.iter().any(|p| {
+                p.palette == Palette::Tools
+                    && p.visible
+                    && p.location == Location::Rail
+            })
+        {
+            egui::Panel::left("tool_rail")
+                .exact_size(34.)
+                .resizable(false)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(Color32::from_gray(47))
+                        .inner_margin(2.),
+                )
+                .show(ui, |ui| self.shell(ui, app, Palette::Tools));
+        }
         let dock_area = ui.available_rect_before_wrap();
         if !app.hide_panels {
             self.side(ui, app, Location::Top);
@@ -934,7 +1062,7 @@ impl Workspace {
                     if p.collapsed { 23. } else { p.height + 29. },
                 ])
                 .with_min_inner_size([
-                    180.,
+                    p.palette.minimum_width(),
                     if p.collapsed { 23. } else { 89. },
                 ])
                 .with_max_inner_size([
@@ -978,10 +1106,10 @@ impl Workspace {
                         item.window_rect = Some([
                             r.left(),
                             r.top(),
-                            r.width().max(180.),
+                            r.width().max(p.palette.minimum_width()),
                             expanded,
                         ]);
-                        item.rect[2] = r.width().max(180.);
+                        item.rect[2] = r.width().max(p.palette.minimum_width());
                         if !item.collapsed && r.height() >= 89. {
                             item.height = (r.height() - 29.).clamp(60., 2000.);
                         }
@@ -1206,9 +1334,6 @@ impl Workspace {
 
 impl Parfait {
     pub fn workspace_ui(&mut self, ui: &mut egui::Ui) {
-        if !self.hide_panels {
-            self.tool_rail(ui);
-        }
         self.update_previews(ui.ctx());
         let mut workspace = std::mem::take(&mut self.workspace);
         workspace.draw(ui, self);
@@ -1312,13 +1437,15 @@ mod tests {
     }
 
     #[test]
-    fn header_context_menu_opens_a_separate_window() {
+    fn batched_tool_rail_drag_keeps_release_position_without_changing_artwork()
+    {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
+        let mut app = Parfait::open_legacy(dir.path().to_owned()).unwrap();
+        let before = app.documents.active_session.document.clone();
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
         let frame = |app: &mut Parfait, events| {
-            let mut out = ctx.run_ui(
+            let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(Rect::from_min_size(
                         Pos2::ZERO,
@@ -1329,61 +1456,131 @@ mod tests {
                 },
                 |ui| app.workspace_ui(ui),
             );
-            out.textures_delta.clear();
+            output.textures_delta.clear();
         };
         frame(&mut app, vec![]);
-        let p = app
+        frame(&mut app, vec![]);
+        let start = app
             .workspace
             .headers
             .iter()
-            .find(|(p, _)| *p == Palette::Brushes)
+            .find(|(p, _)| *p == Palette::Tools)
             .unwrap()
             .1
             .center();
-        let button = |pos, pressed, button| egui::Event::PointerButton {
+        let end = egui::pos2(650., 330.);
+        let button = |pos, pressed| egui::Event::PointerButton {
             pos,
             pressed,
-            button,
+            button: egui::PointerButton::Primary,
             modifiers: Default::default(),
         };
         frame(
             &mut app,
             vec![
-                egui::Event::PointerMoved(p),
-                button(p, true, egui::PointerButton::Secondary),
+                egui::Event::PointerMoved(start),
+                button(start, true),
+                egui::Event::PointerMoved(end),
+                button(end, false),
             ],
         );
-        frame(&mut app, vec![button(p, false, egui::PointerButton::Secondary)]);
         frame(&mut app, vec![]);
-        let rect = ctx
-            .data(|d| {
-                d.get_temp::<Rect>(egui::Id::new((
-                    "native_command",
-                    Palette::Brushes,
-                )))
-            })
-            .expect("right click should open native window menu");
-        frame(
-            &mut app,
-            vec![
-                egui::Event::PointerMoved(rect.center()),
-                button(rect.center(), true, egui::PointerButton::Primary),
-            ],
-        );
-        frame(
-            &mut app,
-            vec![button(rect.center(), false, egui::PointerButton::Primary)],
-        );
-        assert_eq!(
-            app.workspace
-                .panels
-                .iter()
-                .find(|p| p.palette == Palette::Brushes)
-                .unwrap()
-                .location,
-            Location::Window
-        );
+        let tools = app
+            .workspace
+            .panels
+            .iter()
+            .find(|p| p.palette == Palette::Tools)
+            .unwrap();
+        assert_eq!(tools.location, Location::Floating);
+        assert!(tools.rect[0] > 600. && tools.rect[0] < end.x);
+        assert!(tools.rect[1] > 300. && tools.rect[1] < end.y);
         assert!(app.workspace.dragging.is_none());
+        assert_eq!(app.documents.active_session.document, before);
+    }
+
+    #[test]
+    fn header_context_menu_opens_a_separate_window() {
+        for palette in [Palette::Brushes, Palette::Tools] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut app =
+                Parfait::open_legacy(dir.path().to_path_buf()).unwrap();
+            let ctx = egui::Context::default();
+            crate::theme::apply(&ctx);
+            let frame = |app: &mut Parfait, events| {
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            Pos2::ZERO,
+                            egui::vec2(1280., 900.),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| app.workspace_ui(ui),
+                );
+                out.textures_delta.clear();
+            };
+            frame(&mut app, vec![]);
+            let p = app
+                .workspace
+                .headers
+                .iter()
+                .find(|(p, _)| *p == palette)
+                .unwrap()
+                .1
+                .center();
+            let button = |pos, pressed, button| egui::Event::PointerButton {
+                pos,
+                pressed,
+                button,
+                modifiers: Default::default(),
+            };
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(p),
+                    button(p, true, egui::PointerButton::Secondary),
+                ],
+            );
+            frame(
+                &mut app,
+                vec![button(p, false, egui::PointerButton::Secondary)],
+            );
+            frame(&mut app, vec![]);
+            let rect = ctx
+                .data(|d| {
+                    d.get_temp::<Rect>(egui::Id::new((
+                        "native_command",
+                        palette,
+                    )))
+                })
+                .expect("right click should open native window menu");
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(rect.center()),
+                    button(rect.center(), true, egui::PointerButton::Primary),
+                ],
+            );
+            frame(
+                &mut app,
+                vec![button(
+                    rect.center(),
+                    false,
+                    egui::PointerButton::Primary,
+                )],
+            );
+            assert_eq!(
+                app.workspace
+                    .panels
+                    .iter()
+                    .find(|p| p.palette == palette)
+                    .unwrap()
+                    .location,
+                Location::Window
+            );
+            assert!(app.workspace.dragging.is_none());
+        }
     }
     #[test]
     fn side_docking_preview_matches_rendered_slot_and_window_state_roundtrips()

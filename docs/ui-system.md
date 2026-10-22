@@ -206,3 +206,10 @@ Narrow color palettes and the tool rail overlap the primary/secondary swatches, 
 Dock-column resize gutters occupy ten points inside the dock, avoiding competing canvas targets. Native palette windows expose a per-palette inactive-opacity setting (20–100%) in the header context menu. Their transparent surfaces and all palette painting use that opacity when unfocused; focus restores full opacity. The main canvas remains opaque. Preferences without this field retain 100% opacity. Actual platform transparency depends on the window compositor; Windows and Linux have not been exercised locally.
 
 Layer palettes place a label-color menu beside blend/opacity, flags on the next row, and compact raster/vector/text/folder creation, duplication, merge, mask and delete buttons below. Additional operations, including fill/paper creation with the current drawing color, live in the palette's operation menu. Layer labels mark rows without tinting artwork and participate in undo, duplication, original saves and recovery.
+
+
+## Detachable tool palette (2026-10-22)
+
+The tool-icon strip is a workspace palette with a 34-point rail as its default host. Its grip supports dragging into the canvas, normal side/top docking, in-app floating and independent native windows. The header context menu restores the narrow rail; Window → Tool palette controls visibility. Floating/native tools can shrink to 64 points and reflow their icon columns. Compact headers use a short context menu with an inline inactive-opacity slider so actions fit the narrow native viewport. Main/sub/transparent ink remain attached to the tools.
+
+Preferences v24 append the Tools placement when reading valid v1–v23 layouts, without moving existing palettes or resetting keymaps. Tool-window geometry, visibility and inactive opacity use the same persistence as other palettes. Raw ordered pointer events preserve quick tool-grip drags, including press/move/release in a single frame, while Escape and focus loss cancel an active move.

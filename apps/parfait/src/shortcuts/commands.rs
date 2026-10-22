@@ -36,6 +36,7 @@ pub enum Command {
     ShortcutSettings,
     HidePalettes,
     ResetPaletteLayout,
+    PaletteTools,
     PaletteBrushes,
     PaletteProperties,
     PaletteSizes,
@@ -264,6 +265,7 @@ impl Command {
         Self::ShortcutSettings,
         Self::HidePalettes,
         Self::ResetPaletteLayout,
+        Self::PaletteTools,
         Self::PaletteBrushes,
         Self::PaletteProperties,
         Self::PaletteSizes,
@@ -549,6 +551,7 @@ impl Command {
             Self::ShortcutSettings => "Shortcut settings…",
             Self::HidePalettes => "Hide palettes",
             Self::ResetPaletteLayout => "Reset palette layout",
+            Self::PaletteTools => "도구 팔레트",
             Self::PaletteBrushes => "Sub tools palette",
             Self::PaletteProperties => "Tool property palette",
             Self::PaletteSizes => "Brush size palette",
@@ -686,6 +689,7 @@ impl Command {
             | Self::UngroupLayerFolder => Category::Layer,
             Self::HidePalettes
             | Self::ResetPaletteLayout
+            | Self::PaletteTools
             | Self::PaletteBrushes
             | Self::PaletteProperties
             | Self::PaletteSizes
@@ -912,6 +916,7 @@ impl Command {
     }
     pub fn palette(self) -> Option<Palette> {
         Some(match self {
+            Self::PaletteTools => Palette::Tools,
             Self::PaletteBrushes => Palette::Brushes,
             Self::PaletteProperties => Palette::Properties,
             Self::PaletteSizes => Palette::Sizes,

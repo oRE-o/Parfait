@@ -154,31 +154,37 @@ impl Parfait {
                 });
             });
     }
-    pub fn tool_rail(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::left("tools")
-            .exact_size(34.)
-            .resizable(false)
-            .frame(
-                egui::Frame::NONE.fill(Color32::from_gray(47)).inner_margin(2.),
-            )
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(0., 1.);
-                for category in crate::tools::ToolCategory::ALL {
-                    if widgets::flat_icon(
-                        ui,
-                        category.icon(),
-                        self.tools.category == category,
-                        category.label(),
-                        27.,
-                    )
-                    .clicked()
-                    {
-                        self.choose_tool_category(category);
+    pub(crate) fn tool_icons_ui(&mut self, ui: &mut egui::Ui) {
+        ui.spacing_mut().item_spacing = egui::vec2(1., 1.);
+        let columns =
+            ((ui.available_width() + 1.) / 28.).floor().max(1.) as usize;
+        egui::Grid::new("tool_categories").spacing(egui::vec2(1., 1.)).show(
+            ui,
+            |ui| {
+                for (index, category) in
+                    crate::tools::ToolCategory::ALL.into_iter().enumerate()
+                {
+                    ui.push_id(("tool_category", index), |ui| {
+                        if widgets::flat_icon(
+                            ui,
+                            category.icon(),
+                            self.tools.category == category,
+                            category.label(),
+                            27.,
+                        )
+                        .clicked()
+                        {
+                            self.choose_tool_category(category);
+                        }
+                    });
+                    if (index + 1) % columns == 0 {
+                        ui.end_row();
                     }
                 }
-                ui.separator();
-                self.color_slots(ui, true);
-            });
+            },
+        );
+        ui.separator();
+        self.color_slots(ui, ui.available_width() < 96.);
     }
     pub(crate) fn duplicate_layer(&mut self) {
         if self.documents.active_session.document.has_non_raster_layers() {
@@ -347,6 +353,7 @@ impl Parfait {
     ) {
         use crate::workspace::Palette;
         match palette {
+            Palette::Tools => self.tool_icons_ui(ui),
             Palette::History => self.history_palette(ui, body_height),
             Palette::Brushes => self.brush_library_ui(ui, body_height),
             Palette::Properties => self.brush_properties_ui(ui, body_height),

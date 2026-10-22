@@ -578,7 +578,7 @@ const WINDOW: &[MenuItem] = &[
     Separator,
     Planned("커맨드 바"),
     Planned("퀵 액세스"),
-    Planned("도구 팔레트"),
+    Toggle(Command::PaletteTools),
     Toggle(Command::PaletteBrushes),
     Toggle(Command::PaletteProperties),
     Planned("도구 슬라이더"),

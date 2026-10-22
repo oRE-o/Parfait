@@ -359,6 +359,7 @@ fn menu_label(command: Command) -> &'static str {
         Command::RulerBar => "눈금자",
         Command::PixelGrid => "픽셀 격자 (800% 이상)",
         Command::DisplaySettings => "표시 설정…",
+        Command::PaletteTools => "도구 팔레트",
         Command::PaletteBrushes => "보조 도구",
         Command::PaletteProperties => "도구 속성",
         Command::PaletteSizes => "브러시 크기",
