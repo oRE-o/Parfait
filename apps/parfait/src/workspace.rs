@@ -8,13 +8,31 @@ fn default_width_weight() -> f32 {
     1.
 }
 
+#[derive(Clone, Copy)]
+struct OpacityTransition {
+    from: f32,
+    target: f32,
+    started: f64,
+    duration: f32,
+}
+impl OpacityTransition {
+    fn value(self, now: f64) -> f32 {
+        let t = ((now - self.started) as f32 / self.duration).clamp(0., 1.);
+        if t >= 1. {
+            self.target
+        } else {
+            self.from + (self.target - self.from) * (1. - (1. - t).powi(3))
+        }
+    }
+}
+
 fn detached_opacity(
     ui: &egui::Ui,
     bounds: Rect,
     inactive: f32,
     dragging: bool,
 ) -> f32 {
-    if dragging {
+    let target = if dragging {
         0.5
     } else if ui.input(|i| {
         i.pointer.hover_pos().is_some_and(|pos| bounds.contains(pos))
@@ -22,7 +40,34 @@ fn detached_opacity(
         1.
     } else {
         inactive
+    };
+    let now = ui.input(|i| i.time);
+    let id =
+        egui::Id::new(("palette_opacity", ui.ctx().viewport_id(), ui.id()));
+    let value = ui.data_mut(|data| {
+        let transition =
+            data.get_temp_mut_or_insert_with(id, || OpacityTransition {
+                from: target,
+                target,
+                started: now,
+                duration: 0.12,
+            });
+        // Retarget from the displayed value so rapid enter/leave never jumps.
+        let value = transition.value(now);
+        if transition.target != target {
+            *transition = OpacityTransition {
+                from: value,
+                target,
+                started: now,
+                duration: if target > value { 0.12 } else { 0.22 },
+            };
+        }
+        value
+    });
+    if value != target {
+        ui.ctx().request_repaint();
     }
+    value
 }
 
 fn insertion_bar(from: Pos2, to: Pos2) -> Rect {
@@ -1320,6 +1365,47 @@ impl Parfait {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn palette_opacity_transitions_continue_when_hover_reverses() {
+        let ctx = egui::Context::default();
+        let bounds =
+            Rect::from_min_size(egui::pos2(50., 50.), egui::vec2(200., 200.));
+        let frame = |time, hovered| {
+            let mut opacity = 0.;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(800., 600.),
+                    )),
+                    time: Some(time),
+                    events: vec![if hovered {
+                        egui::Event::PointerMoved(bounds.center())
+                    } else {
+                        egui::Event::PointerGone
+                    }],
+                    ..Default::default()
+                },
+                |ui| opacity = detached_opacity(ui, bounds, 0.35, false),
+            );
+            output.textures_delta.clear();
+            opacity
+        };
+        assert_eq!(frame(0., false), 0.35);
+        assert_eq!(frame(1., true), 0.35);
+        let rising = frame(1.06, true);
+        assert!(rising > 0.35 && rising < 1.);
+        // Reversing at the same time must preserve exactly what was displayed.
+        assert_eq!(frame(1.06, false), rising);
+        let falling = frame(1.17, false);
+        assert!(falling > 0.35 && falling < rising);
+        assert_eq!(frame(1.30, false), 0.35);
+        assert_eq!(frame(2., true), 0.35);
+        assert_eq!(frame(2.13, true), 1.);
+        assert_eq!(frame(3., false), 1.);
+        assert_eq!(frame(3.23, false), 0.35);
+    }
+
     #[test]
     fn detached_surface_alpha_follows_mouse_instead_of_keyboard_focus() {
         for (focused, position, dragging, expected) in [
